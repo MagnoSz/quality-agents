@@ -4,7 +4,7 @@
 
 import { build as viteBuild } from 'vite';
 import { build as esbuild } from 'esbuild';
-import { rmSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT } from './lib/repo.mjs';
 
@@ -14,8 +14,30 @@ rmSync(out, { recursive: true, force: true });
 await viteBuild({ configFile: join(ROOT, 'app', 'vite.config.ts'), logLevel: 'warn' });
 
 const common = { bundle: true, platform: 'node', target: 'node22', sourcemap: false, logLevel: 'warning', external: ['electron'] };
+await esbuild({ ...common, entryPoints: [join(ROOT, 'desktop', 'boot.ts')], outfile: join(out, 'boot.mjs'), format: 'esm', external: ['electron', './main.mjs'] });
 await esbuild({ ...common, entryPoints: [join(ROOT, 'desktop', 'main.ts')], outfile: join(out, 'main.mjs'), format: 'esm' });
 await esbuild({ ...common, entryPoints: [join(ROOT, 'desktop', 'preload.ts')], outfile: join(out, 'preload.cjs'), format: 'cjs' });
 await esbuild({ ...common, entryPoints: [join(ROOT, 'desktop', 'run-tool.ts')], outfile: join(out, 'run-tool.mjs'), format: 'esm' });
 
-console.log('Desktop app built: app/dist (UI) and app/dist-electron (main process).');
+// Identifies this build, so an installed app refreshes its framework files once per build.
+mkdirSync(out, { recursive: true });
+writeFileSync(join(out, 'build-info.json'), JSON.stringify({ buildId: new Date().toISOString() }));
+
+// Staging folder for the installer (electron-builder two-package.json layout):
+// only the built app and a minimal package.json, no development files.
+const stage = join(ROOT, 'build', 'app');
+rmSync(stage, { recursive: true, force: true });
+mkdirSync(join(stage, 'app'), { recursive: true });
+cpSync(join(ROOT, 'app', 'dist'), join(stage, 'app', 'dist'), { recursive: true });
+cpSync(out, join(stage, 'app', 'dist-electron'), { recursive: true });
+const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+writeFileSync(join(stage, 'package.json'), JSON.stringify({
+  name: pkg.name, productName: 'Quality Agents', version: pkg.version, description: pkg.description,
+  author: pkg.author, license: pkg.license, type: 'module', main: 'app/dist-electron/boot.mjs',
+}, null, 2));
+
+// The framework copy shipped with the installer gets the full package.json (npm scripts
+// used by the skills). A different file name avoids clashing with the app's own one.
+cpSync(join(ROOT, 'package.json'), join(ROOT, 'build', 'framework-package.json'));
+
+console.log('Desktop app built: app/dist (UI), app/dist-electron (main process) and build/app (installer staging).');

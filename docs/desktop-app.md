@@ -56,6 +56,21 @@ Development helpers (environment variables of the main process):
 |---|---|
 | `QA_OPEN_PROJECT=<id>` | Opens that project directly |
 | `QA_SCREENSHOT=<file.png>` | Saves a screenshot of the window and quits (visual checks) |
+| `QA_ROOT=<folder>` | Uses that folder as the framework folder (the installed app defaults to Documents/Quality Agents) |
+
+## Installer
+
+```bash
+npm run dist:win     # release/Quality Agents Setup <version>.exe (NSIS, per-user, desktop + Start-menu shortcuts)
+npm run dist:mac     # .dmg (build on macOS)
+npm run dist:linux   # .AppImage (build on Linux)
+```
+
+- The build stages only the built app and a minimal `package.json` in `build/app` (electron-builder two-package layout); `release/` and `build/` are ignored by Git.
+- The installer also carries the framework files (`extraResources` → `resources/framework`). On first launch, `desktop/boot.ts` copies them to **Documents/Quality Agents** (or `QA_ROOT`) and points the app there; each new build refreshes the framework files once (`build-info.json` id) and never touches `workspace/` (`desktop/framework.ts`).
+- `run-tool.mjs` is unpacked from `app.asar` and run by the app's own executable in Node mode, so AI tools can be opened on computers without Node.js.
+- Not code-signed yet: Windows SmartScreen shows a warning on first run.
+- `npm audit` reports a moderate issue in `sprintf-js`, a build-time dependency of electron-builder; it is not shipped inside the app.
 
 ## Tests
 
@@ -63,5 +78,5 @@ Development helpers (environment variables of the main process):
 
 ## Planned
 
-- Windows installer (`.exe`) with the app icon and Start-menu/desktop shortcuts.
+- Code signing for the installer, and automatic updates.
 - Approvals and context proposals as buttons in the side panel.

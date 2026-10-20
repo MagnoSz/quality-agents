@@ -4,7 +4,7 @@
 
 import { app, BrowserWindow, ipcMain, Menu, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { existsSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT } from '../scripts/lib/repo.mjs';
 import { listProjects, projectsDir } from '../scripts/lib/core.ts';
@@ -12,8 +12,10 @@ import { createService, ServiceError, type Service } from './service.ts';
 import { launchTool, openFolder } from './launcher.ts';
 
 const DIST = dirname(fileURLToPath(import.meta.url)); // app/dist-electron
-process.env.QA_RUN_TOOL = join(DIST, 'run-tool.mjs');
-const ICON = join(ROOT, 'app', 'public', 'icon.png');
+const UI = join(DIST, '..', 'dist'); // app/dist, inside the app (not the framework folder)
+const ICON = join(UI, 'icon.png');
+// The tool runner must be a real file on disk: in the installer it is unpacked from app.asar.
+process.env.QA_RUN_TOOL = join(DIST, 'run-tool.mjs').replace(`app.asar${sep}`, `app.asar.unpacked${sep}`);
 
 const service = createService(ROOT, {
   launch: launchTool,
@@ -53,7 +55,7 @@ function createWindow(): void {
   win.once('ready-to-show', () => win?.show());
   // QA_OPEN_PROJECT opens a project directly (used by checks and shortcuts).
   const project = process.env.QA_OPEN_PROJECT;
-  void win.loadFile(join(ROOT, 'app', 'dist', 'index.html'), project ? { query: { project } } : undefined);
+  void win.loadFile(join(UI, 'index.html'), project ? { query: { project } } : undefined);
 
   // Visual check for development: QA_SCREENSHOT=<file.png> saves the window and quits.
   const shot = process.env.QA_SCREENSHOT;

@@ -7,6 +7,7 @@ import { createService, ServiceError, type FileContent, type TreeNode } from '..
 import { PathError, resolveInside, isEditable, isOpenable } from '../desktop/fs-guard.ts';
 import { scriptFor, windowsStartArgs, type LaunchResult } from '../desktop/launcher.ts';
 import { docxToMarkdown, readableInputs } from '../scripts/lib/docx.ts';
+import { syncFramework } from '../desktop/framework.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
 import { zip } from '../scripts/lib/zip.mjs';
 import { ROOT } from '../scripts/lib/repo.mjs';
@@ -174,6 +175,37 @@ test('docx extraction keeps headings, lists and tables', () => {
   assert.match(md, /^\| AC1 \| a \\\| b & c \|$/m);
   assert.deepEqual(readableInputs(['workspace/x/inbox/a.md'], root), ['workspace/x/inbox/a.md']);
   assert.throws(() => docxToMarkdown(zip([['other.xml', '<x/>']])), /Not a Word document/);
+});
+
+test('installer framework sync refreshes framework files and never touches workspace/', () => {
+  const bundled = mkdtempSync(join(tmpdir(), 'qa-bundle-'));
+  const target = mkdtempSync(join(tmpdir(), 'qa-installed-'));
+  try {
+    mkdirSync(join(bundled, 'skills', 'a'), { recursive: true });
+    writeFileSync(join(bundled, 'skills', 'a', 'SKILL.md'), 'v1');
+    writeFileSync(join(bundled, 'AGENTS.md'), 'agents v1');
+    mkdirSync(join(bundled, 'workspace'), { recursive: true });
+    writeFileSync(join(bundled, 'workspace', 'README.md'), 'readme');
+
+    assert.equal(syncFramework(bundled, target, 'build-1'), true);
+    assert.equal(readFileSync(join(target, 'skills', 'a', 'SKILL.md'), 'utf8'), 'v1');
+    assert.ok(existsSync(join(target, 'workspace', 'projects')));
+
+    // The user's data, plus a stale framework file.
+    mkdirSync(join(target, 'workspace', 'projects', 'p', 'runs'), { recursive: true });
+    writeFileSync(join(target, 'workspace', 'projects', 'p', 'notes.md'), 'keep me');
+    writeFileSync(join(target, 'skills', 'stale.md'), 'old');
+
+    assert.equal(syncFramework(bundled, target, 'build-1'), false, 'same build: nothing to do');
+    writeFileSync(join(bundled, 'skills', 'a', 'SKILL.md'), 'v2');
+    assert.equal(syncFramework(bundled, target, 'build-2'), true);
+    assert.equal(readFileSync(join(target, 'skills', 'a', 'SKILL.md'), 'utf8'), 'v2');
+    assert.equal(existsSync(join(target, 'skills', 'stale.md')), false);
+    assert.equal(readFileSync(join(target, 'workspace', 'projects', 'p', 'notes.md'), 'utf8'), 'keep me');
+  } finally {
+    rmSync(bundled, { recursive: true, force: true });
+    rmSync(target, { recursive: true, force: true });
+  }
 });
 
 test('fs-guard sandbox and file type rules', () => {

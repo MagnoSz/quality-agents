@@ -97,6 +97,18 @@ flowchart TD
 
 ## 3. Instalação (uma vez por computador)
 
+### 3.0 O jeito mais rápido: o instalador para Windows
+
+1. Baixe o **Quality Agents Setup <versão>.exe** na [página de Releases](https://github.com/Orsi88/quality-agents/releases).
+2. Execute. O Windows pode mostrar *"O Windows protegeu o computador"*, porque o instalador ainda não tem assinatura digital: clique em **Mais informações → Executar assim mesmo**.
+3. Escolha a pasta de instalação e conclua. Um atalho **Quality Agents** é criado na área de trabalho e no menu Iniciar.
+
+Na primeira abertura o app cria **Documentos\Quality Agents** — o framework (skills, `AGENTS.md`, templates) e a sua `workspace/`, onde ficam os projetos e resultados. A sua ferramenta de IA é aberta nessa pasta. Instalar uma versão nova atualiza os arquivos do framework ali e **nunca mexe na `workspace/`**; desinstalar o app também mantém essa pasta.
+
+Você continua precisando de uma ferramenta de IA (Claude Code, Codex, Cursor…). O Node.js é opcional: só é usado pelos comandos auxiliares das skills (geração de Excel/PDF).
+
+Prefere o terminal, quer contribuir com o framework ou usa macOS/Linux? Siga os passos abaixo.
+
 ### 3.1 O que você precisa
 
 | Software | Para quê | Obrigatório? |

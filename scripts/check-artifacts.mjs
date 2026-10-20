@@ -24,7 +24,7 @@ export function findViolations(paths) {
     const name = path.split('/').pop();
     if (path.startsWith('workspace/') && path !== 'workspace/README.md') {
       violations.push(`${path}: workspace/ content is never versioned (artifact isolation policy)`);
-    } else if (path.startsWith('dist/') || path.startsWith('app/dist/') || path.startsWith('app/dist-electron/')) {
+    } else if (path.startsWith('dist/') || path.startsWith('app/dist/') || path.startsWith('app/dist-electron/') || path.startsWith('release/') || path.startsWith('build/')) {
       violations.push(`${path}: dist/ holds generated bundles and is never versioned`);
     } else if (/^\.env(\..*)?$/.test(name)) {
       violations.push(`${path}: environment files may contain credentials`);

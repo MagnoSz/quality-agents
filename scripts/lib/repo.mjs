@@ -1,9 +1,11 @@
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
-import { join, dirname, relative, sep } from 'node:path';
+import { join, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
-export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+// The framework folder. Normally this repository; the installed desktop app sets
+// QA_ROOT to its own copy (Documents/Quality Agents) before loading anything.
+export const ROOT = process.env.QA_ROOT ? resolve(process.env.QA_ROOT) : join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 // Generated mirrors read natively by AI tools (see docs/compatibility.md).
 export const MIRRORS = ['.agents/skills', '.claude/skills'];

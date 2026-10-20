@@ -97,6 +97,18 @@ flowchart TD
 
 ## 3. Install (once per computer)
 
+### 3.0 The quickest way: the Windows installer
+
+1. Download **Quality Agents Setup <version>.exe** from the [Releases page](https://github.com/Orsi88/quality-agents/releases).
+2. Run it. Windows may show *"Windows protected your PC"* because the installer is not digitally signed yet: click **More info → Run anyway**.
+3. Choose the installation folder and finish. A **Quality Agents** shortcut is created on the desktop and in the Start menu.
+
+On first launch the app creates **Documents\Quality Agents** — the framework (skills, `AGENTS.md`, templates) plus your `workspace/`, where projects and results live. Your AI tool is opened in that folder. Installing a newer version refreshes the framework files there and **never touches `workspace/`**; uninstalling the app keeps that folder too.
+
+You still need an AI tool (Claude Code, Codex, Cursor…). Node.js is optional: it is only used by the skills' helper commands (Excel/PDF generation).
+
+Prefer the terminal, contribute to the framework, or use macOS/Linux? Follow the steps below.
+
 ### 3.1 What you need
 
 | Software | Why | Required? |

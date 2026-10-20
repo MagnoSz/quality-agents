@@ -27,7 +27,10 @@
     "runs": "node scripts/runs.mjs",
     "xlsx": "node scripts/xlsx.mjs",
     "pdf": "node scripts/pdf.mjs",
-    "check-output": "node scripts/check-output.mjs"
+    "check-output": "node scripts/check-output.mjs",
+    "dist:win": "node scripts/build-desktop.mjs && electron-builder --win nsis",
+    "dist:mac": "node scripts/build-desktop.mjs && electron-builder --mac dmg",
+    "dist:linux": "node scripts/build-desktop.mjs && electron-builder --linux AppImage"
   },
   "devDependencies": {
     "@types/node": "22.18.12",
@@ -35,11 +38,127 @@
     "@types/react-dom": "19.1.11",
     "@vitejs/plugin-react": "5.0.4",
     "electron": "43.7.8",
+    "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "typescript": "5.9.3",
     "vite": "7.3.7"
   },
-  "main": "app/dist-electron/main.mjs"
+  "main": "app/dist-electron/boot.mjs",
+  "author": "Quality Agents contributors",
+  "build": {
+    "appId": "io.github.orsi88.qualityagents",
+    "productName": "Quality Agents",
+    "copyright": "MIT License",
+    "directories": {
+      "app": "build/app",
+      "output": "release"
+    },
+    "files": [
+      "**/*"
+    ],
+    "asarUnpack": [
+      "app/dist-electron/run-tool.mjs"
+    ],
+    "extraResources": [
+      {
+        "from": "AGENTS.md",
+        "to": "framework/AGENTS.md"
+      },
+      {
+        "from": "CLAUDE.md",
+        "to": "framework/CLAUDE.md"
+      },
+      {
+        "from": "README.md",
+        "to": "framework/README.md"
+      },
+      {
+        "from": "README.pt-BR.md",
+        "to": "framework/README.pt-BR.md"
+      },
+      {
+        "from": "LICENSE",
+        "to": "framework/LICENSE"
+      },
+      {
+        "from": "core",
+        "to": "framework/core"
+      },
+      {
+        "from": "skills",
+        "to": "framework/skills"
+      },
+      {
+        "from": ".agents",
+        "to": "framework/.agents"
+      },
+      {
+        "from": ".claude",
+        "to": "framework/.claude"
+      },
+      {
+        "from": "templates",
+        "to": "framework/templates"
+      },
+      {
+        "from": "schemas",
+        "to": "framework/schemas"
+      },
+      {
+        "from": "adapters",
+        "to": "framework/adapters"
+      },
+      {
+        "from": "docs",
+        "to": "framework/docs"
+      },
+      {
+        "from": "examples",
+        "to": "framework/examples"
+      },
+      {
+        "from": "scripts",
+        "to": "framework/scripts"
+      },
+      {
+        "from": "workspace/README.md",
+        "to": "framework/workspace/README.md"
+      },
+      {
+        "from": "build/framework-package.json",
+        "to": "framework/package.json"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "app/public/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Quality Agents"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "app/public/icon.png",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "app/public/icon.png",
+      "category": "Development"
+    },
+    "electronVersion": "43.7.8"
+  }
 }
