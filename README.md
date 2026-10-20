@@ -4,6 +4,12 @@
 
 <p align="center"><img src="app/public/hero.png" alt="Quality Agents" width="280" /></p>
 
+<p align="center">
+  <a href="https://github.com/Orsi88/quality-agents/releases/latest"><b>⬇️ Download Quality Agents for Windows</b></a>
+  &nbsp;·&nbsp; <a href="https://github.com/Orsi88/quality-agents/releases/download/v0.1.0/Quality.Agents.Setup.0.1.0.exe">direct link (v0.1.0, .exe)</a>
+  &nbsp;·&nbsp; <a href="#30-the-quickest-way-the-windows-installer">how to install</a>
+</p>
+
 A portable library of **AI agent skills for software quality engineering**. Clone it once, register each system you test, and run the same QA activities — requirements review, test design, failure analysis — with Claude Code, Cursor, Codex, ChatGPT, claude.ai, Gemini or other AI tools.
 
 This guide is written for QA professionals. No programming knowledge is needed: you will copy a few commands, open a folder in your AI tool and talk to it in plain language.
