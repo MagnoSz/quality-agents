@@ -74,7 +74,8 @@ export const launchTool: Launcher = (tool, prompt, root) => {
   if (process.platform === 'win32') {
     const file = join(dir, `open-${tool}-${stamp}.json`);
     writeFileSync(file, JSON.stringify({ command: t.command, args, cwd: root, title }), 'utf8');
-    detached('cmd.exe', [windowsStartArgs(process.execPath, runToolPath(), file, title)], {
+    // Prefer Node.js: Electron in Node mode has no console, so interactive tools would start blank.
+    detached('cmd.exe', [windowsStartArgs(which('node') ?? process.execPath, runToolPath(), file, title)], {
       windowsVerbatimArguments: true,
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     });

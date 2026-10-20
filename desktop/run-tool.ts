@@ -5,7 +5,7 @@
 //
 // Usage (internal): <node or Electron as Node> run-tool <request.json>
 
-import { readFileSync, realpathSync, rmSync } from 'node:fs';
+import { openSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { which } from '../scripts/lib/core.ts';
@@ -20,6 +20,14 @@ function waitForKey(message: string): void {
   console.error(`\n${message}\nPress Enter to close this window.`);
   process.stdin.resume();
   process.stdin.once('data', () => process.exit(1));
+}
+
+function consoleStdio(): 'inherit' | number[] {
+  if (process.platform !== 'win32') return 'inherit';
+  try {
+    const out = openSync('CONOUT$', 'r+');
+    return [openSync('CONIN$', 'r+'), out, out];
+  } catch { return 'inherit'; }
 }
 
 function main(): void {
@@ -37,9 +45,13 @@ function main(): void {
   // window's console to UTF-8 first so accents survive.
   const isShim = /\.(cmd|bat)$/i.test(path);
   if (isShim) spawnSync('chcp.com', ['65001'], { stdio: 'ignore' });
+  // Hand the tool this window's console itself. When this runner is the app's
+  // own executable (Electron in Node mode) its standard streams are not the
+  // console, and interactive tools would start with no keyboard or screen.
+  const stdio = consoleStdio();
   const child = isShim
-    ? spawn(`${req.command} ${req.args.map(cmdQuote).join(' ')}`, { cwd: req.cwd, stdio: 'inherit', shell: true })
-    : spawn(path, req.args, { cwd: req.cwd, stdio: 'inherit' });
+    ? spawn(`${req.command} ${req.args.map(cmdQuote).join(' ')}`, { cwd: req.cwd, stdio, shell: true })
+    : spawn(path, req.args, { cwd: req.cwd, stdio });
   child.on('error', (e) => waitForKey(`Could not start ${req.command}: ${e.message}`));
   child.on('exit', (code) => process.exit(code ?? 0));
 }
