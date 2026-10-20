@@ -2,6 +2,8 @@
 
 🇧🇷 [Leia em português](README.pt-BR.md)
 
+<p align="center"><img src="app/public/hero.png" alt="Quality Agents" width="280" /></p>
+
 A portable library of **AI agent skills for software quality engineering**. Clone it once, register each system you test, and run the same QA activities — requirements review, test design, failure analysis — with Claude Code, Cursor, Codex, ChatGPT, claude.ai, Gemini or other AI tools.
 
 This guide is written for QA professionals. No programming knowledge is needed: you will copy a few commands, open a folder in your AI tool and talk to it in plain language.
@@ -100,7 +102,7 @@ flowchart TD
 | Software | Why | Required? |
 |---|---|---|
 | **Git** | To download (clone) and update the framework | Yes |
-| **Node.js 20 or newer** | Runs the helper commands: creating projects and runs, generating Excel and PDF, checking that no project data is committed | Strongly recommended (without it, everything works but those steps become manual) |
+| **Node.js 22.18 or newer** (LTS) | Runs the `qa` app and the helper commands: creating projects and runs, generating Excel and PDF, checking that no project data is committed | Strongly recommended (without it, the skills still work in your AI tool, but the app and those steps are not available) |
 | **Microsoft Edge or Google Chrome** | Used in the background to create PDF reports | Only for PDF generation (Edge already comes with Windows) |
 | An **AI tool** | Claude Code, Cursor, Codex, claude.ai, ChatGPT, Gemini... | Yes |
 
@@ -115,7 +117,7 @@ flowchart TD
 1. Open the **Terminal** app and type `git --version`. If Git is missing, macOS offers to install it — accept.
 2. Node.js: download the **LTS** installer from https://nodejs.org and install it.
 
-**Linux**: install `git` and `nodejs` (version 20+) with your distribution's package manager.
+**Linux**: install `git` and `nodejs` (version 22.18+) with your distribution's package manager.
 
 Check the installation in a terminal (Windows: **PowerShell** or **Git Bash**; macOS/Linux: **Terminal**):
 
@@ -125,7 +127,7 @@ node --version
 npm --version
 ```
 
-Each command should print a version number. `node --version` must be `v20` or higher.
+Each command should print a version number. `node --version` must be `v22.18` or higher.
 
 ### 3.3 Download the framework
 
@@ -146,14 +148,14 @@ Still inside the `quality-agents` folder:
 npm run setup
 ```
 
-Expected output:
+It takes about a minute. It:
 
-```text
-Workspace folders ready under workspace/ (ignored by Git).
-Pre-commit hook enabled (core.hooksPath=.githooks).
-```
+1. installs the development tools (only inside this folder),
+2. builds the desktop app,
+3. creates your local `workspace/` folder,
+4. turns on the protection that blocks accidental commits of project data or passwords.
 
-This creates your local `workspace/` folder and turns on the protection that blocks accidental commits of project data or passwords.
+It ends with `Done. Start Quality Agents with: npm run qa`. Run `npm run setup` again after each update (`git pull`).
 
 ### 3.5 Check that everything is fine
 
@@ -171,7 +173,7 @@ Still inside the `quality-agents` folder:
 npm link
 ```
 
-From now on you can type `qa` in **any** terminal folder to open the terminal assistant ([section 4.1](#41-the-terminal-assistant-qa)). If `npm link` fails with a permission error on macOS/Linux, use `sudo npm link`, or skip it and run `npm run qa` from the `quality-agents` folder instead.
+From now on you can type `qa` in **any** terminal folder to open the Quality Agents desktop app ([section 4.1](#41-the-desktop-app-qa)). If `npm link` fails with a permission error on macOS/Linux, use `sudo npm link`, or skip it and run `npm run qa` from the `quality-agents` folder instead.
 
 > **Windows tip:** if PowerShell says *"running scripts is disabled on this system"* when you type `npm`, use **Git Bash** instead, or type `npm.cmd` instead of `npm`, or see [Troubleshooting](#14-troubleshooting).
 
@@ -184,22 +186,44 @@ From now on you can type `qa` in **any** terminal folder to open the terminal as
 | **Claude Code, Cursor or Codex** (tools that open a folder on your computer) | **Agent mode** — recommended | The AI reads the skills, your project context and your files directly, saves results in the right folders, and can create Excel/PDF. You only talk to it. |
 | **claude.ai, ChatGPT, Gemini** (browser/desktop chat) | **Chat mode** | You upload the skills once, and in each activity you upload the needed files and save what the AI produces. See [10.4](#104-claudeai-chatgpt-gemini-and-other-chat-tools). |
 
-And two ways to start an activity, whatever the tool:
+And three ways to work, whatever the tool:
 
 | Way | For whom |
 |---|---|
-| **Terminal assistant `qa`** — a guided menu: project → activity → files → AI tool. It prepares everything and opens your AI tool with the request ready. | Anyone who does not want to deal with folders and prompts |
+| **The desktop app — `qa`**: a start screen with your projects, then an Obsidian-like workspace to browse, read and edit the project files and **open the project in your AI tool with the request ready**. | Everyone — the easiest way |
+| **The terminal menu — `qa --terminal`**: project → activity → files → AI tool; prepares everything and opens your AI tool with the request ready. | Anyone who does not want to deal with folders and prompts |
 | **Open the `quality-agents` folder** in your AI tool and ask in plain language | People comfortable with the AI tool |
+
+### 4.1 The desktop app (`qa`)
+
+Type `qa` (or use the shortcut, once the installer exists). Quality Agents opens in its own window — no browser, no server.
+
+**Start screen** — your projects on the left; create a new one by just typing its name. The last project you used reopens automatically.
+
+**Workspace** (like Obsidian):
+
+| Area | What it does |
+|---|---|
+| **Left ribbon** | All projects · Open in your AI tool · Open the project folder · Refresh · Show/hide the side panel |
+| **File tree** | *Context* (what the AI knows about the system), *Inbox* (files you give the AI), *Activities* (each review, test design or analysis, with date and a status dot), proposed updates and activity log |
+| **Documents in tabs** | Markdown is shown formatted; **Ctrl+E** switches to editing, **Ctrl+S** saves, **Ctrl+W** closes. Word files show their text; JSON, text and images are previewed; Excel and PDF open in their own program |
+| **Side panel** | For an activity: status, current step, pending items, approvals and the files produced, plus *Continue in your AI tool*. Otherwise: project overview and open activities |
+| **Open in your AI tool** | Choose the activity and the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI or Cursor Agent open in a new terminal window; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web get the request and the list of files to upload |
+
+- **Live**: files the AI writes appear in the tree as soon as they are saved.
+- **Word stories**: `.docx` files are converted to text automatically so any AI can read them.
+- **Local and private**: everything comes from the files in `workspace/`; no account, no hosting, no database.
+- How it is built (for contributors): [docs/desktop-app.md](docs/desktop-app.md).
 
 Everything below describes **agent mode** first. Chat-mode differences are noted where relevant.
 
-### 4.1 The terminal assistant (`qa`)
+### 4.2 The terminal menu (`qa --terminal`)
 
-`qa` is a small menu that runs in your terminal. **It has no AI of its own and calls no online service**: it only copies your files into the right project folder, writes the request for you, and opens the AI tool you already use.
+`qa --terminal` is a small menu that runs in your terminal. **It has no AI of its own and calls no online service**: it only copies your files into the right project folder, writes the request for you, and opens the AI tool you already use.
 
 ```mermaid
 flowchart TD
-  START["Type qa in any terminal"] --> P{"Project"}
+  START["Type qa --terminal in any terminal"] --> P{"Project"}
   P -->|existing| A
   P -->|new| NP["Asks id and name,<br/>creates the project folder"]
   NP --> A{"Activity<br/>unavailable skills are greyed out"}
@@ -304,7 +328,7 @@ qa --help
 
 This uses the fictional system **Acme Library** included in [examples/](examples/README.md).
 
-> **Shortcut:** if you installed the `qa` command ([3.6](#36-install-the-qa-command-recommended)), just type `qa` and follow the menu — it does steps 1 and 2 for you.
+> **Shortcut:** if you installed the `qa` command ([3.6](#36-install-the-qa-command-recommended)), type `qa --terminal` and follow the menu — it does steps 1 and 2 for you.
 
 **Step 1 — Open the folder in your AI tool**
 - Claude Code: in a terminal, `cd quality-agents` then `claude` (or open the folder in the VS Code extension / desktop app).
@@ -936,7 +960,8 @@ Run all commands from the `quality-agents` folder. On Windows PowerShell, use `n
 
 | Command | What it does |
 |---|---|
-| `qa` (after `npm link`) or `npm run qa` | Terminal assistant: guided menu that prepares the request and opens your AI tool ([4.1](#41-the-terminal-assistant-qa)) |
+| `qa` (after `npm link`) or `npm run qa` | Open the desktop app ([4.1](#41-the-desktop-app-qa)) |
+| `qa --terminal` | Terminal menu that prepares the request and opens your AI tool ([4.2](#42-the-terminal-menu-qa---terminal)) |
 | `npm run setup` | One-time setup: workspace folders + commit protection |
 | `npm run new-project -- <id> "<Name>"` | Create a project folder from the template |
 | `npm run new-run -- --project <id> --skill <skill> --slug <short-name>` | Create a run (the AI usually does this for you). Use `--workflow <id>` instead of `--skill` for workflows. |
@@ -960,6 +985,7 @@ Run all commands from the `quality-agents` folder. On Windows PowerShell, use `n
 | `git` / `node` / `npm` "is not recognized" | Install it ([3.2](#32-install-git-and-nodejs)) and **reopen** the terminal. |
 | PowerShell: *"running scripts is disabled on this system"* | Use Git Bash, or type `npm.cmd` instead of `npm`, or run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
 | `qa` "is not recognized" / "command not found" | Run `npm link` inside the `quality-agents` folder and open a new terminal, or use `npm run qa` from that folder. |
+| `qa` says the app is not installed yet | Run `npm run setup` in the `quality-agents` folder (also needed after each `git pull`). |
 | `qa` shows your AI tool as "not installed" | The tool's command (`claude`, `codex`, `cursor-agent`, `gemini`, `cursor`) is not on your PATH. Install the tool's CLI, or choose "Just show the request" and paste it yourself. |
 | The AI does not seem to know the skills | Make sure you opened the **`quality-agents` folder itself** (not a parent folder). Start a new session after cloning or updating. In chat tools, check that you uploaded the skills. |
 | The AI answers generically instead of following the process | Name the skill explicitly ("use the requirements-review skill") or, in Claude Code, type `/requirements-review`. |
@@ -1010,8 +1036,9 @@ For people maintaining the framework:
 ## 17. Contributing
 
 1. Create a branch.
-2. Edit only `skills/`, `core/`, `docs/`, `templates/`, `schemas/`, `adapters/`, `examples/`, `scripts/` and `tests/`. Never edit `.agents/skills/` or `.claude/skills/` by hand.
-3. Run `npm run build`, `npm run check` and `npm test` — all must pass.
+2. Edit only `skills/`, `core/`, `docs/`, `templates/`, `schemas/`, `adapters/`, `examples/`, `scripts/`, `desktop/`, `app/` and `tests/`. Never edit `.agents/skills/` or `.claude/skills/` by hand.
+   - Working on the desktop app: `npm run app:dev` rebuilds it and opens it.
+3. Run `npm run build`, `npm run typecheck`, `npm run check` and `npm test` — all must pass.
 4. Never include real project data; examples must be synthetic.
 5. Changes to the rules of the migrated skills need team agreement: propose them in [docs/proposed-improvements.md](docs/proposed-improvements.md) first. The origin of each rule is documented in [docs/migration/](docs/migration/README.md).
 6. When you change this guide, update both versions: `README.md` (English) and `README.pt-BR.md` (Portuguese).
@@ -1032,7 +1059,9 @@ For people maintaining the framework:
 | `adapters/` | Setup guides per AI tool |
 | `examples/` | Fictional inputs and acceptance checklists |
 | `docs/` | Skill standard, compatibility, privacy, prompt migration, proposed improvements |
-| `scripts/`, `tests/` | Helper commands and the framework's own tests |
+| `app/` | Desktop app interface (React + TypeScript), built into `app/dist/` by `npm run setup` |
+| `desktop/` | Desktop app main process (Electron, TypeScript): file access rules, AI tool launcher — see [docs/desktop-app.md](docs/desktop-app.md) |
+| `scripts/`, `tests/` | `qa` command, helper commands and the framework's own tests |
 | `workspace/` | Your local project data — never versioned |
 
 ## License

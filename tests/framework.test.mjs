@@ -13,7 +13,7 @@ import { scanText } from '../scripts/check-secrets.mjs';
 import { buildXlsx, readXlsx } from '../scripts/xlsx.mjs';
 import { checkPreAnalysis, checkMissingInfo, checkTestCases, checkReviewMatrix } from '../scripts/check-output.mjs';
 import { markdownToHtml } from '../scripts/pdf.mjs';
-import { ACTIVITIES, buildPrompt, cleanPath, copyToInbox, isUsable } from '../scripts/qa.mjs';
+import { ACTIVITIES, buildPrompt, cleanPath, copyToInbox, isUsable } from '../scripts/lib/core.ts';
 
 // A temporary copy of the framework with one skill, to mutate safely.
 function fixture() {

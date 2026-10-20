@@ -20,7 +20,8 @@ A skill becomes **stable** only after passing its example's acceptance checklist
 | xlsx write → re-save in another library (openpyxl) → read back | `npm run xlsx` | Pass: 7 sheets, frozen row, filter, widths, styles, dropdowns; edits detected on read |
 | PDF rendering | `npm run pdf` | Pass with Microsoft Edge (headless) |
 | Run isolation check | `npm run runs` | Flags a `state.json` pointing to another project |
-| Terminal assistant | `qa` | Interactive menu driven end to end (invalid input re-asked, unavailable skill greyed out, missing file rejected, no overwrite in inbox, tool detection); prompt passed as a single argument on Windows `.cmd` shims with quotes and `&`; bin shim works via `npm exec` |
+| Desktop app (Electron) | `qa` / `npm run app:dev` | Built and opened on Windows 11; start screen and workspace captured from the real window; service tests cover project creation, file tree, reading/editing, path confinement, launch validation, Word extraction and Markdown escaping (`tests/desktop.test.ts`) |
+| Terminal assistant | `qa --terminal` | Interactive menu driven end to end (invalid input re-asked, unavailable skill greyed out, missing file rejected, no overwrite in inbox, tool detection); prompt passed as a single argument on Windows `.cmd` shims with quotes and `&`; bin shim works via `npm exec` |
 
 ## Tool × skill results
 

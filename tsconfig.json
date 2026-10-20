@@ -1,0 +1,20 @@
+{
+  "//": "Type checking for the TypeScript run directly by Node (desktop main process, qa command, tests). The browser app has its own app/tsconfig.json.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "noUnusedLocals": true
+  },
+  "include": ["scripts/**/*.ts", "desktop/**/*.ts", "tests/**/*.ts"]
+}

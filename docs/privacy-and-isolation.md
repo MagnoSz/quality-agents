@@ -31,6 +31,10 @@ Everything under `workspace/`: project context, received documents, user stories
 
 A team may version `workspace/projects/<project-id>/` as its **own private Git repository** (see the README inside each project folder). Its `.gitignore` excludes `runs/`, `inbox/` and `temporary/`, so activity results stay unversioned there too. This repository's Git ignores the whole `workspace/`, so the two never mix.
 
+## Desktop app
+
+The `qa` desktop app reads and writes only inside the open project's folder, never opens executables or scripts, and does not send anything over the network: it opens the AI tool you choose, and that tool talks to its provider under your own account and settings. Details: [desktop-app.md](desktop-app.md).
+
 ## Target repositories
 
 When automation is authorized to change a target system's repository, files are created there and that repository's own Git policy applies. This repository's `.gitignore` does not affect other repositories.

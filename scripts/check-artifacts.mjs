@@ -11,11 +11,11 @@ import { git } from './lib/repo.mjs';
 
 // Every versioned path must live under one of these. Anything else is
 // suspicious by default; extend the list deliberately when the repo grows.
-const ALLOWED_ROOT_FILES = ['AGENTS.md', 'CLAUDE.md', 'README.md', 'README.pt-BR.md', 'CONTRIBUTING.md', 'LICENSE', 'package.json', '.gitignore', '.gitattributes', 'workspace/README.md'];
-const ALLOWED_ROOT_DIRS = ['core/', 'skills/', '.agents/skills/', '.claude/skills/', 'adapters/', 'templates/', 'schemas/', 'examples/', 'docs/', 'scripts/', 'tests/', '.githooks/', '.github/'];
+const ALLOWED_ROOT_FILES = ['AGENTS.md', 'CLAUDE.md', 'README.md', 'README.pt-BR.md', 'CONTRIBUTING.md', 'LICENSE', 'package.json', 'package-lock.json', 'tsconfig.json', '.gitignore', '.gitattributes', 'workspace/README.md'];
+const ALLOWED_ROOT_DIRS = ['app/', 'desktop/', 'core/', 'skills/', '.agents/skills/', '.claude/skills/', 'adapters/', 'templates/', 'schemas/', 'examples/', 'docs/', 'scripts/', 'tests/', '.githooks/', '.github/'];
 const ARTIFACT_EXTENSIONS = /\.(pdf|xlsx?|xlsm|docx?|pptx?|odt|ods|png|jpe?g|gif|webp|bmp|mp4|webm|mov|zip|7z|rar|tar|gz|har|trace|db|sqlite|pcap)$/i;
-// Binary templates/images are only legitimate as skill assets or doc images.
-const BINARY_ALLOWED = [/^skills\/[^/]+\/assets\//, /^\.agents\/skills\/[^/]+\/assets\//, /^\.claude\/skills\/[^/]+\/assets\//, /^docs\/assets\//];
+// Binary templates/images are only legitimate as skill assets, app artwork or doc images.
+const BINARY_ALLOWED = [/^app\/public\//,/^skills\/[^/]+\/assets\//, /^\.agents\/skills\/[^/]+\/assets\//, /^\.claude\/skills\/[^/]+\/assets\//, /^docs\/assets\//];
 
 export function findViolations(paths) {
   const violations = [];
@@ -24,7 +24,7 @@ export function findViolations(paths) {
     const name = path.split('/').pop();
     if (path.startsWith('workspace/') && path !== 'workspace/README.md') {
       violations.push(`${path}: workspace/ content is never versioned (artifact isolation policy)`);
-    } else if (path.startsWith('dist/')) {
+    } else if (path.startsWith('dist/') || path.startsWith('app/dist/') || path.startsWith('app/dist-electron/')) {
       violations.push(`${path}: dist/ holds generated bundles and is never versioned`);
     } else if (/^\.env(\..*)?$/.test(name)) {
       violations.push(`${path}: environment files may contain credentials`);
