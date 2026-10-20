@@ -101,7 +101,7 @@ export function validate(root = ROOT, { checkDrift = true } = {}) {
   validateAgentsMd(root, skills, err);
   validateSchemas(root, err);
 
-  for (const file of ['README.md', 'AGENTS.md'].map((f) => join(root, f)).filter(existsSync)) checkLinks(root, file, err);
+  for (const file of ['README.md', 'README.pt-BR.md', 'AGENTS.md'].map((f) => join(root, f)).filter(existsSync)) checkLinks(root, file, err);
   for (const dir of ['docs', 'adapters', 'examples', 'templates', 'workspace', 'core']) {
     for (const file of walkFiles(join(root, dir)).filter((f) => f.endsWith('.md'))) {
       if (dir === 'workspace' && relPosix(root, file) !== 'workspace/README.md') continue;

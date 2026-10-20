@@ -11,7 +11,7 @@ import { git } from './lib/repo.mjs';
 
 // Every versioned path must live under one of these. Anything else is
 // suspicious by default; extend the list deliberately when the repo grows.
-const ALLOWED_ROOT_FILES = ['AGENTS.md', 'CLAUDE.md', 'README.md', 'CONTRIBUTING.md', 'LICENSE', 'package.json', '.gitignore', '.gitattributes', 'workspace/README.md'];
+const ALLOWED_ROOT_FILES = ['AGENTS.md', 'CLAUDE.md', 'README.md', 'README.pt-BR.md', 'CONTRIBUTING.md', 'LICENSE', 'package.json', '.gitignore', '.gitattributes', 'workspace/README.md'];
 const ALLOWED_ROOT_DIRS = ['core/', 'skills/', '.agents/skills/', '.claude/skills/', 'adapters/', 'templates/', 'schemas/', 'examples/', 'docs/', 'scripts/', 'tests/', '.githooks/', '.github/'];
 const ARTIFACT_EXTENSIONS = /\.(pdf|xlsx?|xlsm|docx?|pptx?|odt|ods|png|jpe?g|gif|webp|bmp|mp4|webm|mov|zip|7z|rar|tar|gz|har|trace|db|sqlite|pcap)$/i;
 // Binary templates/images are only legitimate as skill assets or doc images.

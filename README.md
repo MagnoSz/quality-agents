@@ -1,5 +1,7 @@
 # Quality Agents
 
+🇧🇷 [Leia em português](README.pt-BR.md)
+
 A portable library of **AI agent skills for software quality engineering**. Clone it once, register each system you test, and run the same QA activities — requirements review, test design, failure analysis — with Claude Code, Cursor, Codex, ChatGPT, claude.ai, Gemini or other AI tools.
 
 This guide is written for QA professionals. No programming knowledge is needed: you will copy a few commands, open a folder in your AI tool and talk to it in plain language.
@@ -1012,6 +1014,7 @@ For people maintaining the framework:
 3. Run `npm run build`, `npm run check` and `npm test` — all must pass.
 4. Never include real project data; examples must be synthetic.
 5. Changes to the rules of the migrated skills need team agreement: propose them in [docs/proposed-improvements.md](docs/proposed-improvements.md) first. The origin of each rule is documented in [docs/migration/](docs/migration/README.md).
+6. When you change this guide, update both versions: `README.md` (English) and `README.pt-BR.md` (Portuguese).
 
 ---
 
