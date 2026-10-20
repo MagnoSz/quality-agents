@@ -34,6 +34,7 @@ before(() => {
     cpSync(join(ROOT, 'skills', s), join(root, 'skills', s), { recursive: true });
   }
   cpSync(join(ROOT, 'templates'), join(root, 'templates'), { recursive: true });
+  cpSync(join(ROOT, 'agents'), join(root, 'agents'), { recursive: true });
   writeFileSync(join(root, 'package.json'), JSON.stringify({ version: '9.9.9' }));
   createProject('acme', 'Acme', root);
   const project = join(root, 'workspace', 'projects', 'acme');
@@ -141,6 +142,53 @@ test('launch builds the request; Word files are extracted', () => {
   assert.equal(chat.opened, false);
   assert.ok((chat as { upload: string[] }).upload.some((u) => u.endsWith('state.json')));
   assert.equal(launched.length, 1, 'chat does not launch anything');
+});
+
+test('agent library: built-in agents are read-only, copies are editable and validated', () => {
+  const names = service.agents().map((a) => a.name);
+  assert.ok(names.includes('requirements-analyst') && names.includes('automation-engineer'));
+  assert.equal(service.agents().find((a) => a.name === 'automation-engineer')?.usable, false);
+  assert.ok(service.categories().some((c) => c.id === 'quality'));
+  assert.throws(() => service.saveAgent('requirements-analyst', 'x'), /cannot be edited/);
+  assert.throws(() => service.deleteAgent('requirements-analyst'), /cannot be deleted/);
+  assert.throws(() => service.agent('../secret'), /Unknown agent/);
+
+  const copy = service.duplicateAgent('requirements-analyst');
+  assert.equal(copy.name, 'requirements-analyst-custom');
+  assert.equal(copy.source, 'custom');
+  assert.equal(copy.basedOn, 'requirements-analyst');
+  const file = join(root, 'workspace', 'library', 'agents', 'quality', 'requirements-analyst-custom.md');
+  const text = readFileSync(file, 'utf8');
+  assert.match(text, /^# Requirements Analyst \(custom\)$/m);
+
+  assert.throws(() => service.saveAgent(copy.name, text.replace('name: requirements-analyst-custom', 'name: other')), /must match the file name/);
+  assert.throws(() => service.saveAgent(copy.name, text.replace('skills: requirements-review', 'skills: made-up')), /unknown skill "made-up"/);
+  assert.throws(() => service.saveAgent(copy.name, text.replace('access: project-write', 'access: root')), /access must be one of/);
+  assert.equal(service.saveAgent(copy.name, text.replace('## Boundaries', '## Boundaries\n\nAlways cite the rule id.')), true);
+  assert.match(service.agent(copy.name).html, /Always cite the rule id/);
+  assert.match(readFileSync(join(root, 'agents', 'quality', 'requirements-analyst.md'), 'utf8'), /^# Requirements Analyst$/m, 'the original never changes');
+
+  assert.equal(service.deleteAgent(copy.name), true);
+  assert.ok(!existsSync(file));
+});
+
+test('agents per project: enabled list in project.json gates the launch', () => {
+  const all = service.projectAgents('acme');
+  assert.ok(all.includes('requirements-analyst') && !all.includes('automation-engineer'), 'absent list = every usable agent');
+  assert.throws(() => service.setProjectAgents('acme', ['automation-engineer']), /Unknown or unavailable/);
+  assert.deepEqual(service.setProjectAgents('acme', ['requirements-analyst']), ['requirements-analyst']);
+  const stored = JSON.parse(readFileSync(join(root, 'workspace', 'projects', 'acme', 'project.json'), 'utf8')) as { agents: string[]; project: string };
+  assert.deepEqual(stored.agents, ['requirements-analyst']);
+  assert.equal(stored.project, 'acme');
+
+  const base = { project: 'acme', activity: 'review', tool: 'print', files: ['us-1.md'], language: 'English', note: '' };
+  assert.throws(() => service.launch({ ...base, agent: 'failure-analyst' }), /not enabled in this project/);
+  assert.throws(() => service.launch({ ...base, agent: 'automation-engineer' }), /not available yet/);
+  assert.throws(() => service.launch({ ...base, agent: 'nobody' }), /Unknown agent/);
+  const r = service.launch({ ...base, agent: 'requirements-analyst' });
+  assert.match(r.prompt, /Act as the requirements-analyst agent: read agents\/quality\/requirements-analyst\.md and follow it\./);
+  assert.doesNotMatch(service.launch(base).prompt, /Act as/);
+  service.setProjectAgents('acme', all);
 });
 
 test('non-ASCII prompts reach Windows tools through a UTF-8 request file', () => {

@@ -1,4 +1,4 @@
-// Builds self-contained skills from the canonical sources:
+// Builds self-contained skills (and Claude Code subagents) from the canonical sources:
 //   skills/<name>/**  +  core/*.md  ->  <mirror>/<name>/** (core under references/core/)
 // for every mirror in MIRRORS. Mirrors are committed so a fresh clone works
 // without running anything; `--check` fails when they drift from the source.
@@ -9,6 +9,11 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node
 import { join, dirname, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ROOT, MIRRORS, listSkillDirs, walkFiles, relPosix } from './lib/repo.mjs';
+import { claudeSubagent, isUsableAgent, listAgents } from './lib/agents.ts';
+
+// Built-in agents become native Claude Code subagents (usable ones only).
+const AGENT_MIRROR = '.claude/agents';
+const GENERATED = [...MIRRORS, AGENT_MIRROR];
 
 const MIRROR_README = `# Generated folder — do not edit
 
@@ -33,6 +38,9 @@ export function expectedFiles(root = ROOT) {
       }
     }
   }
+  for (const agent of listAgents(root).filter((a) => a.source === 'builtin' && isUsableAgent(a))) {
+    files.set(`${AGENT_MIRROR}/${agent.name}.md`, Buffer.from(claudeSubagent(agent)));
+  }
   return files;
 }
 
@@ -40,7 +48,7 @@ export function findDrift(root = ROOT) {
   const expected = expectedFiles(root);
   const problems = [];
   const actual = new Set();
-  for (const mirror of MIRRORS) {
+  for (const mirror of GENERATED) {
     for (const file of walkFiles(join(root, mirror))) actual.add(relPosix(root, file));
   }
   for (const [path, content] of expected) {
@@ -56,7 +64,7 @@ export function findDrift(root = ROOT) {
 
 export function build(root = ROOT) {
   const files = expectedFiles(root);
-  for (const mirror of MIRRORS) rmSync(join(root, mirror), { recursive: true, force: true });
+  for (const mirror of GENERATED) rmSync(join(root, mirror), { recursive: true, force: true });
   for (const [path, content] of files) {
     const full = join(root, path);
     mkdirSync(dirname(full), { recursive: true });
@@ -73,9 +81,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
       drift.forEach((d) => console.error(`  ${d}`));
       process.exit(1);
     }
-    console.log('Skill mirrors are up to date.');
+    console.log('Skill and agent mirrors are up to date.');
   } else {
     const count = build();
-    console.log(`Built ${count} files into ${MIRRORS.join(', ')}.`);
+    console.log(`Built ${count} files into ${GENERATED.join(", ")}.`);
   }
 }

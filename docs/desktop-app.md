@@ -9,14 +9,15 @@ The Quality Agents desktop app is a thin visual layer over the framework. It has
 | `scripts/qa.ts` | The `qa` command: opens the app (default), the terminal menu (`--terminal`) or prepares a request directly (`--project … --tool …`) |
 | `desktop/main.ts` | Electron main process: one window, one validated IPC channel, project folder watcher |
 | `desktop/preload.ts` | Bridge exposed to the UI as `window.qa` (`call`, `watch`, `onChanged`, `openLink`) |
-| `desktop/service.ts` | Everything the UI can ask for: projects, file tree, read/write files, activity state, inbox, launching AI tools. Validates every input |
+| `desktop/service.ts` | Everything the UI can ask for: projects, file tree, read/write files, activity state, inbox, agent library and agents per project, launching AI tools. Validates every input |
 | `desktop/fs-guard.ts` | Path confinement (`resolveInside`) and file type rules (editable, openable) |
 | `desktop/launcher.ts` | Opens AI tools: terminal tools in a new terminal window, editors with the request on the clipboard |
 | `desktop/run-tool.ts` | Runs in that new window (Windows): reads the request from a UTF-8 JSON file and starts the tool |
 | `scripts/lib/core.ts` | Shared core (also used by the terminal menu): projects, runs, skills, request building |
+| `scripts/lib/agents.ts` | Agent model shared with the validator and the build: parsing, validation, listing, duplication, Claude Code subagents ([agents.md](agents.md)) |
 | `scripts/lib/docx.ts` | Word (`.docx`) to Markdown, so any AI can read stories written in Word |
 | `scripts/lib/markdown.mjs` | Markdown to HTML (escapes all HTML from the document); also used for PDF reports |
-| `app/` | UI (React + TypeScript, built by Vite into `app/dist/`): start screen, Obsidian-like workspace, launch dialog |
+| `app/` | UI (React + TypeScript, built by Vite into `app/dist/`): start screen, Obsidian-like workspace, launch dialog, agent library |
 
 ```mermaid
 flowchart LR
@@ -35,6 +36,7 @@ flowchart LR
 - **Renderer locked down**: `contextIsolation`, `sandbox`, no Node integration, strict Content-Security-Policy, no navigation, no new windows (web links go to the default browser), all permission requests denied.
 - **One IPC channel** (`qa:call`) that only accepts calls from the app's own page and only the service's method names.
 - **Every input validated in the main process**: project ids must exist; paths are resolved inside the project folder (symlinks included); activities, tools and languages come from fixed lists; inbox files must exist.
+- **Agents**: built-in agents are read-only; only the user's own agents (in `workspace/library/agents/`) can be saved or deleted, always resolved inside that folder and validated before saving. A launch with an agent requires it to be usable and enabled in the project.
 - **Editing** only for existing `.md` and `.txt` files. **Opening with the default program** only for document and image types — never executables or scripts.
 - **AI tools** are started from the fixed tool list. User text only travels as the prompt: on Windows through a UTF-8 file (never through a batch file); on macOS/Linux as a single-quoted argument.
 - **Markdown** is rendered with all HTML escaped (including attribute quotes); links are handled by the app, not followed by the page.
@@ -55,6 +57,7 @@ Development helpers (environment variables of the main process):
 | Variable | Effect |
 |---|---|
 | `QA_OPEN_PROJECT=<id>` | Opens that project directly |
+| `QA_OPEN_VIEW=library` | Opens the agent library |
 | `QA_SCREENSHOT=<file.png>` | Saves a screenshot of the window and quits (visual checks) |
 | `QA_ROOT=<folder>` | Uses that folder as the framework folder (the installed app defaults to Documents/Quality Agents) |
 
@@ -74,7 +77,7 @@ npm run dist:linux   # .AppImage (build on Linux)
 
 ## Tests
 
-`tests/desktop.test.ts` exercises the service without Electron: project creation, file tree, reading and editing, path confinement, launch validation, Word extraction, Markdown escaping and the launcher's quoting. AI tools are never started in tests.
+`tests/desktop.test.ts` exercises the service without Electron: project creation, file tree, reading and editing, path confinement, launch validation, agent library and agents per project, Word extraction, Markdown escaping and the launcher's quoting. AI tools are never started in tests.
 
 ## Planned
 

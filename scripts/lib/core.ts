@@ -189,11 +189,14 @@ export interface Request {
   note?: string;
   run?: string;
   language?: string;
+  // Agent to act as: its name and its file (relative to the framework folder).
+  agent?: { name: string; path: string };
 }
 
-export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English' }: Request): string {
+export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English', agent }: Request): string {
   const list = files.length ? files.join(', ') : '';
   const parts = [`Follow AGENTS.md. Project: ${project}.`];
+  if (agent) parts.push(`Act as the ${agent.name} agent: read ${agent.path} and follow it.`);
   switch (activity) {
     case 'open':
       parts.push('Use the project-context skill to load this project\'s context, summarize in a few lines what is known and what is missing, and ask me what I need.');

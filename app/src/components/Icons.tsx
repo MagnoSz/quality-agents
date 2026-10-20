@@ -76,3 +76,9 @@ export const IconPlus = ({ size }: IconProps) => (
 export const IconPanel = ({ size }: IconProps) => (
   <svg {...base(size)}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M15 4v16" /></svg>
 );
+export const IconUsers = ({ size }: IconProps) => (
+  <svg {...base(size)}><circle cx="9" cy="8" r="3.5" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6 6 0 0 1 3 5.5" /></svg>
+);
+export const IconTrash = ({ size }: IconProps) => (
+  <svg {...base(size)}><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+);

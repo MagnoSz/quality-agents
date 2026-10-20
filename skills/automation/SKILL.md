@@ -5,6 +5,7 @@ license: MIT
 metadata:
   version: "0.2.0"
   status: pending-migration
+  category: quality
   phase: "4"
 ---
 

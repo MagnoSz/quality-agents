@@ -5,6 +5,7 @@ Everything in this folder (except this file) is ignored by Git. It holds all pro
 ```text
 workspace/
 ├── projects/<project-id>/   # one folder per system under test (context, inbox, runs)
+├── library/agents/          # your own agents (copies of built-in agents you customized)
 └── temporary/               # scratch files not tied to a project
 ```
 

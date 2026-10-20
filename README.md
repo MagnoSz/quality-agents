@@ -75,6 +75,7 @@ This guide is written for QA professionals. No programming knowledge is needed: 
 | Term | Meaning |
 |---|---|
 | **Skill** | The instructions for one QA activity. You never need to open them — the AI reads them. |
+| **Agent** | A role that does the work using one or more skills (e.g. `requirements-analyst`), with an access level. Built-in agents can be duplicated and customized — see [docs/agents.md](docs/agents.md). |
 | **Project** | One system you test (e.g. "Billing Portal"). Identified by a short id in lowercase with hyphens: `billing-portal`. |
 | **Project context** | What the AI knows about a project: glossary, business rules, modules, flows, permissions, environments, conventions. Only definitions **you confirmed** are stored. |
 | **Run** | One execution of an activity (e.g. "review of story US-310"). Each run has an id like `20261020-0930-requirements-review-us-310` and its own folder with inputs, outputs and a `state.json` file. |
@@ -222,11 +223,12 @@ Type `qa` (or use the shortcut, once the installer exists). Quality Agents opens
 
 | Area | What it does |
 |---|---|
-| **Left ribbon** | All projects · Open in your AI tool · Open the project folder · Refresh · Show/hide the side panel |
+| **Left ribbon** | All projects · Open in your AI tool · Open the project folder · Agent library · Refresh · Show/hide the side panel |
 | **File tree** | *Context* (what the AI knows about the system), *Inbox* (files you give the AI), *Activities* (each review, test design or analysis, with date and a status dot), proposed updates and activity log |
 | **Documents in tabs** | Markdown is shown formatted; **Ctrl+E** switches to editing, **Ctrl+S** saves, **Ctrl+W** closes. Word files show their text; JSON, text and images are previewed; Excel and PDF open in their own program |
-| **Side panel** | For an activity: status, current step, pending items, approvals and the files produced, plus *Continue in your AI tool*. Otherwise: project overview and open activities |
-| **Open in your AI tool** | Choose the activity and the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI or Cursor Agent open in a new terminal window; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web get the request and the list of files to upload |
+| **Side panel** | For an activity: status, current step, pending items, approvals and the files produced, plus *Continue in your AI tool*. Otherwise: project overview, **agents enabled in this project** (checkboxes) and open activities |
+| **Open in your AI tool** | Choose the activity, optionally **who should do it** (an agent), the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI or Cursor Agent open in a new terminal window; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web get the request and the list of files to upload |
+| **Agent library** | From the start screen or the ribbon: agents by category, with their role, skills and access. **Duplicate** a built-in agent to make your own, then **Edit** and **Save** it (checked before saving) or delete it. Your agents stay in `workspace/library/agents/` |
 
 - **Live**: files the AI writes appear in the tree as soon as they are saved.
 - **Word stories**: `.docx` files are converted to text automatically so any AI can read them.
@@ -951,6 +953,7 @@ More: [adapters/chat/README.md](adapters/chat/README.md) · other tools: [adapte
 | — deliverables (Excel, PDF, reports, test cases) | `.../outputs/` |
 | — screenshots, traces | `.../evidence/` |
 | — logs | `.../logs/` |
+| Your own agents | `workspace/library/agents/<category>/` |
 | Chat-tool packages | `dist/` |
 
 The AI never writes results into the framework folders (`skills/`, `core/`, `templates/`, `docs/`...). If you see a result somewhere else, ask it to move it to the run folder.
@@ -1070,8 +1073,9 @@ For people maintaining the framework:
 | `AGENTS.md` | Entry point read by AI tools: rules, skill catalog, routing, approvals, resume |
 | `CLAUDE.md` | Makes Claude Code load `AGENTS.md` |
 | `skills/` | Skill definitions (source — edit here) |
+| `agents/` | Built-in agents by category (source — edit here); see [docs/agents.md](docs/agents.md) |
 | `core/` | Policies shared by all skills: isolation, approval, persistence, traceability, principles |
-| `.agents/skills/`, `.claude/skills/` | Generated copies so each AI tool finds the skills — do not edit |
+| `.agents/skills/`, `.claude/skills/`, `.claude/agents/` | Generated copies so each AI tool finds the skills (and Claude Code the agents) — do not edit |
 | `templates/project-context/` | Template for new project folders |
 | `schemas/` | Formats of `state.json`, `project.json` and workflows |
 | `adapters/` | Setup guides per AI tool |

@@ -8,6 +8,7 @@ import { ROOT, listSkillDirs, walkFiles, relPosix, readJson, SLUG } from './lib/
 import { parseFrontmatter } from './lib/frontmatter.mjs';
 import { validateSchema } from './lib/schema.mjs';
 import { findDrift } from './build.mjs';
+import { listAgents, listCategories, parseAgent, validateAgent } from './lib/agents.ts';
 
 // Agent Skills spec fields only, so skills load in every compatible tool.
 const ALLOWED_KEYS = ['name', 'description', 'license', 'compatibility', 'metadata', 'allowed-tools'];
@@ -70,6 +71,7 @@ export function validate(root = ROOT, { checkDrift = true } = {}) {
     if (!meta.version || !/^\d+\.\d+\.\d+$/.test(meta.version)) err(`${where}/SKILL.md`, 'metadata.version must be semver (e.g. "0.1.0")');
     const status = meta.status;
     statusBySkill[dir] = status;
+    if (meta.category !== undefined && !SLUG.test(meta.category)) err(`${where}/SKILL.md`, 'metadata.category must be lowercase letters, digits and hyphens');
     if (!(status in STATUSES)) err(`${where}/SKILL.md`, `metadata.status must be one of ${Object.keys(STATUSES).join(', ')}`);
     else if (STATUSES[status] && !description.startsWith(STATUSES[status])) {
       err(`${where}/SKILL.md`, `description of a "${status}" skill must start with ${STATUSES[status]} so agents do not treat it as available`);
@@ -98,6 +100,7 @@ export function validate(root = ROOT, { checkDrift = true } = {}) {
   }
 
   validateWorkflows(root, skills, err);
+  validateAgents(root, skills, err);
   validateAgentsMd(root, skills, err);
   validateSchemas(root, err);
 
@@ -167,6 +170,25 @@ function validateWorkflows(root, skills, err) {
       }
       seen.add(step.id);
     }
+  }
+}
+
+// Built-in agents (agents/<category>/<name>.md): same rules the app uses for custom agents.
+function validateAgents(root, skills, err) {
+  const dir = join(root, 'agents');
+  if (!existsSync(dir)) return;
+  const categories = listCategories(root).filter((c) => c.source === 'builtin').map((c) => c.id);
+  for (const file of walkFiles(dir).filter((f) => f.endsWith('.md'))) {
+    const where = relPosix(root, file);
+    const parts = where.split('/');
+    if (parts.length !== 3) { err(where, 'agents must be at agents/<category>/<name>.md'); continue; }
+    const { agent, errors } = parseAgent(readFileSync(file, 'utf8'), 'builtin', where);
+    errors.forEach((e) => err(where, e));
+    if (agent) validateAgent(agent, { skills, categories, fileName: basename(file, '.md'), folder: parts[1] }).forEach((e) => err(where, e));
+  }
+  const text = existsSync(join(root, 'AGENTS.md')) ? readFileSync(join(root, 'AGENTS.md'), 'utf8') : '';
+  for (const a of listAgents(root).filter((x) => x.source === 'builtin')) {
+    if (!text.includes(`\`${a.name}\``)) err('AGENTS.md', `agent "${a.name}" is not listed in the agent catalog`);
   }
 }
 

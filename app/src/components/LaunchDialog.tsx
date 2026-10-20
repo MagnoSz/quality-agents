@@ -2,7 +2,7 @@
 // and opens the AI tool the QA already uses. Quality Agents has no chat of its own.
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { api, describeRun, type ActivityInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type ToolInfo, type ToolKind } from '../api';
+import { api, describeRun, type ActivityInfo, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type ToolInfo, type ToolKind } from '../api';
 import { IconCheck, IconCode, IconCopy, IconFile, IconFolder, IconGlobe, IconPlay, IconRefresh, IconTerminal, IconX } from './Icons';
 
 interface Props {
@@ -33,6 +33,8 @@ export function LaunchDialog({ project, tools, preset, onClose }: Props) {
   const [runs, setRuns] = useState<OpenRun[]>([]);
   const [run, setRun] = useState(preset?.run ?? '');
   const [note, setNote] = useState('');
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [agent, setAgent] = useState('');
   const [language, setLanguage] = useState(recall('qa-language') || 'English');
   const [tool, setTool] = useState(() => {
     const saved = recall('qa-tool');
@@ -50,8 +52,11 @@ export function LaunchDialog({ project, tools, preset, onClose }: Props) {
 
   useEffect(() => {
     api.activities().then((r) => { setActivities(r.activities); setLanguages(r.languages); }).catch(() => { /* empty list */ });
+    Promise.all([api.agents(), api.projectAgents(project.id)])
+      .then(([list, enabled]) => setAgents(list.filter((a) => a.usable && enabled.includes(a.name))))
+      .catch(() => setAgents([]));
     load();
-  }, [load]);
+  }, [load, project.id]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -60,6 +65,9 @@ export function LaunchDialog({ project, tools, preset, onClose }: Props) {
   }, [onClose]);
 
   const current = activities.find((a) => a.id === activity);
+  // Agents that use the chosen activity's skill come first; any enabled agent can be chosen.
+  const suited = agents.filter((a) => current && a.skills.includes(current.skill));
+  const others = agents.filter((a) => !suited.includes(a));
   const selectedTool = tools.find((t) => t.id === tool);
   const missing = [
     current && !current.available && 'this activity is not available yet',
@@ -72,7 +80,7 @@ export function LaunchDialog({ project, tools, preset, onClose }: Props) {
     setBusy(true); setResult(null); setError(''); setCopied(false);
     remember('qa-tool', tool); remember('qa-language', language);
     try {
-      const r = await api.launch({ project: project.id, activity, tool, files, note, language, run: activity === 'resume' ? run : undefined });
+      const r = await api.launch({ project: project.id, activity, tool, files, note, language, run: activity === 'resume' ? run : undefined, agent: agent || undefined });
       setResult(r);
       if (!r.opened && r.message) setError(r.message);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
@@ -114,6 +122,16 @@ export function LaunchDialog({ project, tools, preset, onClose }: Props) {
                 <span className="label">Activity to continue</span>
                 <select value={run} onChange={(e) => setRun(e.target.value)}>
                   {runs.map((r) => <option key={r.id} value={r.id}>{describeRun(r.id).title} — {describeRun(r.id).date}</option>)}
+                </select>
+              </label>
+            )}
+            {agents.length > 0 && (
+              <label className="field inline">
+                <span className="label">Who should do it?</span>
+                <select value={agent} onChange={(e) => setAgent(e.target.value)}>
+                  <option value="">Let the skill decide (no specific agent)</option>
+                  {suited.length > 0 && <optgroup label="Suited to this activity">{suited.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}</optgroup>}
+                  {others.length > 0 && <optgroup label="Other agents in this project">{others.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}</optgroup>}
                 </select>
               </label>
             )}

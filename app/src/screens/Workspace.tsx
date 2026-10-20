@@ -7,9 +7,9 @@ import { DocView } from '../components/DocView';
 import { FileTree } from '../components/FileTree';
 import { LaunchDialog } from '../components/LaunchDialog';
 import { SidePanel } from '../components/SidePanel';
-import { IconFolder, IconHome, IconPanel, IconPlay, IconRefresh, IconX } from '../components/Icons';
+import { IconFolder, IconHome, IconPanel, IconPlay, IconRefresh, IconUsers, IconX } from '../components/Icons';
 
-interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; onProjectChanged: () => void }
+interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; onLibrary: () => void; onProjectChanged: () => void }
 
 interface Tab { path: string; content: FileContent; draft: string; mode: 'preview' | 'edit'; saving: boolean }
 
@@ -27,7 +27,7 @@ function resolveLink(from: string, href: string): string | null {
   return parts.join('/');
 }
 
-export function Workspace({ project, tools, onHome, onProjectChanged }: Props) {
+export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged }: Props) {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(DEFAULT_EXPANDED));
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -98,6 +98,11 @@ export function Workspace({ project, tools, onHome, onProjectChanged }: Props) {
     onHome();
   };
 
+  const goLibrary = () => {
+    if (tabsRef.current.some(isDirty) && !window.confirm('There are unsaved changes. Leave anyway?')) return;
+    onLibrary();
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || !active) return;
@@ -136,6 +141,7 @@ export function Workspace({ project, tools, onHome, onProjectChanged }: Props) {
         <button type="button" className="icon-btn" onClick={goHome} title="All projects"><IconHome size={19} /></button>
         <button type="button" className="icon-btn accent" onClick={() => setLaunch({ activity: 'open' })} title="Open in your AI tool"><IconPlay size={19} /></button>
         <button type="button" className="icon-btn" onClick={() => { void api.openFolder(project.id); }} title="Open the project folder"><IconFolder size={19} /></button>
+        <button type="button" className="icon-btn" onClick={goLibrary} title="Agent library"><IconUsers size={19} /></button>
         <button type="button" className="icon-btn" onClick={() => { loadTree(); setRefreshKey((k) => k + 1); }} title="Refresh"><IconRefresh size={19} /></button>
         <span className="ribbon-spacer" />
         <button type="button" className="icon-btn" onClick={() => setShowPanel((v) => !v)} title="Show or hide the side panel"><IconPanel size={19} /></button>
@@ -200,7 +206,7 @@ export function Workspace({ project, tools, onHome, onProjectChanged }: Props) {
         )}
       </main>
 
-      {showPanel && <SidePanel project={project} runId={runId} refreshKey={refreshKey} onOpenPath={openPath} onLaunch={(p) => setLaunch(p ?? { activity: 'open' })} />}
+      {showPanel && <SidePanel project={project} runId={runId} refreshKey={refreshKey} onOpenPath={openPath} onLaunch={(p) => setLaunch(p ?? { activity: 'open' })} onLibrary={goLibrary} />}
 
       <footer className="statusbar">
         <span>{project.name}</span>

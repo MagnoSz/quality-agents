@@ -5,6 +5,7 @@ license: MIT
 metadata:
   version: "0.0.1"
   status: planned
+  category: quality
   phase: "4"
 ---
 

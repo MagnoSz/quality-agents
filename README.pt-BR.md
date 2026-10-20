@@ -75,6 +75,7 @@ Este guia foi escrito para profissionais de QA. Não é preciso saber programar:
 | Termo | Significado |
 |---|---|
 | **Skill** | As instruções de uma atividade de QA. Você nunca precisa abri-las — a IA lê. |
+| **Agente** | Um papel que faz o trabalho usando uma ou mais skills (ex.: `requirements-analyst`), com um nível de acesso. Agentes prontos podem ser duplicados e personalizados — veja [docs/agents.md](docs/agents.md). |
 | **Projeto** | Um sistema que você testa (ex.: "Billing Portal"). Identificado por um id curto em minúsculas com hífens: `billing-portal`. |
 | **Contexto do projeto** | O que a IA sabe sobre um projeto: glossário, regras de negócio, módulos, fluxos, permissões, ambientes, convenções. Só ficam registradas as definições que **você confirmou**. |
 | **Execução (run)** | Uma execução de uma atividade (ex.: "revisão da história US-310"). Cada execução tem um id como `20261020-0930-requirements-review-us-310` e uma pasta própria com entradas, saídas e o arquivo `state.json`. |
@@ -222,11 +223,12 @@ Digite `qa` (ou use o atalho, quando o instalador existir). O Quality Agents abr
 
 | Área | O que faz |
 |---|---|
-| **Faixa de ícones à esquerda** | Todos os projetos · Abrir na sua ferramenta de IA · Abrir a pasta do projeto · Atualizar · Mostrar/ocultar o painel lateral |
+| **Faixa de ícones à esquerda** | Todos os projetos · Abrir na sua ferramenta de IA · Abrir a pasta do projeto · Biblioteca de agentes · Atualizar · Mostrar/ocultar o painel lateral |
 | **Árvore de arquivos** | *Context* (o que a IA sabe sobre o sistema), *Inbox* (arquivos que você entrega à IA), *Activities* (cada revisão, projeto de testes ou análise, com data e ponto de status), atualizações propostas e histórico |
 | **Documentos em abas** | Markdown aparece formatado; **Ctrl+E** alterna para edição, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word mostram o texto; JSON, texto e imagens têm pré-visualização; Excel e PDF abrem no programa deles |
-| **Painel lateral** | Numa atividade: status, etapa atual, pendências, aprovações e arquivos gerados, além de *Continuar na sua ferramenta de IA*. Fora dela: visão geral do projeto e atividades em aberto |
-| **Abrir na sua ferramenta de IA** | Escolha a atividade e os arquivos do inbox, adicione uma observação e escolha a ferramenta: Claude Code, Codex, Gemini CLI ou Cursor Agent abrem numa janela de terminal nova; Cursor ou VS Code abrem a pasta com o pedido copiado; ChatGPT / claude.ai / Gemini web recebem o pedido e a lista de arquivos para enviar |
+| **Painel lateral** | Numa atividade: status, etapa atual, pendências, aprovações e arquivos gerados, além de *Continuar na sua ferramenta de IA*. Fora dela: visão geral do projeto, **agentes habilitados no projeto** (caixas de seleção) e atividades em aberto |
+| **Abrir na sua ferramenta de IA** | Escolha a atividade, opcionalmente **quem deve fazer** (um agente), os arquivos do inbox, adicione uma observação e escolha a ferramenta: Claude Code, Codex, Gemini CLI ou Cursor Agent abrem numa janela de terminal nova; Cursor ou VS Code abrem a pasta com o pedido copiado; ChatGPT / claude.ai / Gemini web recebem o pedido e a lista de arquivos para enviar |
+| **Biblioteca de agentes** | Na tela inicial ou na faixa de ícones: agentes por categoria, com papel, skills e acesso. **Duplicate** cria a sua cópia de um agente pronto, que você pode **Edit**ar e salvar (validado antes de salvar) ou excluir. Seus agentes ficam em `workspace/library/agents/` |
 
 - **Ao vivo**: os arquivos que a IA grava aparecem na árvore assim que são salvos.
 - **Histórias em Word**: arquivos `.docx` são convertidos em texto automaticamente para qualquer IA conseguir ler.
@@ -961,6 +963,7 @@ Mais detalhes: [adapters/chat/README.md](adapters/chat/README.md) · outras ferr
 | — entregáveis (Excel, PDF, relatórios, casos de teste) | `.../outputs/` |
 | — prints, traces | `.../evidence/` |
 | — logs | `.../logs/` |
+| Seus próprios agentes | `workspace/library/agents/<categoria>/` |
 | Pacotes para ferramentas de chat | `dist/` |
 
 A IA nunca grava resultados nas pastas do framework (`skills/`, `core/`, `templates/`, `docs/`...). Se você encontrar um resultado em outro lugar, peça para ela movê-lo para a pasta da execução.
@@ -1080,8 +1083,9 @@ Para quem mantém o framework:
 | `AGENTS.md` | Ponto de entrada lido pelas ferramentas de IA: regras, catálogo de skills, roteamento, aprovações, retomada |
 | `CLAUDE.md` | Faz o Claude Code carregar o `AGENTS.md` |
 | `skills/` | Definições das skills (fonte — edite aqui) |
+| `agents/` | Agentes prontos por categoria (fonte — edite aqui); veja [docs/agents.md](docs/agents.md) |
 | `core/` | Políticas compartilhadas por todas as skills: isolamento, aprovação, persistência, rastreabilidade, princípios |
-| `.agents/skills/`, `.claude/skills/` | Cópias geradas para cada ferramenta de IA encontrar as skills — não edite |
+| `.agents/skills/`, `.claude/skills/`, `.claude/agents/` | Cópias geradas para cada ferramenta de IA encontrar as skills (e o Claude Code, os agentes) — não edite |
 | `templates/project-context/` | Template das pastas de projeto |
 | `schemas/` | Formatos de `state.json`, `project.json` e workflows |
 | `adapters/` | Guias de configuração por ferramenta de IA |

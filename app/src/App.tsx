@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, hasBridge, type ProjectSummary, type ToolInfo } from './api';
 import { Home } from './screens/Home';
+import { Library } from './screens/Library';
 import { Workspace } from './screens/Workspace';
 
 const LAST_PROJECT = 'qa-last-project';
@@ -16,6 +17,7 @@ export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [library, setLibrary] = useState(false);
 
   const loadProjects = useCallback(() => api.projects().then(setProjects), []);
 
@@ -27,7 +29,9 @@ export function App() {
         setProjects(list);
         setTools(toolList);
         // Reopen the last project, like Obsidian reopens the last vault.
-        const requested = new URLSearchParams(window.location.search).get('project');
+        const params = new URLSearchParams(window.location.search);
+        const requested = params.get('project');
+        if (params.get('view') === 'library') setLibrary(true);
         const last = requested || recall();
         if (last && list.some((p) => p.id === last)) setProjectId(last);
         setReady(true);
@@ -48,7 +52,8 @@ export function App() {
   if (!ready) return <div className="notice muted">Loading…</div>;
 
   const project = projects.find((p) => p.id === projectId);
+  if (library) return <Library backLabel={project ? `Back to ${project.name}` : 'All projects'} onBack={() => setLibrary(false)} />;
   return project
-    ? <Workspace key={project.id} project={project} tools={tools} onHome={home} onProjectChanged={onProjectChanged} />
-    : <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} />;
+    ? <Workspace key={project.id} project={project} tools={tools} onHome={home} onLibrary={() => setLibrary(true)} onProjectChanged={onProjectChanged} />
+    : <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} onLibrary={() => setLibrary(true)} />;
 }

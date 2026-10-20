@@ -31,6 +31,20 @@ Canonical definitions are in `skills/<name>/SKILL.md` (tools load the generated 
 
 Status meaning: **draft** = usable, procedure complete, not yet validated in two AI tools; **pending-migration** = defined but waiting for source/reference material — do not execute; **planned** = do not execute, tell the user it is not available. Each skill can run alone (after project identification) except where it depends on another's output.
 
+## Agents
+
+An **agent** is a role with instructions that uses one or more skills and asks for an access level. Built-in agents are in `agents/<category>/<name>.md` (Claude Code also gets them as subagents in `.claude/agents/`); the user's own agents are in `workspace/library/agents/<category>/<name>.md`. When the user asks you to act as an agent, read its file and follow it; its skills define how the work is done.
+
+| Agent | Category | Status | Uses skills | Access |
+|---|---|---|---|---|
+| `qa-lead` | quality | draft | qa-orchestrator, project-context, requirements-review, test-design, failure-analysis | project-write |
+| `requirements-analyst` | quality | draft | requirements-review, project-context | project-write |
+| `test-designer` | quality | draft | test-design, project-context | project-write |
+| `failure-analyst` | quality | draft | failure-analysis, project-context | project-write |
+| `automation-engineer` | quality | pending-migration | automation, project-context | repository-write |
+
+Access levels: **read-only** (reads the project, writes nothing), **project-write** (writes only inside `workspace/projects/<project-id>/`), **repository-write** (may also change a linked code repository, after an approved plan).
+
 ## How to handle a request
 
 1. **Classify**: single activity, composite, resume, or context management. Composite or unclear → follow `qa-orchestrator`.

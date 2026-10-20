@@ -23,6 +23,11 @@
         }
       }
     },
+    "agents": {
+      "type": "array",
+      "description": "Agents enabled in this project (names from agents/ or workspace/library/agents/). Absent = every available agent.",
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+    },
     "repositories": {
       "type": "array",
       "items": {

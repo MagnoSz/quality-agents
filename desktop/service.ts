@@ -3,7 +3,7 @@
 // folder, choices come from fixed lists. It reuses the shared core — no QA
 // logic lives here; the AI tools do the QA work following the skills.
 
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 import {
   ACTIVITIES, LANGUAGES, TOOLS, buildPrompt, createProject, detectTools, isActivity, isTool, isUsable, listProjects,
@@ -13,6 +13,7 @@ import { readableInputs, docxToMarkdown } from '../scripts/lib/docx.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
 import { cleanPrompt, type LaunchResult } from './launcher.ts';
 import { isEditable, isOpenable, PathError, resolveInside } from './fs-guard.ts';
+import { duplicateAgent, isUsableAgent, libraryDir, listAgents, listCategories, parseAgent, validateAgent, type Agent } from '../scripts/lib/agents.ts';
 
 export class ServiceError extends Error {}
 
@@ -40,8 +41,10 @@ export type FileContent =
   | { kind: 'binary'; path: string; size: number; openable: boolean; reason?: string };
 
 export interface LaunchRequest {
-  project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string;
+  project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string; agent?: string;
 }
+
+export interface AgentInfo extends Omit<Agent, 'body'> { usable: boolean }
 
 const TEXT_LIMIT = 2 * 1024 * 1024;
 const IMAGE_LIMIT = 10 * 1024 * 1024;
@@ -63,6 +66,22 @@ export function createService(root: string, deps: Deps) {
       if (e instanceof PathError) throw new ServiceError(e.message);
       throw e;
     }
+  };
+
+  const findAgent = (name: unknown): Agent => {
+    const agent = listAgents(root).find((a) => a.name === name);
+    if (!agent) throw new ServiceError('Unknown agent.');
+    return agent;
+  };
+
+  // The user's agent file, always resolved inside the library folder.
+  const customFile = (agent: Agent): string => inside(libraryDir(root), `${agent.category}/${agent.name}.md`);
+
+  // Agents a project may use: the "agents" list in project.json, or every usable agent when absent.
+  const enabledAgents = (project: string): string[] => {
+    const data = JSON.parse(readFileSync(join(projectDir(project), 'project.json'), 'utf8')) as { agents?: unknown };
+    const usable = listAgents(root).filter(isUsableAgent).map((a) => a.name);
+    return Array.isArray(data.agents) ? usable.filter((n) => (data.agents as unknown[]).includes(n)) : usable;
   };
 
   function inboxFiles(dir: string) {
@@ -176,6 +195,57 @@ export function createService(root: string, deps: Deps) {
       return readFile(project, rel);
     },
 
+    // ---------------------------------------------------------- agents
+
+    categories: () => listCategories(root),
+
+    agents: (): AgentInfo[] => listAgents(root).map(({ body: _body, ...a }) => ({ ...a, usable: isUsableAgent({ ...a, body: '' }) })),
+
+    agent: (name: string) => {
+      const agent = findAgent(name);
+      return { ...agent, usable: isUsableAgent(agent), text: readFileSync(join(root, agent.path), 'utf8'), html: markdownToHtml(agent.body) };
+    },
+
+    duplicateAgent: (name: string) => {
+      findAgent(name);
+      const copy = duplicateAgent(name, root);
+      return { ...copy, usable: isUsableAgent(copy) };
+    },
+
+    // Only the user's own agents can be edited; the text is validated like a built-in agent.
+    saveAgent: (name: string, text: unknown) => {
+      const agent = findAgent(name);
+      if (agent.source !== 'custom') throw new ServiceError('Built-in agents cannot be edited. Duplicate it to customize.');
+      if (typeof text !== 'string' || text.length > 200_000) throw new ServiceError('Invalid content.');
+      const { agent: parsed, errors } = parseAgent(text, 'custom', agent.path);
+      const problems = parsed
+        ? [...errors, ...validateAgent(parsed, { skills: listSkills(root).map((s) => s.name), categories: [], fileName: agent.name, folder: agent.category })]
+        : errors;
+      if (problems.length) throw new ServiceError(`Not saved: ${problems.join('; ')}`);
+      writeFileSync(customFile(agent), text.replace(/\r\n/g, '\n'), 'utf8');
+      return true;
+    },
+
+    deleteAgent: (name: string) => {
+      const agent = findAgent(name);
+      if (agent.source !== 'custom') throw new ServiceError('Built-in agents cannot be deleted.');
+      rmSync(customFile(agent));
+      return true;
+    },
+
+    projectAgents: (project: string) => enabledAgents(project),
+
+    setProjectAgents: (project: string, names: unknown) => {
+      const file = join(projectDir(project), 'project.json');
+      const usable = new Set(listAgents(root).filter(isUsableAgent).map((a) => a.name));
+      const list = Array.isArray(names) ? [...new Set(names.map(String))] : [];
+      const unknown = list.filter((n) => !usable.has(n));
+      if (unknown.length) throw new ServiceError(`Unknown or unavailable agents: ${unknown.join(', ')}`);
+      const data = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+      writeFileSync(file, `${JSON.stringify({ ...data, agents: list }, null, 2)}\n`);
+      return enabledAgents(project);
+    },
+
     run: (project: string, runId: string) => {
       projectDir(project);
       const run = listRuns(project, root).find((r) => r.id === runId);
@@ -227,7 +297,14 @@ export function createService(root: string, deps: Deps) {
         run = String(req.run ?? '');
         if (!openRuns(project, root).some((r) => r.id === run)) throw new ServiceError('Choose an open activity to resume.');
       }
-      const prompt = buildPrompt({ project, activity, files: readableInputs(files, root), note, run, language });
+      let agent: { name: string; path: string } | undefined;
+      if (req.agent) {
+        const chosen = findAgent(String(req.agent));
+        if (!isUsableAgent(chosen)) throw new ServiceError(`The ${chosen.name} agent is not available yet.`);
+        if (!enabledAgents(project).includes(chosen.name)) throw new ServiceError(`The ${chosen.name} agent is not enabled in this project.`);
+        agent = { name: chosen.name, path: chosen.path };
+      }
+      const prompt = buildPrompt({ project, activity, files: readableInputs(files, root), note, run, language, agent });
       const t = TOOLS[tool];
       if (t.print || t.chat) {
         const upload = t.chat ? [

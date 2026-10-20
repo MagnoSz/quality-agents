@@ -3,7 +3,7 @@
 
 import { useState, type FormEvent } from 'react';
 import type { ProjectSummary, ToolInfo } from '../api';
-import { IconBox, IconChevron, IconPlus } from '../components/Icons';
+import { IconBox, IconChevron, IconPlus, IconUsers } from '../components/Icons';
 
 interface Props {
   projects: ProjectSummary[];
@@ -11,13 +11,14 @@ interface Props {
   version: string;
   onOpen: (id: string) => void;
   onCreate: (name: string) => Promise<void>;
+  onLibrary: () => void;
 }
 
 const onboarding: Record<string, string> = {
   'not-started': 'Context not started', partial: 'Context in progress', complete: 'Context complete',
 };
 
-export function Home({ projects, tools, version, onOpen, onCreate }: Props) {
+export function Home({ projects, tools, version, onOpen, onCreate, onLibrary }: Props) {
   const [creating, setCreating] = useState(projects.length === 0);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
@@ -88,6 +89,13 @@ export function Home({ projects, tools, version, onOpen, onCreate }: Props) {
               <IconBox size={22} />
             </div>
           )}
+          <div className="home-action">
+            <div>
+              <strong>Agent library</strong>
+              <p className="muted small">The agents that do the work, by category. Duplicate one to make your own.</p>
+            </div>
+            <button type="button" className="btn btn-ghost" onClick={onLibrary}><IconUsers size={16} /> Agents</button>
+          </div>
         </div>
 
         <p className="muted small home-tools">

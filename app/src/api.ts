@@ -33,7 +33,14 @@ export interface RunState {
   artifacts?: string[];
 }
 
-export interface LaunchRequest { project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string }
+export interface AgentInfo {
+  name: string; description: string; category: string; skills: string[]; access: string; version: string; status: string;
+  basedOn: string; source: 'builtin' | 'custom'; path: string; usable: boolean;
+}
+export interface AgentDetail extends AgentInfo { text: string; html: string }
+export interface Category { id: string; label: string; description: string; source: 'builtin' | 'custom' }
+
+export interface LaunchRequest { project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string; agent?: string }
 export interface LaunchResult { opened: boolean; message?: string; copied?: boolean; prompt: string; upload?: string[]; bundleReady?: boolean }
 
 interface Bridge {
@@ -70,6 +77,14 @@ export const api = {
   openFolder: (project: string, path = '') => call<boolean>('openFolder', project, path),
   openExternal: (project: string, path: string) => call<boolean>('openExternal', project, path),
   launch: (req: LaunchRequest) => call<LaunchResult>('launch', req),
+  categories: () => call<Category[]>('categories'),
+  agents: () => call<AgentInfo[]>('agents'),
+  agent: (name: string) => call<AgentDetail>('agent', name),
+  duplicateAgent: (name: string) => call<AgentInfo>('duplicateAgent', name),
+  saveAgent: (name: string, text: string) => call<boolean>('saveAgent', name, text),
+  deleteAgent: (name: string) => call<boolean>('deleteAgent', name),
+  projectAgents: (project: string) => call<string[]>('projectAgents', project),
+  setProjectAgents: (project: string, names: string[]) => call<string[]>('setProjectAgents', project, names),
   watch: (project: string | null) => window.qa?.watch(project ?? '') ?? Promise.resolve(false),
   onChanged: (cb: (project: string) => void) => window.qa?.onChanged(cb) ?? (() => {}),
   openLink: (url: string) => window.qa?.openLink(url),

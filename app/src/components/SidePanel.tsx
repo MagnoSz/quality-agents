@@ -2,7 +2,7 @@
 // of the project — with the action to open it in the AI tool.
 
 import { useEffect, useState } from 'react';
-import { api, describeRun, statusLabel, type OpenRun, type ProjectSummary, type RunState } from '../api';
+import { api, describeRun, statusLabel, type AgentInfo, type OpenRun, type ProjectSummary, type RunState } from '../api';
 import { IconFolder, IconPlay } from './Icons';
 
 interface Props {
@@ -11,14 +11,18 @@ interface Props {
   refreshKey: number;
   onOpenPath: (path: string) => void;
   onLaunch: (preset?: { activity: string; run?: string }) => void;
+  onLibrary: () => void;
 }
 
 const onboarding: Record<string, string> = { 'not-started': 'Not started', partial: 'In progress', complete: 'Complete' };
 
-export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch }: Props) {
+export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch, onLibrary }: Props) {
   const [run, setRun] = useState<RunState | null>(null);
   const [runs, setRuns] = useState<OpenRun[]>([]);
   const [inboxCount, setInboxCount] = useState(0);
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [enabled, setEnabled] = useState<string[]>([]);
+  const [agentError, setAgentError] = useState('');
 
   useEffect(() => {
     if (runId) api.run(project.id, runId).then(setRun).catch(() => setRun(null));
@@ -28,7 +32,15 @@ export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch }: 
   useEffect(() => {
     api.openRuns(project.id).then(setRuns).catch(() => setRuns([]));
     api.inbox(project.id).then((f) => setInboxCount(f.length)).catch(() => setInboxCount(0));
+    api.agents().then((list) => setAgents(list.filter((a) => a.usable))).catch(() => setAgents([]));
+    api.projectAgents(project.id).then(setEnabled).catch(() => setEnabled([]));
   }, [project.id, refreshKey]);
+
+  const toggleAgent = (name: string) => {
+    const next = enabled.includes(name) ? enabled.filter((n) => n !== name) : [...enabled, name];
+    setAgentError('');
+    api.setProjectAgents(project.id, next).then(setEnabled).catch((e: Error) => setAgentError(e.message));
+  };
 
   const prefix = `workspace/projects/${project.id}/`;
   const local = (p: string) => (p.startsWith(prefix) ? p.slice(prefix.length) : null);
@@ -96,6 +108,23 @@ export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch }: 
         <div><dt>Files in inbox</dt><dd>{inboxCount}</dd></div>
       </dl>
       <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void api.openFolder(project.id, 'inbox'); }}><IconFolder size={15} /> Open inbox folder</button>
+
+      <section className="panel-section">
+        <h3>Agents in this project</h3>
+        <ul className="agent-toggles">
+          {agents.map((a) => (
+            <li key={a.name}>
+              <label title={a.description}>
+                <input type="checkbox" checked={enabled.includes(a.name)} onChange={() => toggleAgent(a.name)} />
+                <span>{a.name}</span>
+                {a.source === 'custom' && <span className="chip">yours</span>}
+              </label>
+            </li>
+          ))}
+        </ul>
+        {agentError && <p className="error small">{agentError}</p>}
+        <button type="button" className="link small" onClick={onLibrary}>Open the agent library</button>
+      </section>
 
       <section className="panel-section">
         <h3>Open activities</h3>
