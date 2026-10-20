@@ -18,6 +18,7 @@ export function App() {
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [library, setLibrary] = useState(false);
+  const [launchOnOpen, setLaunchOnOpen] = useState(false);
 
   const loadProjects = useCallback(() => api.projects().then(setProjects), []);
 
@@ -32,6 +33,7 @@ export function App() {
         const params = new URLSearchParams(window.location.search);
         const requested = params.get('project');
         if (params.get('view') === 'library') setLibrary(true);
+        if (params.get('view') === 'launch') setLaunchOnOpen(true);
         const last = requested || recall();
         if (last && list.some((p) => p.id === last)) setProjectId(last);
         setReady(true);
@@ -54,6 +56,6 @@ export function App() {
   const project = projects.find((p) => p.id === projectId);
   if (library) return <Library backLabel={project ? `Back to ${project.name}` : 'All projects'} onBack={() => setLibrary(false)} />;
   return project
-    ? <Workspace key={project.id} project={project} tools={tools} onHome={home} onLibrary={() => setLibrary(true)} onProjectChanged={onProjectChanged} />
+    ? <Workspace key={project.id} project={project} tools={tools} onHome={home} onLibrary={() => setLibrary(true)} onProjectChanged={onProjectChanged} launchOnOpen={launchOnOpen} />
     : <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} onLibrary={() => setLibrary(true)} />;
 }

@@ -53,10 +53,10 @@ function createWindow(): void {
     },
   });
   win.once('ready-to-show', () => win?.show());
-  // QA_OPEN_PROJECT opens a project directly, QA_OPEN_VIEW=library the agent library (used by checks and shortcuts).
+  // QA_OPEN_PROJECT opens a project directly, QA_OPEN_VIEW=library|launch the agent library or the launch wizard (used by checks and shortcuts).
   const query: Record<string, string> = {};
   if (process.env.QA_OPEN_PROJECT) query.project = process.env.QA_OPEN_PROJECT;
-  if (process.env.QA_OPEN_VIEW === 'library') query.view = 'library';
+  if (['library', 'launch'].includes(process.env.QA_OPEN_VIEW ?? '')) query.view = process.env.QA_OPEN_VIEW as string;
   void win.loadFile(join(UI, 'index.html'), { query });
 
   // Visual check for development: QA_SCREENSHOT=<file.png> saves the window and quits.

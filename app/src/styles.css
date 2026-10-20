@@ -297,6 +297,35 @@ textarea { width: 100%; resize: vertical; }
 .prompt-head { display: flex; justify-content: space-between; align-items: center; padding: 4px 10px; border-bottom: 1px solid var(--border); }
 .prompt-text { margin: 0; padding: 10px 12px; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
 
+/* Wizard: one question per screen */
+.wizard { width: min(640px, 100%); min-height: min(560px, 100%); }
+.wizard .modal-head h2 { font-size: 1.35rem; margin-top: 2px; }
+.wizard .modal-body { flex: 1; gap: 10px; padding-top: 18px; }
+.wizard-progress { margin: 0; font-size: 0.75rem; color: var(--faint); }
+.wizard-bar { height: 3px; background: var(--bg-3); }
+.wizard-bar span { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+.wizard-spacer { flex: 1; }
+.answer-list { display: flex; flex-direction: column; gap: 6px; }
+.answer-group { margin: 8px 0 0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.answer {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; text-align: left;
+  border: 1px solid var(--border); border-radius: 10px; background: transparent; cursor: pointer;
+}
+.answer:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.answer.on { border-color: var(--accent); }
+.answer:disabled { opacity: 0.4; cursor: not-allowed; }
+.answer-icon { display: grid; place-items: center; color: var(--muted); }
+.answer-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.answer-title { font-weight: 600; }
+.answer-hint { font-size: 0.82rem; color: var(--muted); }
+.wizard-empty { padding: 16px; border: 1px dashed var(--border); border-radius: 10px; }
+.wizard-summary { margin: 0; display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.wizard-summary-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; cursor: pointer; }
+.wizard-summary-row:last-child { border-bottom: 0; }
+.wizard-summary-row:hover { background: var(--bg-2); }
+.wizard-summary-row dt { color: var(--muted); }
+.wizard-summary-row dd { margin: 0; text-align: right; word-break: break-word; }
+
 .notice { max-width: 520px; margin: 18vh auto; padding: 0 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 
 @media (max-width: 1100px) {

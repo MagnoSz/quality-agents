@@ -9,7 +9,7 @@ import { LaunchDialog } from '../components/LaunchDialog';
 import { SidePanel } from '../components/SidePanel';
 import { IconFolder, IconHome, IconPanel, IconPlay, IconRefresh, IconUsers, IconX } from '../components/Icons';
 
-interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; onLibrary: () => void; onProjectChanged: () => void }
+interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; onLibrary: () => void; onProjectChanged: () => void; launchOnOpen?: boolean }
 
 interface Tab { path: string; content: FileContent; draft: string; mode: 'preview' | 'edit'; saving: boolean }
 
@@ -27,13 +27,13 @@ function resolveLink(from: string, href: string): string | null {
   return parts.join('/');
 }
 
-export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged }: Props) {
+export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged, launchOnOpen = false }: Props) {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(DEFAULT_EXPANDED));
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [showPanel, setShowPanel] = useState(true);
-  const [launch, setLaunch] = useState<{ activity: string; run?: string } | null>(null);
+  const [launch, setLaunch] = useState<{ activity: string; run?: string } | null>(launchOnOpen ? { activity: 'open' } : null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState('');
   const tabsRef = useRef(tabs);

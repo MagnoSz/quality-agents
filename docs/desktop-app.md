@@ -57,7 +57,7 @@ Development helpers (environment variables of the main process):
 | Variable | Effect |
 |---|---|
 | `QA_OPEN_PROJECT=<id>` | Opens that project directly |
-| `QA_OPEN_VIEW=library` | Opens the agent library |
+| `QA_OPEN_VIEW=library` / `launch` | Opens the agent library / the launch wizard (with `QA_OPEN_PROJECT`) |
 | `QA_SCREENSHOT=<file.png>` | Saves a screenshot of the window and quits (visual checks) |
 | `QA_ROOT=<folder>` | Uses that folder as the framework folder (the installed app defaults to Documents/Quality Agents) |
 
