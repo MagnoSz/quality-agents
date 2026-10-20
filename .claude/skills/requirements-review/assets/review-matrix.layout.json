@@ -1,0 +1,669 @@
+{
+  "id": "review-matrix",
+  "fileName": {
+    "pt-BR": "Matriz de Revisão QA.xlsx",
+    "en": "QA Review Matrix.xlsx"
+  },
+  "enums": {
+    "initialStatus": {
+      "pt-BR": [
+        "CONTEMPLADO",
+        "PARCIAL",
+        "NÃO CONTEMPLADO",
+        "AMBÍGUO",
+        "CONTRADITÓRIO",
+        "A CONFIRMAR",
+        "NÃO SE APLICA"
+      ],
+      "en": [
+        "COVERED",
+        "PARTIAL",
+        "NOT COVERED",
+        "AMBIGUOUS",
+        "CONTRADICTORY",
+        "TO CONFIRM",
+        "NOT APPLICABLE"
+      ]
+    },
+    "finalStatus": {
+      "pt-BR": [
+        "CONTEMPLADO",
+        "RESOLVIDO",
+        "RESOLVIDO — ATUALIZAR US",
+        "PENDENTE",
+        "BLOQUEADO",
+        "NÃO SE APLICA"
+      ],
+      "en": [
+        "COVERED",
+        "RESOLVED",
+        "RESOLVED — UPDATE STORY",
+        "PENDING",
+        "BLOCKED",
+        "NOT APPLICABLE"
+      ]
+    },
+    "prototyping": {
+      "pt-BR": [
+        "NECESSÁRIO",
+        "RECOMENDADO",
+        "NÃO NECESSÁRIO"
+      ],
+      "en": [
+        "REQUIRED",
+        "RECOMMENDED",
+        "NOT REQUIRED"
+      ]
+    },
+    "prototypingSheet": {
+      "pt-BR": [
+        "NECESSÁRIO",
+        "RECOMENDADO"
+      ],
+      "en": [
+        "REQUIRED",
+        "RECOMMENDED"
+      ]
+    }
+  },
+  "sheets": [
+    {
+      "key": "matrix",
+      "title": {
+        "pt-BR": "Matriz de Revisão",
+        "en": "Review Matrix"
+      },
+      "columns": [
+        {
+          "key": "id",
+          "label": {
+            "pt-BR": "ID",
+            "en": "ID"
+          },
+          "width": 10
+        },
+        {
+          "key": "us",
+          "label": {
+            "pt-BR": "US",
+            "en": "US"
+          },
+          "width": 12
+        },
+        {
+          "key": "category",
+          "label": {
+            "pt-BR": "Categoria",
+            "en": "Category"
+          },
+          "width": 18
+        },
+        {
+          "key": "subcategory",
+          "label": {
+            "pt-BR": "Subcategoria",
+            "en": "Subcategory"
+          },
+          "width": 18
+        },
+        {
+          "key": "source",
+          "label": {
+            "pt-BR": "Origem",
+            "en": "Source"
+          },
+          "width": 18
+        },
+        {
+          "key": "reference",
+          "label": {
+            "pt-BR": "Referência",
+            "en": "Reference"
+          },
+          "width": 18
+        },
+        {
+          "key": "point",
+          "label": {
+            "pt-BR": "Ponto analisado",
+            "en": "Point analyzed"
+          },
+          "width": 35
+        },
+        {
+          "key": "initialAnalysis",
+          "label": {
+            "pt-BR": "Análise inicial",
+            "en": "Initial analysis"
+          },
+          "width": 40
+        },
+        {
+          "key": "initialStatus",
+          "label": {
+            "pt-BR": "Status inicial",
+            "en": "Initial status"
+          },
+          "width": 18,
+          "values": "initialStatus"
+        },
+        {
+          "key": "problem",
+          "label": {
+            "pt-BR": "Problema",
+            "en": "Problem"
+          },
+          "width": 40
+        },
+        {
+          "key": "impact",
+          "label": {
+            "pt-BR": "Impacto",
+            "en": "Impact"
+          },
+          "width": 30
+        },
+        {
+          "key": "risk",
+          "label": {
+            "pt-BR": "Risco",
+            "en": "Risk"
+          },
+          "width": 14
+        },
+        {
+          "key": "question",
+          "label": {
+            "pt-BR": "Pergunta",
+            "en": "Question"
+          },
+          "width": 40
+        },
+        {
+          "key": "answer",
+          "label": {
+            "pt-BR": "Resposta",
+            "en": "Answer"
+          },
+          "width": 40
+        },
+        {
+          "key": "finalDefinition",
+          "label": {
+            "pt-BR": "Definição final",
+            "en": "Final definition"
+          },
+          "width": 45
+        },
+        {
+          "key": "finalStatus",
+          "label": {
+            "pt-BR": "Status final",
+            "en": "Final status"
+          },
+          "width": 22,
+          "values": "finalStatus"
+        },
+        {
+          "key": "updateUs",
+          "label": {
+            "pt-BR": "Atualizar US?",
+            "en": "Update story?"
+          },
+          "width": 14
+        },
+        {
+          "key": "updateNeeded",
+          "label": {
+            "pt-BR": "Atualização necessária",
+            "en": "Update needed"
+          },
+          "width": 40
+        },
+        {
+          "key": "evidence",
+          "label": {
+            "pt-BR": "Evidência",
+            "en": "Evidence"
+          },
+          "width": 25
+        },
+        {
+          "key": "prototyping",
+          "label": {
+            "pt-BR": "Prototipação",
+            "en": "Prototyping"
+          },
+          "width": 18,
+          "values": "prototyping"
+        },
+        {
+          "key": "notes",
+          "label": {
+            "pt-BR": "Observações",
+            "en": "Notes"
+          },
+          "width": 30
+        }
+      ]
+    },
+    {
+      "key": "checklist",
+      "title": {
+        "pt-BR": "Checklist Sistêmico",
+        "en": "Systemic Checklist"
+      },
+      "columns": [
+        {
+          "key": "area",
+          "label": {
+            "pt-BR": "Área",
+            "en": "Area"
+          },
+          "width": 25
+        },
+        {
+          "key": "applicability",
+          "label": {
+            "pt-BR": "Aplicabilidade",
+            "en": "Applicability"
+          },
+          "width": 18
+        },
+        {
+          "key": "initialStatus",
+          "label": {
+            "pt-BR": "Status Inicial",
+            "en": "Initial Status"
+          },
+          "width": 18,
+          "values": "initialStatus"
+        },
+        {
+          "key": "finalStatus",
+          "label": {
+            "pt-BR": "Status Final",
+            "en": "Final Status"
+          },
+          "width": 22,
+          "values": "finalStatus"
+        },
+        {
+          "key": "points",
+          "label": {
+            "pt-BR": "Nº Pontos",
+            "en": "No. of Points"
+          },
+          "width": 12
+        },
+        {
+          "key": "pending",
+          "label": {
+            "pt-BR": "Pendências",
+            "en": "Pending Items"
+          },
+          "width": 35
+        },
+        {
+          "key": "notes",
+          "label": {
+            "pt-BR": "Observação",
+            "en": "Notes"
+          },
+          "width": 40
+        }
+      ]
+    },
+    {
+      "key": "questions",
+      "title": {
+        "pt-BR": "Perguntas e Definições",
+        "en": "Questions and Definitions"
+      },
+      "columns": [
+        {
+          "key": "number",
+          "label": {
+            "pt-BR": "Nº",
+            "en": "No."
+          },
+          "width": 8
+        },
+        {
+          "key": "us",
+          "label": {
+            "pt-BR": "US",
+            "en": "US"
+          },
+          "width": 12
+        },
+        {
+          "key": "topic",
+          "label": {
+            "pt-BR": "Tema",
+            "en": "Topic"
+          },
+          "width": 20
+        },
+        {
+          "key": "reason",
+          "label": {
+            "pt-BR": "Motivo",
+            "en": "Reason"
+          },
+          "width": 30
+        },
+        {
+          "key": "question",
+          "label": {
+            "pt-BR": "Pergunta",
+            "en": "Question"
+          },
+          "width": 40
+        },
+        {
+          "key": "answer",
+          "label": {
+            "pt-BR": "Resposta",
+            "en": "Answer"
+          },
+          "width": 40
+        },
+        {
+          "key": "definition",
+          "label": {
+            "pt-BR": "Definição",
+            "en": "Definition"
+          },
+          "width": 45
+        },
+        {
+          "key": "impacts",
+          "label": {
+            "pt-BR": "Impactos",
+            "en": "Impacts"
+          },
+          "width": 30
+        },
+        {
+          "key": "status",
+          "label": {
+            "pt-BR": "Status",
+            "en": "Status"
+          },
+          "width": 22,
+          "values": "finalStatus"
+        }
+      ]
+    },
+    {
+      "key": "usChanges",
+      "title": {
+        "pt-BR": "Alterações nas USs",
+        "en": "Story Changes"
+      },
+      "columns": [
+        {
+          "key": "id",
+          "label": {
+            "pt-BR": "ID",
+            "en": "ID"
+          },
+          "width": 10
+        },
+        {
+          "key": "us",
+          "label": {
+            "pt-BR": "US",
+            "en": "US"
+          },
+          "width": 12
+        },
+        {
+          "key": "reference",
+          "label": {
+            "pt-BR": "Referência",
+            "en": "Reference"
+          },
+          "width": 18
+        },
+        {
+          "key": "changeType",
+          "label": {
+            "pt-BR": "Tipo de Alteração",
+            "en": "Change Type"
+          },
+          "width": 20
+        },
+        {
+          "key": "currentState",
+          "label": {
+            "pt-BR": "Situação Atual",
+            "en": "Current State"
+          },
+          "width": 40
+        },
+        {
+          "key": "approvedDefinition",
+          "label": {
+            "pt-BR": "Definição Aprovada",
+            "en": "Approved Definition"
+          },
+          "width": 45
+        },
+        {
+          "key": "priority",
+          "label": {
+            "pt-BR": "Prioridade",
+            "en": "Priority"
+          },
+          "width": 12
+        }
+      ]
+    },
+    {
+      "key": "impacts",
+      "title": {
+        "pt-BR": "Impactos e Artefatos",
+        "en": "Impacts and Artifacts"
+      },
+      "columns": [
+        {
+          "key": "type",
+          "label": {
+            "pt-BR": "Tipo",
+            "en": "Type"
+          },
+          "width": 18
+        },
+        {
+          "key": "element",
+          "label": {
+            "pt-BR": "Elemento",
+            "en": "Element"
+          },
+          "width": 25
+        },
+        {
+          "key": "newOrChanged",
+          "label": {
+            "pt-BR": "Novo/Alterado",
+            "en": "New/Changed"
+          },
+          "width": 14
+        },
+        {
+          "key": "us",
+          "label": {
+            "pt-BR": "US",
+            "en": "US"
+          },
+          "width": 12
+        },
+        {
+          "key": "definition",
+          "label": {
+            "pt-BR": "Definição",
+            "en": "Definition"
+          },
+          "width": 45
+        },
+        {
+          "key": "artifact",
+          "label": {
+            "pt-BR": "Artefato necessário",
+            "en": "Required Artifact"
+          },
+          "width": 30
+        },
+        {
+          "key": "situation",
+          "label": {
+            "pt-BR": "Situação",
+            "en": "Situation"
+          },
+          "width": 18
+        }
+      ]
+    },
+    {
+      "key": "prototyping",
+      "title": {
+        "pt-BR": "Prototipação",
+        "en": "Prototyping"
+      },
+      "columns": [
+        {
+          "key": "id",
+          "label": {
+            "pt-BR": "ID",
+            "en": "ID"
+          },
+          "width": 10
+        },
+        {
+          "key": "us",
+          "label": {
+            "pt-BR": "US",
+            "en": "US"
+          },
+          "width": 12
+        },
+        {
+          "key": "screenFlow",
+          "label": {
+            "pt-BR": "Tela/Fluxo",
+            "en": "Screen/Flow"
+          },
+          "width": 25
+        },
+        {
+          "key": "classification",
+          "label": {
+            "pt-BR": "Classificação",
+            "en": "Classification"
+          },
+          "width": 18,
+          "values": "prototypingSheet"
+        },
+        {
+          "key": "reason",
+          "label": {
+            "pt-BR": "Motivo",
+            "en": "Reason"
+          },
+          "width": 35
+        },
+        {
+          "key": "toDefine",
+          "label": {
+            "pt-BR": "O que precisa definir",
+            "en": "What needs definition"
+          },
+          "width": 45
+        },
+        {
+          "key": "status",
+          "label": {
+            "pt-BR": "Status",
+            "en": "Status"
+          },
+          "width": 18
+        }
+      ]
+    },
+    {
+      "key": "pending",
+      "title": {
+        "pt-BR": "Pendências e Riscos",
+        "en": "Pending Items and Risks"
+      },
+      "columns": [
+        {
+          "key": "id",
+          "label": {
+            "pt-BR": "ID",
+            "en": "ID"
+          },
+          "width": 10
+        },
+        {
+          "key": "us",
+          "label": {
+            "pt-BR": "US",
+            "en": "US"
+          },
+          "width": 12
+        },
+        {
+          "key": "item",
+          "label": {
+            "pt-BR": "Pendência",
+            "en": "Pending Item"
+          },
+          "width": 40
+        },
+        {
+          "key": "type",
+          "label": {
+            "pt-BR": "Tipo",
+            "en": "Type"
+          },
+          "width": 18
+        },
+        {
+          "key": "risk",
+          "label": {
+            "pt-BR": "Risco",
+            "en": "Risk"
+          },
+          "width": 14
+        },
+        {
+          "key": "impact",
+          "label": {
+            "pt-BR": "Impacto",
+            "en": "Impact"
+          },
+          "width": 30
+        },
+        {
+          "key": "owner",
+          "label": {
+            "pt-BR": "Responsável",
+            "en": "Owner"
+          },
+          "width": 18
+        },
+        {
+          "key": "nextAction",
+          "label": {
+            "pt-BR": "Próxima ação",
+            "en": "Next Action"
+          },
+          "width": 35
+        }
+      ]
+    }
+  ]
+}

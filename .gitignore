@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------
+# Quality Agents — artifact isolation policy
+# Everything received or produced while running skills lives in
+# workspace/ and is NEVER versioned. See docs/privacy-and-isolation.md.
+# .gitignore is a convenience, not a security control: the pre-commit
+# hook and CI run scripts/check-artifacts.mjs as a second barrier.
+# ---------------------------------------------------------------
+/workspace/*
+!/workspace/README.md
+
+# Generated distribution bundles (chat bundles, skill zips)
+/dist/
+
+# Local tooling
+node_modules/
+.env
+.env.*
+*.local.md
+CLAUDE.local.md
+AGENTS.local.md
+AGENTS.override.md
+.claude/settings.local.json
+.cursor/
+.vscode/
+.idea/
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,65 @@
+import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
+import { join, dirname, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+
+export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+// Generated mirrors read natively by AI tools (see docs/compatibility.md).
+export const MIRRORS = ['.agents/skills', '.claude/skills'];
+
+export function toPosix(p) {
+  return p.split(sep).join('/');
+}
+
+export function listSkillDirs(root = ROOT) {
+  const skillsDir = join(root, 'skills');
+  if (!existsSync(skillsDir)) return [];
+  return readdirSync(skillsDir)
+    .filter((name) => statSync(join(skillsDir, name)).isDirectory())
+    .sort();
+}
+
+export function walkFiles(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const name of readdirSync(dir).sort()) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...walkFiles(full));
+    else out.push(full);
+  }
+  return out;
+}
+
+export function relPosix(from, to) {
+  return toPosix(relative(from, to));
+}
+
+export function readJson(file) {
+  return JSON.parse(readFileSync(file, 'utf8'));
+}
+
+export function git(args, cwd = ROOT) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+export function nowStamp(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
+export function parseArgs(argv) {
+  const args = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next === undefined || next.startsWith('--')) args[key] = true;
+      else { args[key] = next; i++; }
+    } else args._.push(a);
+  }
+  return args;
+}
+
+export const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;

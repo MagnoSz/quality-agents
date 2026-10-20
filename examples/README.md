@@ -1,0 +1,19 @@
+# Examples
+
+Synthetic material for exercising the skills. Everything here is fictional ("Acme Library", a library loan system) — never put real project content in this folder.
+
+| Folder | Skill | Language of input |
+|---|---|---|
+| [project-context](project-context/README.md) | `project-context` | en |
+| [requirements-review](requirements-review/README.md) | `requirements-review` | pt-BR (tests the original labels) |
+| [test-design](test-design/README.md) | `test-design` | en |
+| [failure-analysis](failure-analysis/README.md) | `failure-analysis` | en |
+| [qa-orchestrator](qa-orchestrator/README.md) | `qa-orchestrator` | en |
+
+## How to run an example
+
+1. `npm run new-project -- acme-library "Acme Library"` (once).
+2. Copy the example input files into `workspace/projects/acme-library/inbox/`.
+3. Ask your AI tool what the example's README says.
+4. Check the result against the README's **acceptance checklist**. Where a deterministic check exists (`npm run check-output ...`), run it — a plausible-looking answer is not a pass.
+5. Record the result (tool, model, date, pass/fail per item) in [docs/compatibility-tests.md](../docs/compatibility-tests.md).

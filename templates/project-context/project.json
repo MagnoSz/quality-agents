@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1",
+  "project": "example-project",
+  "name": "Example project",
+  "description": "",
+  "deliverableLanguage": "",
+  "onboardingStatus": "not-started",
+  "contextFiles": [
+    { "path": "context/index.md", "contains": "Catalog of context files and what each covers; read first" }
+  ],
+  "repositories": [],
+  "environments": [],
+  "knowledgeSources": [],
+  "tools": [],
+  "templates": {},
+  "constraints": [],
+  "externalDataSharingAllowed": false
+}

@@ -1,0 +1,31 @@
+========================================
+📥 INPUT — FILLED IN BY QA
+========================================
+
+[ITEM DESCRIPTION]
+- Flow: Loan renewal in the reader portal
+- Action executed: Clicked "Renew" on an active loan of "Dune" for reader 10422
+- Expected result: Due date extended by 14 days and confirmation shown
+- Obtained result: Error page "Something went wrong" (HTTP 500)
+
+[MOMENT OF FAILURE]
+- Step where the error occurred: right after clicking "Renew"
+
+[EVIDENCE DATE/TIME]
+- Approximate date and time of the error:
+14/10/2026 10:42
+
+[OBSERVATIONS]
+- Does the error always happen? Only for loans whose new due date falls on 2026-10-28
+- Relevant variations: other dates work
+
+[LOG]
+2026-10-14 10:42:07.311 INFO  [http-nio-8080-exec-4] c.a.l.web.LoanController - POST /loans/88213/renew reader=10422
+2026-10-14 10:42:07.402 ERROR [http-nio-8080-exec-4] c.a.l.web.ErrorHandler - Unhandled exception
+java.lang.NullPointerException: Cannot invoke "com.acme.library.calendar.Holiday.nextBusinessDay()" because "holiday" is null
+    at com.acme.library.loans.RenewalService.adjustForHolidays(RenewalService.java:118)
+    at com.acme.library.loans.RenewalService.renew(RenewalService.java:74)
+    at com.acme.library.web.LoanController.renew(LoanController.java:52)
+2026-10-14 10:42:07.405 WARN  [http-nio-8080-exec-4] c.a.l.calendar.HolidayRepository - No holiday entry for 2026-10-28 in calendar "default"; calendar "municipal" lookup returned 1 row
+
+========================================

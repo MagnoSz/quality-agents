@@ -1,0 +1,59 @@
+{
+  "id": "test-cases",
+  "fileName": {
+    "pt-BR": "Casos de Teste.xlsx",
+    "en": "Test Cases.xlsx"
+  },
+  "enums": {},
+  "sheets": [
+    {
+      "key": "testCases",
+      "title": {
+        "pt-BR": "Casos de Teste",
+        "en": "Test Cases"
+      },
+      "columns": [
+        {
+          "key": "source",
+          "label": {
+            "pt-BR": "Origem",
+            "en": "Source"
+          },
+          "width": 20
+        },
+        {
+          "key": "context",
+          "label": {
+            "pt-BR": "Contexto",
+            "en": "Context"
+          },
+          "width": 25
+        },
+        {
+          "key": "scenario",
+          "label": {
+            "pt-BR": "Cenário",
+            "en": "Scenario"
+          },
+          "width": 40
+        },
+        {
+          "key": "steps",
+          "label": {
+            "pt-BR": "Passo a Passo",
+            "en": "Steps"
+          },
+          "width": 60
+        },
+        {
+          "key": "expected",
+          "label": {
+            "pt-BR": "Resultado Esperado",
+            "en": "Expected Result"
+          },
+          "width": 50
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Quality Agents pre-commit hook (enable with: npm run setup)
+# Blocks run artifacts and credentials, and stale skill mirrors.
+node scripts/check-artifacts.mjs || exit 1
+node scripts/check-secrets.mjs || exit 1
+node scripts/build.mjs --check || exit 1

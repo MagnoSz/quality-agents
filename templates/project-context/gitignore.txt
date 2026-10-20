@@ -1,0 +1,7 @@
+# Used only if this project folder is versioned in its own PRIVATE repository.
+# Activity results, received files and scratch files stay unversioned.
+runs/
+inbox/
+temporary/
+.env
+.env.*

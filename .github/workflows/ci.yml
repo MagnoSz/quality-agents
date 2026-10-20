@@ -1,0 +1,25 @@
+name: framework-checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate skills, workflows, links, schemas and mirrors
+        run: node scripts/validate.mjs
+      - name: No run artifacts in the repository
+        run: node scripts/check-artifacts.mjs --all
+      - name: No known secret formats in the repository
+        run: node scripts/check-secrets.mjs --all
+      - name: Unit tests for the checks
+        run: node --test

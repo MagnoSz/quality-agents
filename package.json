@@ -1,0 +1,29 @@
+{
+  "name": "quality-agents",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Portable, vendor-neutral Agent Skills for software quality engineering.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "qa": "scripts/qa.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "qa": "node scripts/qa.mjs",
+    "build": "node scripts/build.mjs",
+    "validate": "node scripts/validate.mjs",
+    "check": "node scripts/validate.mjs && node scripts/check-artifacts.mjs --all && node scripts/check-secrets.mjs --all",
+    "test": "node --test",
+    "bundle": "node scripts/bundle.mjs",
+    "new-project": "node scripts/new-project.mjs",
+    "new-run": "node scripts/new-run.mjs",
+    "runs": "node scripts/runs.mjs",
+    "xlsx": "node scripts/xlsx.mjs",
+    "pdf": "node scripts/pdf.mjs",
+    "check-output": "node scripts/check-output.mjs"
+  }
+}

@@ -1,0 +1,18 @@
+========================================
+📥 INPUT — FILLED IN BY QA
+========================================
+
+[ITEM DESCRIPTION]
+- Flow: Loan renewal in the reader portal
+- Action executed: Clicked "Renew"
+- Expected result: Due date extended
+- Obtained result: HTTP 500
+
+[OBSERVATIONS]
+- Does the error always happen? Yes
+
+[LOG]
+java.lang.NullPointerException
+    at com.acme.library.loans.RenewalService.adjustForHolidays(RenewalService.java:118)
+
+========================================

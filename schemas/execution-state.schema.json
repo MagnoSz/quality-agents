@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "quality-agents/execution-state",
+  "title": "Quality Agents run state",
+  "type": "object",
+  "required": ["schemaVersion", "id", "project", "createdAt", "updatedAt", "status", "currentStep", "completedSteps", "pending", "approvals", "inputs", "results", "artifacts"],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["1"] },
+    "id": { "type": "string", "pattern": "^[0-9]{8}-[0-9]{4}-[a-z0-9]+(-[a-z0-9]+)*$" },
+    "project": { "type": "string", "minLength": 1 },
+    "skill": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "workflow": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "tool": { "type": "string", "description": "AI tool that last updated the run (informational only)." },
+    "createdAt": { "type": "string", "minLength": 10 },
+    "updatedAt": { "type": "string", "minLength": 10 },
+    "status": { "type": "string", "enum": ["in-progress", "awaiting-approval", "awaiting-input", "blocked", "completed", "cancelled"] },
+    "currentStep": { "type": "string" },
+    "completedSteps": { "type": "array", "items": { "type": "string" } },
+    "pending": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "owner": { "type": "string" },
+          "resolution": { "type": "string" }
+        }
+      }
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step", "decision", "at"],
+        "properties": {
+          "step": { "type": "string" },
+          "decision": { "type": "string", "enum": ["approved", "rejected", "adjusted"] },
+          "by": { "type": "string" },
+          "at": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "results": { "type": "array", "items": { "type": "object" } },
+    "artifacts": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^(workspace/projects/[a-z0-9-]+/|<target-repo>/)" }
+    }
+  }
+}

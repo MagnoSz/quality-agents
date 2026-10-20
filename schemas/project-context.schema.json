@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "quality-agents/project-context",
+  "title": "Quality Agents project context",
+  "type": "object",
+  "required": ["schemaVersion", "project", "name"],
+  "properties": {
+    "schemaVersion": { "type": "string", "enum": ["1"] },
+    "project": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "deliverableLanguage": { "type": "string", "description": "Language for deliverables, e.g. en or pt-BR. Empty = English (framework default)." },
+    "onboardingStatus": { "type": "string", "enum": ["not-started", "partial", "complete"] },
+    "contextFiles": {
+      "type": "array",
+      "description": "Files under workspace/projects/<project>/context/ that skills may read, with what each contains.",
+      "items": {
+        "type": "object",
+        "required": ["path", "contains"],
+        "properties": {
+          "path": { "type": "string" },
+          "contains": { "type": "string" }
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "localPath": { "type": "string" },
+          "purpose": { "type": "string" },
+          "writeAllowed": { "type": "boolean", "description": "Whether skills may propose changes in this repository (each change still needs approval)." }
+        }
+      }
+    },
+    "environments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "url": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "knowledgeSources": {
+      "type": "array",
+      "description": "Where the project's documentation lives. Skills consult only indicated sources, never the whole base.",
+      "items": {
+        "type": "object",
+        "required": ["name", "access"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string", "description": "e.g. confluence, notion, google-drive, sharepoint, files" },
+          "access": { "type": "string", "description": "mcp:<server-name> | files | manual" },
+          "scope": { "type": "string", "description": "Relevant spaces, projects, folders or pages" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "tools": { "type": "array", "items": { "type": "string" } },
+    "templates": {
+      "type": "object",
+      "description": "Overrides for deliverable templates, mapping template key to a path under workspace/projects/<project>/."
+    },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "externalDataSharingAllowed": { "type": "boolean", "description": "Whether project data may be sent to external services. Defaults to false." }
+  }
+}

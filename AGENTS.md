@@ -1,0 +1,81 @@
+# Quality Agents — instructions for AI agents
+
+This repository is a portable library of **QA skills** (Agent Skills format). You, the AI tool, execute them; the skills define responsibilities, procedures, rules, inputs, outputs and approval points. Nothing here depends on a specific AI vendor.
+
+## Golden rules
+
+1. **Identify the project first.** Every activity belongs to one project in `workspace/projects/<project-id>/`. Never read or reuse another project's files.
+2. **Files go to the project folder.** Inputs, outputs, evidence, logs and state live under `workspace/projects/<project-id>/` (ignored by Git). Never write them into `skills/`, `core/`, `templates/`, `schemas/`, `adapters/`, `docs/`, `examples/` or the repository root.
+3. **Stop at approval gates.** Never run a step that needs approval in the same response that asks for it.
+4. **Never invent** requirements, rules, messages, data or ids. Missing information becomes a pending item. Hypotheses are labeled as hypotheses.
+5. **No shared memory.** Continuity comes only from files you read explicitly (`state.json`, project context).
+6. **Language.** Talk to the user in their language. Deliverables are in **English** by default, or in the project's `deliverableLanguage`, or in the language the user explicitly asks for. Quoted source content (documented messages, log lines) stays in its original language.
+7. **No secrets, no external sharing** of project data without configuration and authorization.
+
+Full policies: [core/isolation-policy.md](core/isolation-policy.md), [core/approval-policy.md](core/approval-policy.md), [core/persistence-protocol.md](core/persistence-protocol.md), [core/traceability.md](core/traceability.md), [core/execution-principles.md](core/execution-principles.md).
+
+## Skill catalog
+
+Canonical definitions are in `skills/<name>/SKILL.md` (tools load the generated copies in `.agents/skills/` or `.claude/skills/`, which are identical).
+
+| Skill | Status | Use when | Required inputs | Depends on |
+|---|---|---|---|---|
+| `qa-orchestrator` | draft | Composite requests, resuming work, unclear which skill applies | The request | `project-context` |
+| `project-context` | draft | Start of any activity; new project onboarding; updating project knowledge | Project id or name | — |
+| `requirements-review` | draft | Review/refine/validate user stories before development (never writes test cases) | One or more user stories | `project-context` |
+| `test-design` | draft | Map scenarios, then (after OK) write manual test cases | Stories/rules/criteria | `project-context`; optionally `requirements-review` output |
+| `failure-analysis` | draft | Pre-analysis of an error from description + log | Item description, failure moment, date/time, log | `project-context` (optional) |
+| `documentation` | planned | Propose updates to the official scenario base | — | not available |
+| `automation` | pending-migration | Automation engineering: build, implement (FLX scenarios) and evolve automation projects in a target repository | — | not available until its reference materials are migrated |
+| `smoke-test` | planned | Targeted pre-validation of an improvement | — | not available |
+
+Status meaning: **draft** = usable, procedure complete, not yet validated in two AI tools; **pending-migration** = defined but waiting for source/reference material — do not execute; **planned** = do not execute, tell the user it is not available. Each skill can run alone (after project identification) except where it depends on another's output.
+
+## How to handle a request
+
+1. **Classify**: single activity, composite, resume, or context management. Composite or unclear → follow `qa-orchestrator`.
+2. **Project**: identify it (ask if ambiguous). Load context with `project-context`; if the project is new, create it and run the progressive onboarding interview — only what the activity needs.
+3. **Run**: create a run (`npm run new-run -- --project <id> --skill <name> --slug <slug>`, or manually per the persistence protocol). Load the skill's `SKILL.md`; open its `references/` files only when the procedure step needs them.
+4. **Gate**: at each approval point, stop, summarize, ask, update `state.json`.
+5. **Close**: record results and artifacts in `state.json`, update `activity-log.md`, offer confirmed general definitions to `project-context` as proposals.
+
+Example: *"Review this story and, once approved, map the test scenarios"* → workflow `requirements-to-tests`: `project-context` → `requirements-review` (all its gates) → **approval** → `test-design` (mapping → **OK** → detailing).
+
+Workflows: `skills/qa-orchestrator/references/workflows/` — `requirements-to-tests`, `failure-investigation`, `quality-lifecycle`.
+
+## Interrupting and resuming
+
+- The user may stop at any time. Persist `state.json` with `currentStep`, `pending` and the last approval; tell the user the run id.
+- To resume: `npm run runs -- <project-id>` (or list `workspace/projects/<project-id>/runs/`), read the run's `state.json`, reload only the context the current step needs, summarize status, continue from `currentStep`.
+
+## Where results go
+
+```text
+workspace/projects/<project-id>/
+├── project.json, context/, proposed-updates.md, activity-log.md   # project knowledge (confirmed only in context/)
+├── inbox/                                                         # files the user provides
+└── runs/<run-id>/{state.json, inputs/, outputs/, evidence/, logs/}  # each execution
+```
+
+Exception: an authorized change to a **target repository** (e.g. automation code) is written there and follows that repository's Git policy.
+
+## Errors and limitations
+
+- Missing mandatory input → ask for exactly what is missing; status `awaiting-input`.
+- Capability missing in this tool (no file access, no shell, no image reading, cannot create xlsx/pdf) → say so and use the skill's documented fallback. Never claim a file was created or a command ran when it did not.
+- Same action failing 3 times → stop, status `blocked`, report what was tried.
+- Conflicts between user instructions, project context and framework rules → user > confirmed project context > framework, but isolation, approval and truthfulness rules can never be disabled.
+
+## Helper commands (need Node.js ≥ 20, run from the repository root)
+
+| Command | Purpose |
+|---|---|
+| `npm run new-project -- <id> "<name>"` | Create a project folder from the template |
+| `npm run new-run -- --project <id> --skill <name> --slug <slug>` | Create a run with `state.json` |
+| `npm run runs [-- <id>]` | List runs and validate their state |
+| `npm run xlsx -- write/read ...` | Build or read xlsx deliverables from a skill's layout |
+| `npm run pdf -- <report.md> <report.pdf>` | Render a Markdown report to PDF (Edge/Chrome) |
+
+## For contributors (editing this framework)
+
+Edit `skills/` and `core/` only; then `npm run build` (regenerates `.agents/skills/` and `.claude/skills/`) and `npm run check`. Standard: [docs/skill-standard.md](docs/skill-standard.md).
