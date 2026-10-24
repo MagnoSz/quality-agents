@@ -37,10 +37,12 @@
           "name": { "type": "string" },
           "localPath": { "type": "string" },
           "purpose": { "type": "string" },
-          "writeAllowed": { "type": "boolean", "description": "Whether skills may propose changes in this repository (each change still needs approval)." }
+          "writeAllowed": { "type": "boolean", "description": "Whether skills may propose changes in this repository (each change still needs approval)." },
+          "linkedFolder": { "type": "boolean", "description": "Set by the desktop app's \"Choose my folder\": the folder the project is linked to. Linking only records it here and backs up its AI settings; nothing in the folder changes." }
         }
       }
     },
+    "linkedSkills": { "type": "array", "items": { "type": "string" }, "description": "Set by the desktop app's \"Set up project\": names of global skills (~/.claude/skills, ~/.agents/skills) this project uses; requests name them. Nothing is copied." },
     "environments": {
       "type": "array",
       "items": {

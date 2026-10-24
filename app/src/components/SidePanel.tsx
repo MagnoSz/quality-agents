@@ -12,11 +12,13 @@ interface Props {
   onOpenPath: (path: string) => void;
   onLaunch: (preset?: { activity: string; run?: string }) => void;
   onLibrary: () => void;
+  onMyFolder: () => void; // opens the linked folder, or links one first
+  onSetup: () => void; // description and the global skills the project uses
 }
 
 const onboarding: Record<string, string> = { 'not-started': 'Not started', partial: 'In progress', complete: 'Complete' };
 
-export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch, onLibrary }: Props) {
+export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch, onLibrary, onMyFolder, onSetup }: Props) {
   const [run, setRun] = useState<RunState | null>(null);
   const [runs, setRuns] = useState<OpenRun[]>([]);
   const [inboxCount, setInboxCount] = useState(0);
@@ -100,6 +102,7 @@ export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch, on
       <div className="panel-label">Project</div>
       <h2 className="panel-title">{project.name}</h2>
       <p className="muted small">{project.id}</p>
+      {project.description && <p className="small">{project.description}</p>}
       <button type="button" className="btn btn-block" onClick={() => onLaunch()}><IconPlay size={15} /> Open in your AI tool</button>
 
       <dl className="facts">
@@ -107,7 +110,8 @@ export function SidePanel({ project, runId, refreshKey, onOpenPath, onLaunch, on
         <div><dt>Deliverables</dt><dd>{project.deliverableLanguage}</dd></div>
         <div><dt>Files in inbox</dt><dd>{inboxCount}</dd></div>
       </dl>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void api.openFolder(project.id, 'inbox'); }}><IconFolder size={15} /> Open inbox folder</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onMyFolder} title={project.repository || 'Link a folder of this computer to the project'}><IconFolder size={15} /> {project.repository ? 'Open my folder' : 'Choose my folder'}</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onSetup} title="Description and the global skills this project uses">Set up project{project.linkedSkills.length ? ` · ${project.linkedSkills.length} linked skill${project.linkedSkills.length === 1 ? '' : 's'}` : ''}</button>
 
       <section className="panel-section">
         <h3>Agents in this project</h3>

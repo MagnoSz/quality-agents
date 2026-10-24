@@ -3,7 +3,8 @@
 
 import { useState, type FormEvent } from 'react';
 import type { ProjectSummary, ToolInfo } from '../api';
-import { IconBox, IconChevron, IconPlus, IconUsers } from '../components/Icons';
+import { GlobalDialog } from '../components/GlobalDialog';
+import { IconBox, IconChevron, IconGlobe, IconPlus, IconUsers } from '../components/Icons';
 
 interface Props {
   projects: ProjectSummary[];
@@ -23,6 +24,7 @@ export function Home({ projects, tools, version, onOpen, onCreate, onLibrary }: 
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showGlobal, setShowGlobal] = useState(false);
   const installed = tools.filter((t) => t.command && t.available);
 
   const submit = async (e: FormEvent) => {
@@ -96,6 +98,13 @@ export function Home({ projects, tools, version, onOpen, onCreate, onLibrary }: 
             </div>
             <button type="button" className="btn btn-ghost" onClick={onLibrary}><IconUsers size={16} /> Agents</button>
           </div>
+          <div className="home-action">
+            <div>
+              <strong>Skills &amp; agents for all projects</strong>
+              <p className="muted small">Review or remove what is installed in your user folder (~/.claude, ~/.agents).</p>
+            </div>
+            <button type="button" className="btn btn-ghost" onClick={() => setShowGlobal(true)}><IconGlobe size={16} /> Manage</button>
+          </div>
         </div>
 
         <p className="muted small home-tools">
@@ -104,6 +113,7 @@ export function Home({ projects, tools, version, onOpen, onCreate, onLibrary }: 
             : 'No AI tool found on this computer. Install Claude Code, Codex, Cursor or another supported tool.'}
         </p>
       </main>
+      {showGlobal && <GlobalDialog onClose={() => setShowGlobal(false)} />}
     </div>
   );
 }

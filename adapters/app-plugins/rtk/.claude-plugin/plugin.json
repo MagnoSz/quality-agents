@@ -1,0 +1,5 @@
+{
+  "name": "rtk",
+  "version": "1.0.0",
+  "description": "Routes Bash commands through rtk (Rust Token Killer) to shrink their output. Needs the rtk CLI installed."
+}

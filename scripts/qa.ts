@@ -7,7 +7,7 @@
 //      [--run <run-id>] [--lang <language>]   prepare a request and open an AI tool directly
 //
 // Activities: open, review, tests, review-then-tests, failure, context, resume
-// Tools: claude, codex, cursor-agent, gemini, cursor, vscode, chat, print
+// Tools: claude, codex, cursor-agent, gemini, antigravity, cursor, vscode, chat, print
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
