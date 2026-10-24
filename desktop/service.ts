@@ -362,8 +362,8 @@ export function createService(root: string, deps: Deps) {
       if (!picked) return null;
       if (!existsSync(picked) || !statSync(picked).isDirectory()) throw new ServiceError('Folder not found.');
       const folder = realpathSync(picked);
-      if (isWithin(realpathSync(root), folder) || isWithin(folder, realpathSync(root))) throw new ServiceError('Choose a folder outside Quality Agents.');
       if (folder === realpathSync(homedir())) throw new ServiceError('Choose a project folder, not your whole user folder.');
+      if (isWithin(realpathSync(root), folder) || isWithin(folder, realpathSync(root))) throw new ServiceError('Choose a folder outside Quality Agents.');
       const data = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
       const repos = (Array.isArray(data.repositories) ? data.repositories : []) as Record<string, unknown>[];
       for (const r of repos) delete r.linkedFolder;
