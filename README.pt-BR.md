@@ -114,7 +114,7 @@ Na primeira abertura o app cria **Documentos\Quality Agents** — o framework (s
 
 Você continua precisando de uma ferramenta de IA (Claude Code, Codex, Cursor…). O Node.js é opcional: só é usado pelos comandos auxiliares das skills (geração de Excel/PDF).
 
-Prefere o terminal, quer contribuir com o framework ou usa macOS/Linux? Siga os passos abaixo.
+Prefere o terminal, quer contribuir com o framework ou usa macOS/Linux? Siga os passos abaixo; para gerar o instalador do seu sistema, veja a [3.7](#37-gerar-o-instalador-do-app-desktop-windows-macos-linux).
 
 ### 3.1 O que você precisa
 
@@ -196,6 +196,39 @@ A partir daí você pode digitar `qa` em **qualquer** pasta do terminal para abr
 
 > **Dica para Windows:** se o PowerShell disser *"a execução de scripts foi desabilitada neste sistema"* quando você digitar `npm`, use o **Git Bash**, ou digite `npm.cmd` em vez de `npm`, ou veja a [Solução de problemas](#14-solução-de-problemas).
 
+### 3.7 Gerar o instalador do app desktop (Windows, macOS, Linux)
+
+Opcional: para quem publica os instaladores, ou para ter o app no macOS/Linux como um programa independente. Depois da [3.4](#34-rodar-a-configuração-inicial), rode o comando do seu sistema dentro da pasta `quality-agents`. **Gere cada instalador no próprio sistema de destino** (o instalador para macOS só pode ser gerado num Mac). Os arquivos são gravados em `release/`.
+
+| Sistema | Comando | Resultado em `release/` |
+|---|---|---|
+| Windows 10/11 (x64) | `npm run dist:win` | `Quality Agents Setup <versão>.exe` |
+| macOS (Intel ou Apple Silicon) | `npm run dist:mac` | `Quality Agents-<versão>.dmg` (com `-arm64` no nome em Apple Silicon) |
+| Linux (x64) | `npm run dist:linux` | `Quality Agents-<versão>.AppImage` |
+
+Os instaladores ainda não têm assinatura digital: o Windows mostra o aviso do SmartScreen descrito na [3.0](#30-o-jeito-mais-rápido-o-instalador-para-windows); o macOS bloqueia a primeira abertura — clique com o botão direito no app → **Abrir**, ou **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**. Em todos os sistemas, a primeira abertura cria **Documentos/Quality Agents**, como na 3.0.
+
+#### Linux: distribuições e versões
+
+O build para Linux é um único `.AppImage`: um arquivo que roda sem instalação em qualquer distribuição x64 com **glibc 2.25 ou mais recente** e ambiente gráfico (GTK 3). Para gerá-lo basta Git e Node.js 22.18+ — sem compilador nem pacotes extras.
+
+| Distribuição | Versões | Pacote FUSE 2 que o AppImage precisa |
+|---|---|---|
+| Ubuntu | 22.04 LTS | `sudo apt install libfuse2` |
+| Ubuntu | 24.04 LTS ou mais recente | `sudo apt install libfuse2t64` (veja a nota sobre AppArmor abaixo) |
+| Debian | 12 ou mais recente | `sudo apt install libfuse2` (Debian 13: `libfuse2t64`) |
+| Linux Mint / Pop!_OS / elementary OS | Mint 21+, Pop!_OS 22.04+, elementary OS 7+ | o mesmo pacote da versão do Ubuntu em que se baseiam |
+| Fedora | 42 ou mais recente | `sudo dnf install fuse-libs` |
+| RHEL / Rocky Linux / AlmaLinux | 9 ou mais recente | `sudo dnf install fuse-libs` |
+| openSUSE | Leap 15.6, Tumbleweed | `sudo zypper install libfuse2` |
+| Arch / Manjaro | rolling | `sudo pacman -S fuse2` |
+
+Para executar: `chmod +x "Quality Agents-<versão>.AppImage"` e depois dê dois cliques no arquivo ou abra-o pelo terminal.
+
+- **Nenhuma entrada no menu** é criada. Deixe o arquivo numa pasta fixa (ex.: `~/Applications`); ferramentas como AppImageLauncher ou Gear Lever podem adicioná-lo ao menu.
+- **Ubuntu 24.04 ou mais recente:** o AppArmor bloqueia o sandbox usado por apps Electron, e o AppImage pode fechar logo ao abrir com um erro de *"sandbox"*. Abra-o com `"./Quality Agents-<versão>.AppImage" --no-sandbox` (isso desliga o sandbox do Chromium para este app).
+- **ARM64:** gere numa máquina ARM64 com `npm run app:build` e depois `npx electron-builder --linux AppImage --arm64`.
+
 ---
 
 ## 4. Escolha como vai usar
@@ -227,7 +260,7 @@ Digite `qa` (ou use o atalho, quando o instalador existir). O Quality Agents abr
 | **Árvore de arquivos** | *Context* (o que a IA sabe sobre o sistema), *Inbox* (arquivos que você entrega à IA), *Activities* (cada revisão, projeto de testes ou análise, com data e ponto de status), atualizações propostas e histórico |
 | **Documentos em abas** | Markdown aparece formatado; **Ctrl+E** alterna para edição, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word mostram o texto; JSON, texto e imagens têm pré-visualização; Excel e PDF abrem no programa deles |
 | **Painel lateral** | Numa atividade: status, etapa atual, pendências, aprovações e arquivos gerados, além de *Continuar na sua ferramenta de IA*. Fora dela: visão geral do projeto, **agentes habilitados no projeto** (caixas de seleção) e atividades em aberto |
-| **Abrir na sua ferramenta de IA** | Escolha a atividade, opcionalmente **quem deve fazer** (um agente), os arquivos do inbox, adicione uma observação e escolha a ferramenta: Claude Code, Codex, Gemini CLI ou Cursor Agent abrem numa janela de terminal nova; Cursor ou VS Code abrem a pasta com o pedido copiado; ChatGPT / claude.ai / Gemini web recebem o pedido e a lista de arquivos para enviar |
+| **Abrir na sua ferramenta de IA** | Escolha a atividade, opcionalmente **quem deve fazer** (um agente), os arquivos do inbox, adicione uma observação e escolha a ferramenta: Claude Code, Codex, Gemini CLI, Antigravity CLI ou Cursor Agent abrem numa aba de terminal do app; Cursor ou VS Code abrem a pasta com o pedido copiado; ChatGPT / claude.ai / Gemini web recebem o pedido e a lista de arquivos para enviar |
 | **Biblioteca de agentes** | Na tela inicial ou na faixa de ícones: agentes por categoria, com papel, skills e acesso. **Duplicate** cria a sua cópia de um agente pronto, que você pode **Edit**ar e salvar (validado antes de salvar) ou excluir. Seus agentes ficam em `workspace/library/agents/` |
 
 - **Ao vivo**: os arquivos que a IA grava aparecem na árvore assim que são salvos.
@@ -254,7 +287,7 @@ flowchart TD
   RUN --> N
   N --> L["Idioma da conversa"]
   L --> T{"Abrir com<br/>ferramentas não instaladas ficam apagadas"}
-  T -->|"Claude Code, Codex,<br/>Cursor Agent, Gemini CLI"| OPEN["Abre a ferramenta em quality-agents<br/>com o pedido já digitado"]
+  T -->|"Claude Code, Codex,<br/>Cursor Agent, Gemini CLI,<br/>Antigravity CLI"| OPEN["Abre a ferramenta em quality-agents<br/>com o pedido já digitado"]
   T -->|"Cursor (editor)"| CUR["Abre a pasta,<br/>pedido copiado para a área de transferência"]
   T -->|"ChatGPT, claude.ai, Gemini web"| CHAT["Pedido copiado,<br/>lista de arquivos para enviar"]
   T -->|"Só mostrar"| SHOW["Mostra o pedido"]
@@ -337,7 +370,7 @@ qa --help
 | Opção | Valores |
 |---|---|
 | `--activity` | `review` (revisão), `tests` (testes), `review-then-tests` (revisão e depois testes), `failure` (falha), `context` (contexto), `resume` (retomar) |
-| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `cursor`, `chat`, `print` |
+| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `antigravity`, `cursor`, `chat`, `print` |
 | `--file` | Repita para vários arquivos |
 | `--run` | Id da execução, para `resume` |
 | `--note` | Instruções extras |
@@ -1017,7 +1050,7 @@ Rode todos os comandos de dentro da pasta `quality-agents`. No PowerShell do Win
 | PowerShell: *"a execução de scripts foi desabilitada neste sistema"* | Use o Git Bash, ou digite `npm.cmd` em vez de `npm`, ou rode uma vez: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
 | `qa` "não é reconhecido" / "command not found" | Rode `npm link` dentro da pasta `quality-agents` e abra um terminal novo, ou use `npm run qa` de dentro dessa pasta. |
 | O `qa` diz que o app ainda não está instalado | Rode `npm run setup` na pasta `quality-agents` (também necessário depois de cada `git pull`). |
-| O `qa` mostra a sua ferramenta de IA como "not installed" | O comando da ferramenta (`claude`, `codex`, `cursor-agent`, `gemini`, `cursor`) não está no PATH. Instale a CLI da ferramenta, ou escolha "Just show the request" e cole o pedido você mesmo. |
+| O `qa` mostra a sua ferramenta de IA como "not installed" | O comando da ferramenta (`claude`, `codex`, `cursor-agent`, `gemini`, `agy`, `cursor`) não está no PATH. Instale a CLI da ferramenta, ou escolha "Just show the request" e cole o pedido você mesmo. |
 | A IA parece não conhecer as skills | Confira se você abriu **a própria pasta `quality-agents`** (e não uma pasta acima dela). Abra uma sessão nova depois de clonar ou atualizar. Em ferramentas de chat, confira se você enviou as skills. |
 | A IA responde de forma genérica em vez de seguir o processo | Cite a skill explicitamente ("use a skill requirements-review") ou, no Claude Code, digite `/requirements-review`. |
 | A IA pergunta qual é o projeto | É o esperado quando o projeto é ambíguo. Informe o id ou o nome do projeto. |

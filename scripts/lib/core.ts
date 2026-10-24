@@ -3,13 +3,13 @@
 // It never executes skills itself — the AI tools do, following AGENTS.md.
 
 import { existsSync, readdirSync, statSync, copyFileSync, cpSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join, basename, extname, resolve } from 'node:path';
+import { join, basename, extname, resolve, sep } from 'node:path';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { ROOT, SLUG, readJson } from './repo.mjs';
 import { parseFrontmatter } from './frontmatter.mjs';
 
-export type ActivityKey = 'open' | 'review' | 'tests' | 'review-then-tests' | 'failure' | 'context' | 'automation' | 'resume';
-export type ToolKey = 'claude' | 'codex' | 'cursor-agent' | 'gemini' | 'cursor' | 'vscode' | 'chat' | 'print';
+export type ActivityKey = 'open' | 'review' | 'tests' | 'review-then-tests' | 'failure' | 'context' | 'setup' | 'automation' | 'resume';
+export type ToolKey = 'claude' | 'codex' | 'cursor-agent' | 'gemini' | 'antigravity' | 'cursor' | 'vscode' | 'chat' | 'print';
 
 export interface Activity { label: string; hint?: string; skill: string; needsFiles: boolean }
 export interface Tool {
@@ -29,6 +29,7 @@ export const ACTIVITIES: Record<ActivityKey, Activity> = {
   'review-then-tests': { label: 'Review, then design tests', hint: 'workflow with approval in between', skill: 'qa-orchestrator', needsFiles: true },
   failure: { label: 'Failure pre-analysis', hint: 'from your description and the log', skill: 'failure-analysis', needsFiles: false },
   context: { label: 'Project context', hint: 'onboarding, questions, updates', skill: 'project-context', needsFiles: false },
+  setup: { label: 'Prepare the project', hint: 'adapts the context to the project description', skill: 'project-context', needsFiles: false },
   automation: { label: 'Automation', skill: 'automation', needsFiles: false },
   resume: { label: 'Resume a run', skill: 'qa-orchestrator', needsFiles: false },
 };
@@ -38,6 +39,7 @@ export const TOOLS: Record<ToolKey, Tool> = {
   codex: { label: 'OpenAI Codex CLI', command: 'codex', args: (p) => [p] },
   'cursor-agent': { label: 'Cursor Agent CLI', command: 'cursor-agent', args: (p) => [p] },
   gemini: { label: 'Gemini CLI', command: 'gemini', args: (p) => ['-i', p] },
+  antigravity: { label: 'Antigravity CLI', command: 'agy', args: (p) => ['-i', p] },
   cursor: { label: 'Cursor editor', hint: 'opens the folder, request copied to clipboard', command: 'cursor', args: () => [ROOT], clipboard: true },
   vscode: { label: 'VS Code (Claude Code / Codex extensions)', hint: 'opens the folder, request copied to clipboard', command: 'code', args: () => [ROOT], clipboard: true },
   chat: { label: 'ChatGPT / claude.ai / Gemini web', hint: 'request copied, files listed', chat: true },
@@ -46,8 +48,8 @@ export const TOOLS: Record<ToolKey, Tool> = {
 
 export const LANGUAGES = ['English', 'Portuguese (pt-BR)', 'Spanish'];
 
-export const isActivity = (v: string): v is ActivityKey => v in ACTIVITIES;
-export const isTool = (v: string): v is ToolKey => v in TOOLS;
+export const isActivity = (v: string): v is ActivityKey => Object.hasOwn(ACTIVITIES, v);
+export const isTool = (v: string): v is ToolKey => Object.hasOwn(TOOLS, v);
 
 // ---------------------------------------------------------------- skills
 
@@ -96,6 +98,8 @@ export interface ProjectSummary {
   deliverableLanguage: string;
   runs: number;
   openRuns: number;
+  repository: string; // folder on this machine linked to the project ('' when none)
+  linkedSkills: string[]; // global skills this project uses, by name (project.json linkedSkills)
 }
 
 export const projectsDir = (root = ROOT): string => join(root, 'workspace', 'projects');
@@ -132,7 +136,69 @@ export function projectSummary(id: string, root = ROOT): ProjectSummary {
     deliverableLanguage: String(data.deliverableLanguage || 'en (default)'),
     runs: runs.length,
     openRuns: runs.filter((r) => !['completed', 'cancelled'].includes(r.status)).length,
+    repository: linkedOf(data)?.path ?? '',
+    linkedSkills: Array.isArray(data.linkedSkills) ? data.linkedSkills.filter((s): s is string => typeof s === 'string') : [],
   };
+}
+
+// The folder linked with the desktop app's "Choose my folder": the repositories[] entry marked linkedFolder.
+// writeBlocked: the entry says writeAllowed: false, so nothing is ever written there.
+export interface LinkedFolder { path: string; writeBlocked: boolean }
+
+function linkedOf(data: Record<string, unknown>): LinkedFolder | null {
+  const repos = Array.isArray(data.repositories) ? (data.repositories as Record<string, unknown>[]) : [];
+  const r = repos.find((x) => x?.linkedFolder === true && typeof x.localPath === 'string' && x.localPath);
+  return r ? { path: String(r.localPath), writeBlocked: r.writeAllowed === false } : null;
+}
+
+export function linkedFolder(project: string, root = ROOT): LinkedFolder | null {
+  try { return linkedOf(readJson(join(projectsDir(root), project, 'project.json')) as Record<string, unknown>); } catch { return null; }
+}
+
+export const projectRepository = (project: string, root = ROOT): string => linkedFolder(project, root)?.path ?? '';
+
+// ---------------------------------------------------------------- installed skills and agents
+
+// Names of the skill folders (<dir>/<name>/SKILL.md) in a skills directory.
+export const skillFolders = (dir: string): string[] =>
+  existsSync(dir) ? readdirSync(dir).filter((n) => existsSync(join(dir, n, 'SKILL.md'))).sort() : [];
+
+// Names of the agent definitions (<dir>/<name>.md) in an agents directory.
+export const agentFiles = (dir: string): string[] =>
+  existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.md') && !n.startsWith('.')).map((n) => n.slice(0, -3)).sort() : [];
+
+// Where one project's installed skills or agents live, as the AI is told: <linked folder>/.claude/<kind>, or workspace/projects/<id>/<kind>.
+type Kind = 'skills' | 'agents';
+const folderLabel = (project: string, repository: string, kind: Kind): string =>
+  repository ? `${repository.split(sep).join('/')}/.claude/${kind}` : `workspace/projects/${project}/${kind}`;
+
+// `dir` on disk, `label` as written in requests and agents.
+function projectFolder(project: string, kind: Kind, root: string): { dir: string; label: string } {
+  const repo = linkedFolder(project, root)?.path ?? '';
+  return { dir: repo ? join(repo, '.claude', kind) : join(projectsDir(root), project, kind), label: folderLabel(project, repo, kind) };
+}
+export const projectSkillsDir = (project: string, root = ROOT) => projectFolder(project, 'skills', root);
+export const projectAgentsDir = (project: string, root = ROOT) => projectFolder(project, 'agents', root);
+export const installedSkills = (project: string, root = ROOT): string[] => skillFolders(projectSkillsDir(project, root).dir);
+export const installedAgents = (project: string, root = ROOT): string[] => agentFiles(projectAgentsDir(project, root).dir);
+
+export interface AgentSpec {
+  name: string; description: string; skills: { name: string; path: string }[];
+  framework?: { root: string; project: string }; // set when the agent uses Quality Agents' own skills
+}
+
+// An agent in the Claude Code subagent format (plain Markdown any AI tool can follow).
+// The skills list closes the agent to the skills chosen for it.
+export function agentMarkdown({ name, description, skills, framework }: AgentSpec): string {
+  const summary = description.split('\n')[0].split(/(?<=[.!?])\s/)[0].slice(0, 300);
+  return [
+    '---', `name: ${name}`, `description: ${JSON.stringify(summary)}`, '---', '',
+    description, '',
+    '## Skills', '',
+    'Use only these skills (read the SKILL.md when one fits the task). Do not use or install any other skill; if the task needs one that is not listed, say so and stop.', '',
+    ...skills.map((s) => `- \`${s.name}\`: \`${s.path}\``), '',
+    ...(framework ? [`The Quality Agents skills follow \`${framework.root}/AGENTS.md\` for the project \`${framework.project}\`: its context, runs and approvals are in \`${framework.root}/workspace/projects/${framework.project}/\`.`, ''] : []),
+  ].join('\n');
 }
 
 // Creates workspace/projects/<id>/ from templates/project-context/ (same result as npm run new-project).
@@ -191,11 +257,17 @@ export interface Request {
   language?: string;
   // Agent to act as: its name and its file (relative to the framework folder).
   agent?: { name: string; path: string };
+  repository?: string; // folder linked to the project
+  skills?: string[]; // installed for this project (installedSkills)
+  agents?: string[]; // installed for this project (installedAgents)
+  description?: string; // the project's goal, for the setup activity
+  globalSkills?: { name: string; path: string }[]; // global skills linked to the project, with their SKILL.md
 }
 
-export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English', agent }: Request): string {
+export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English', agent, repository = '', skills = [], agents = [], description = '', globalSkills = [] }: Request): string {
   const list = files.length ? files.join(', ') : '';
   const parts = [`Follow AGENTS.md. Project: ${project}.`];
+  if (repository) parts.push(`Linked folder (the system's repository): ${repository}.`);
   if (agent) parts.push(`Act as the ${agent.name} agent: read ${agent.path} and follow it.`);
   switch (activity) {
     case 'open':
@@ -220,6 +292,12 @@ export function buildPrompt({ project, activity, files = [], note = '', run = ''
       parts.push('Use the project-context skill: load the project context, show what is known and what is missing, and continue the onboarding if needed.');
       if (list) parts.push(`Documents to use: ${list}.`);
       break;
+    case 'setup':
+      parts.push(`Use the project-context skill to prepare this project for its goal: ${description.trim() ? JSON.stringify(description.trim()) : 'the description in project.json (ask me for it if it is empty)'}.`
+        + `${repository ? ' Look at the linked folder first.' : ''} Propose how to adapt the context files and which of the available skills fit;`
+        + ` write the proposals to workspace/projects/${project}/proposed-updates.md and wait for my approval before changing context/. Do not install skills: I install them from the app.`);
+      if (list) parts.push(`Documents to use: ${list}.`);
+      break;
     case 'automation':
       parts.push(`Use the automation skill.${list ? ` Inputs: ${list}.` : ''}`);
       break;
@@ -229,6 +307,9 @@ export function buildPrompt({ project, activity, files = [], note = '', run = ''
     default:
       throw new Error(`Unknown activity "${String(activity)}"`);
   }
+  if (skills.length) parts.push(`Skills installed for this project (read ${folderLabel(project, repository, 'skills')}/<name>/SKILL.md when one fits the task): ${skills.join(', ')}.`);
+  if (globalSkills.length) parts.push(`Global skills linked to this project (read the SKILL.md when one fits the task): ${globalSkills.map((s) => `${s.name} (${s.path})`).join(', ')}.`);
+  if (agents.length) parts.push(`Agents defined for this project (when I ask for one, follow ${folderLabel(project, repository, 'agents')}/<name>.md and use only the skills it lists): ${agents.join(', ')}.`);
   if (note.trim()) parts.push(`Additional instructions: ${note.trim().replace(/([^.!?])$/, '$1.')}`);
   parts.push(`Talk to me in ${language}.`);
   return parts.join(' ');

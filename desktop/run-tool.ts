@@ -35,6 +35,7 @@ function main(): void {
   const req = JSON.parse(readFileSync(file, 'utf8')) as LaunchFile;
   rmSync(file, { force: true }); // contains the prompt; no need to keep it
   process.title = req.title;
+  process.on('SIGINT', () => { /* Ctrl+C belongs to the tool; wait for it to exit */ });
   process.stdout.write(`\x1b]0;${req.title}\x07`);
 
   const path = which(req.command);

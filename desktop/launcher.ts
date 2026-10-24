@@ -1,6 +1,7 @@
 // Opens AI tools for the desktop app. Terminal tools (claude, codex, gemini,
-// cursor-agent) start in a NEW terminal window; editors open the framework
-// folder. Only tools from the fixed TOOLS list can be started, and user text
+// antigravity, cursor-agent) start in a terminal tab of the app (launchInTerminal) or, when
+// embedded terminals are unavailable, in a NEW terminal window; editors open
+// the framework folder. Only tools from the fixed TOOLS list can be started, and user text
 // only ever travels as the prompt argument.
 //
 // Windows: the request goes to a UTF-8 JSON file read by desktop/run-tool.ts in
@@ -12,8 +13,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { TOOLS, copyToClipboard, which, type ToolKey } from '../scripts/lib/core.ts';
+import type { TermSpec } from './terminals.ts';
 
-export interface LaunchResult { opened: boolean; message: string; copied?: boolean }
+export interface LaunchResult { opened: boolean; message: string; copied?: boolean; terminal?: { id: string; title: string } }
 
 export type Launcher = (tool: ToolKey, prompt: string, root: string) => LaunchResult;
 export type FolderOpener = (folder: string) => void;
@@ -45,6 +47,20 @@ function detached(cmd: string, args: string[], options: { shell?: boolean; windo
   child.unref();
 }
 
+// Plugins only for the sessions the app opens (adapters/app-plugins/README.md); each is
+// skipped when what it needs is missing. Codex has no per-session plugins, so it gets
+// one line of developer instructions (one line: launcher scripts drop line breaks).
+export function pluginArgs(tool: ToolKey, root: string): string[] {
+  const ponytail = tool === 'codex' || Boolean(which('node')); // the Claude hooks run on Node
+  const rtk = Boolean(which('rtk'));
+  const dir = join(root, 'adapters', 'app-plugins');
+  if (tool === 'claude') return [...(ponytail ? ['ponytail'] : []), ...(rtk ? ['rtk'] : [])].flatMap((p) => ['--plugin-dir', join(dir, p)]);
+  if (tool !== 'codex') return [];
+  const lines = [`Ponytail mode is active (level full): before writing, changing or reviewing code, read ${join(dir, 'ponytail', 'skills', 'ponytail', 'SKILL.md')} and follow it.`];
+  if (rtk) lines.push('Run shell commands through rtk to shrink their output (rtk git status, rtk grep, rtk ls...); rtk proxy CMD runs one unfiltered.');
+  return ['-c', `developer_instructions=${lines.join(' ')}`];
+}
+
 const LINUX_TERMINALS: [string, string[]][] = [
   ['x-terminal-emulator', ['-e']], ['gnome-terminal', ['--']], ['konsole', ['-e']], ['xfce4-terminal', ['-x']], ['xterm', ['-e']],
 ];
@@ -69,11 +85,10 @@ export const launchTool: Launcher = (tool, prompt, root) => {
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const title = `Quality Agents - ${t.label}`;
-  const args = t.args(cleanPrompt(prompt));
+  const args = [...pluginArgs(tool, root), ...t.args(cleanPrompt(prompt))];
 
   if (process.platform === 'win32') {
-    const file = join(dir, `open-${tool}-${stamp}.json`);
-    writeFileSync(file, JSON.stringify({ command: t.command, args, cwd: root, title }), 'utf8');
+    const file = requestFile(tool, args, root, title);
     // Prefer Node.js: Electron in Node mode has no console, so interactive tools would start blank.
     detached('cmd.exe', [windowsStartArgs(which('node') ?? process.execPath, runToolPath(), file, title)], {
       windowsVerbatimArguments: true,
@@ -94,6 +109,29 @@ export const launchTool: Launcher = (tool, prompt, root) => {
   }
   return { opened: true, message: `${t.label} is opening in a new terminal window, already in the Quality Agents folder with your request.` };
 };
+
+// Windows: the UTF-8 JSON request read by run-tool (see the header).
+function requestFile(tool: ToolKey, args: string[], root: string, title: string): string {
+  const dir = join(root, 'workspace', 'temporary');
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `open-${tool}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+  writeFileSync(file, JSON.stringify({ command: TOOLS[tool].command, args, cwd: root, title }), 'utf8');
+  return file;
+}
+
+// Starts a terminal tool in a terminal tab of the app, with the request or, for an
+// empty prompt, just the tool. `prepare` registers the command with
+// desktop/terminals.ts; the tab starts it once it knows its size.
+export function launchInTerminal(tool: ToolKey, prompt: string, root: string, prepare: (spec: TermSpec) => string): LaunchResult {
+  const t = TOOLS[tool];
+  if (!t.command || !t.args || t.clipboard) throw new Error(`${t.label} does not run in a terminal.`);
+  if (!which(t.command)) return { opened: false, message: `${t.label} is not installed on this computer (command "${t.command}" not found).` };
+  const args = [...pluginArgs(tool, root), ...(prompt ? t.args(cleanPrompt(prompt)) : [])];
+  const id = prepare(process.platform === 'win32'
+    ? { file: which('node') ?? process.execPath, args: [runToolPath(), requestFile(tool, args, root, t.label)], cwd: root, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }
+    : { file: t.command, args, cwd: root });
+  return { opened: true, message: `${t.label} opened in a terminal tab${prompt ? ' with your request' : ''}.`, terminal: { id, title: t.label } };
+}
 
 // Opens a folder in the system file manager (Explorer, Finder, ...).
 export const openFolder: FolderOpener = (folder) => {

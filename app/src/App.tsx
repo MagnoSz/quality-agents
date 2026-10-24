@@ -17,6 +17,7 @@ export function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [created, setCreated] = useState<string | null>(null); // a new project opens with "Set up"
   const [library, setLibrary] = useState(false);
   const [launchOnOpen, setLaunchOnOpen] = useState(false);
 
@@ -41,12 +42,13 @@ export function App() {
       .catch((e: Error) => setError(e.message));
   }, []);
 
-  const open = (id: string) => { setProjectId(id); remember(id); };
-  const home = () => { setProjectId(null); remember(null); void loadProjects(); };
+  const open = (id: string) => { setProjectId(id); setCreated(null); remember(id); };
+  const home = () => { setProjectId(null); setCreated(null); remember(null); void loadProjects(); };
   const create = async (name: string) => {
-    const created = await api.createProject(name);
+    const project = await api.createProject(name);
     await loadProjects();
-    open(created.id);
+    open(project.id);
+    setCreated(project.id);
   };
   const onProjectChanged = useCallback(() => { void loadProjects(); }, [loadProjects]);
 
@@ -56,6 +58,6 @@ export function App() {
   const project = projects.find((p) => p.id === projectId);
   if (library) return <Library backLabel={project ? `Back to ${project.name}` : 'All projects'} onBack={() => setLibrary(false)} />;
   return project
-    ? <Workspace key={project.id} project={project} tools={tools} onHome={home} onLibrary={() => setLibrary(true)} onProjectChanged={onProjectChanged} launchOnOpen={launchOnOpen} />
+    ? <Workspace key={project.id} project={project} tools={tools} onHome={home} onLibrary={() => setLibrary(true)} onProjectChanged={onProjectChanged} launchOnOpen={launchOnOpen} startSetup={created === project.id} />
     : <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} onLibrary={() => setLibrary(true)} />;
 }

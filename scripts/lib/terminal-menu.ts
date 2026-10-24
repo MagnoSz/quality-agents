@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { ROOT, SLUG } from './repo.mjs';
 import {
   ACTIVITIES, TOOLS, LANGUAGES, type ActivityKey, type ToolKey, type Request,
-  buildPrompt, cleanPath, copyToClipboard, copyToInbox, detectTools, isFile, isUsable, windowsSafePrompt,
+  buildPrompt, projectRepository, cleanPath, copyToClipboard, copyToInbox, detectTools, isFile, isUsable, windowsSafePrompt,
   launchTool, listProjects, loadPrefs, openRuns, projectsDir, savePrefs, skillStatus,
 } from './core.ts';
 import { createUI, CancelError, c, type UI } from './tui.ts';
@@ -32,7 +32,7 @@ const plainOut: Out = {
 };
 
 export async function deliver(request: Request & { tool: ToolKey; files: string[] }, out: Out = plainOut): Promise<number> {
-  const prompt = buildPrompt({ ...request, files: readableInputs(request.files, ROOT) });
+  const prompt = buildPrompt({ ...request, files: readableInputs(request.files, ROOT), repository: projectRepository(request.project, ROOT) });
   mkdirSync(join(ROOT, 'workspace', 'temporary'), { recursive: true });
   writeFileSync(join(ROOT, 'workspace', 'temporary', 'last-prompt.txt'), `${prompt}\n`);
   const tool = TOOLS[request.tool];

@@ -5,14 +5,17 @@
 //
 // Usage: node scripts/build.mjs [--check]
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ROOT, MIRRORS, listSkillDirs, walkFiles, relPosix } from './lib/repo.mjs';
 import { claudeSubagent, isUsableAgent, listAgents } from './lib/agents.ts';
 
 // Built-in agents become native Claude Code subagents (usable ones only).
+// claude-agents/*.md are copied unchanged into the same mirror (framework
+// subagents that are not QA-activity agents).
 const AGENT_MIRROR = '.claude/agents';
+const CLAUDE_AGENTS = 'claude-agents';
 const GENERATED = [...MIRRORS, AGENT_MIRROR];
 
 const MIRROR_README = `# Generated folder — do not edit
@@ -40,6 +43,14 @@ export function expectedFiles(root = ROOT) {
   }
   for (const agent of listAgents(root).filter((a) => a.source === 'builtin' && isUsableAgent(a))) {
     files.set(`${AGENT_MIRROR}/${agent.name}.md`, Buffer.from(claudeSubagent(agent)));
+  }
+  const extraDir = join(root, CLAUDE_AGENTS);
+  if (existsSync(extraDir)) {
+    for (const name of readdirSync(extraDir).filter((f) => f.endsWith('.md') && statSync(join(extraDir, f)).isFile())) {
+      const path = `${AGENT_MIRROR}/${name}`;
+      if (files.has(path)) throw new Error(`${CLAUDE_AGENTS}/${name} collides with a built-in agent`);
+      files.set(path, readFileSync(join(extraDir, name)));
+    }
   }
   return files;
 }

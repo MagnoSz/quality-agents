@@ -30,13 +30,15 @@
     "check-output": "node scripts/check-output.mjs",
     "dist:win": "node scripts/build-desktop.mjs && electron-builder --win nsis",
     "dist:mac": "node scripts/build-desktop.mjs && electron-builder --mac dmg",
-    "dist:linux": "node scripts/build-desktop.mjs && electron-builder --linux AppImage"
+    "dist:linux": "node scripts/build-desktop.mjs && electron-builder --linux AppImage deb rpm"
   },
   "devDependencies": {
     "@types/node": "22.18.12",
     "@types/react": "19.1.17",
     "@types/react-dom": "19.1.11",
     "@vitejs/plugin-react": "5.0.4",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
     "electron": "43.7.8",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
@@ -46,6 +48,7 @@
     "vite": "7.3.7"
   },
   "main": "app/dist-electron/boot.mjs",
+  "desktopName": "quality-agents.desktop",
   "author": "Quality Agents contributors",
   "build": {
     "appId": "io.github.orsi88.qualityagents",
@@ -59,8 +62,10 @@
       "**/*"
     ],
     "asarUnpack": [
-      "app/dist-electron/run-tool.mjs"
+      "app/dist-electron/run-tool.mjs",
+      "node_modules/node-pty/**"
     ],
+    "npmRebuild": false,
     "extraResources": [
       {
         "from": "AGENTS.md",
@@ -162,11 +167,18 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb",
+        "rpm"
       ],
-      "icon": "app/public/icon.png",
-      "category": "Development"
+      "icon": "app/public/icon-512.png",
+      "category": "Development",
+      "maintainer": "Quality Agents contributors",
+      "syncDesktopName": true
     },
     "electronVersion": "43.7.8"
+  },
+  "optionalDependencies": {
+    "node-pty": "1.1.0"
   }
 }

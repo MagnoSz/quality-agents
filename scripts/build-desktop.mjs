@@ -4,7 +4,7 @@
 
 import { build as viteBuild } from 'vite';
 import { build as esbuild } from 'esbuild';
-import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT } from './lib/repo.mjs';
 
@@ -13,7 +13,8 @@ rmSync(out, { recursive: true, force: true });
 
 await viteBuild({ configFile: join(ROOT, 'app', 'vite.config.ts'), logLevel: 'warn' });
 
-const common = { bundle: true, platform: 'node', target: 'node22', sourcemap: false, logLevel: 'warning', external: ['electron'] };
+// node-pty is native: it is not bundled but shipped as a module next to the app.
+const common = { bundle: true, platform: 'node', target: 'node22', sourcemap: false, logLevel: 'warning', external: ['electron', 'node-pty'] };
 await esbuild({ ...common, entryPoints: [join(ROOT, 'desktop', 'boot.ts')], outfile: join(out, 'boot.mjs'), format: 'esm', external: ['electron', './main.mjs'] });
 await esbuild({ ...common, entryPoints: [join(ROOT, 'desktop', 'main.ts')], outfile: join(out, 'main.mjs'), format: 'esm' });
 await esbuild({ ...common, entryPoints: [join(ROOT, 'desktop', 'preload.ts')], outfile: join(out, 'preload.cjs'), format: 'cjs' });
@@ -31,10 +32,25 @@ mkdirSync(join(stage, 'app'), { recursive: true });
 cpSync(join(ROOT, 'app', 'dist'), join(stage, 'app', 'dist'), { recursive: true });
 cpSync(out, join(stage, 'app', 'dist-electron'), { recursive: true });
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const hasPty = existsSync(join(ROOT, 'node_modules', 'node-pty', 'package.json'));
 writeFileSync(join(stage, 'package.json'), JSON.stringify({
   name: pkg.name, productName: 'Quality Agents', version: pkg.version, description: pkg.description,
   author: pkg.author, license: pkg.license, type: 'module', main: 'app/dist-electron/boot.mjs',
+  optionalDependencies: hasPty ? pkg.optionalDependencies : undefined,
 }, null, 2));
+// node-pty (terminal tabs) with its binaries: prebuilt for Windows/macOS, built by npm install
+// on Linux (needs a C++ compiler). N-API, so no rebuild for Electron. Sources and debug symbols
+// are left out. Without it the app opens the AI tools in external terminal windows.
+if (hasPty) {
+  for (const mod of ['node-pty', 'node-addon-api']) {
+    cpSync(join(ROOT, 'node_modules', mod), join(stage, 'node_modules', mod), {
+      recursive: true,
+      filter: (src) => !/([\\/](src|deps|third_party|obj\.target|\.deps)|\.pdb)$/.test(src),
+    });
+  }
+} else {
+  console.warn('node-pty is not installed: this build opens the AI tools in external terminal windows instead of tabs.');
+}
 
 // The framework copy shipped with the installer gets the full package.json (npm scripts
 // used by the skills). A different file name avoids clashing with the app's own one.

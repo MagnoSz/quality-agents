@@ -3,7 +3,7 @@
 // tool the QA already uses. Quality Agents has no chat of its own.
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { api, describeRun, type ActivityInfo, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type ToolInfo, type ToolKind } from '../api';
+import { api, describeRun, type ActivityInfo, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type TerminalRef, type ToolInfo, type ToolKind } from '../api';
 import { IconCheck, IconCode, IconCopy, IconFile, IconFolder, IconGlobe, IconPlay, IconRefresh, IconTerminal, IconX } from './Icons';
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   tools: ToolInfo[];
   preset?: { activity: string; run?: string };
   onClose: () => void;
+  onTerminal: (terminal: TerminalRef) => void; // the tool opened in a terminal tab of the app
 }
 
 type StepKey = 'activity' | 'run' | 'files' | 'agent' | 'details' | 'tool' | 'review';
@@ -22,13 +23,13 @@ const KIND_ICON: Record<ToolKind, ReactNode> = {
   terminal: <IconTerminal size={16} />, editor: <IconCode size={16} />, chat: <IconGlobe size={16} />, print: <IconFile size={16} />,
 };
 const KIND_HINT: Record<ToolKind, string> = {
-  terminal: 'Opens in a new terminal window', editor: 'Opens the folder in your editor, request copied',
+  terminal: 'Opens in a terminal tab', editor: 'Opens the folder in your editor, request copied',
   chat: 'Web chat — you upload the files', print: 'Only prepares the request for you to copy',
 };
 
 const formatSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
-export function LaunchDialog({ project, tools, preset, onClose }: Props) {
+export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Props) {
   const [activities, setActivities] = useState<ActivityInfo[]>([]);
   const [languages, setLanguages] = useState<string[]>(['English']);
   const [activity, setActivity] = useState(preset?.activity ?? '');
@@ -88,6 +89,7 @@ export function LaunchDialog({ project, tools, preset, onClose }: Props) {
     remember('qa-tool', tool); remember('qa-language', language);
     try {
       const r = await api.launch({ project: project.id, activity, tool, files, note, language, run: resume ? run : undefined, agent: agent || undefined });
+      if (r.terminal) { onTerminal(r.terminal); return; }
       setResult(r);
       if (!r.opened && r.message) setError(r.message);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }

@@ -114,7 +114,7 @@ On first launch the app creates **Documents\Quality Agents** — the framework (
 
 You still need an AI tool (Claude Code, Codex, Cursor…). Node.js is optional: it is only used by the skills' helper commands (Excel/PDF generation).
 
-Prefer the terminal, contribute to the framework, or use macOS/Linux? Follow the steps below.
+Prefer the terminal, contribute to the framework, or use macOS/Linux? Follow the steps below; to build the installer for your system, see [3.7](#37-build-the-desktop-app-installer-windows-macos-linux).
 
 ### 3.1 What you need
 
@@ -196,6 +196,39 @@ From now on you can type `qa` in **any** terminal folder to open the Quality Age
 
 > **Windows tip:** if PowerShell says *"running scripts is disabled on this system"* when you type `npm`, use **Git Bash** instead, or type `npm.cmd` instead of `npm`, or see [Troubleshooting](#14-troubleshooting).
 
+### 3.7 Build the desktop app installer (Windows, macOS, Linux)
+
+Optional: for whoever publishes the installers, or to get the app on macOS/Linux as a standalone program. After [3.4](#34-run-the-one-time-setup), run the command for your system inside the `quality-agents` folder. **Build each installer on the system it is for** (a macOS installer can only be built on a Mac). The files are written to `release/`.
+
+| System | Command | Result in `release/` |
+|---|---|---|
+| Windows 10/11 (x64) | `npm run dist:win` | `Quality Agents Setup <version>.exe` |
+| macOS (Intel or Apple Silicon) | `npm run dist:mac` | `Quality Agents-<version>.dmg` (`-arm64` in the name on Apple Silicon) |
+| Linux (x64) | `npm run dist:linux` | `Quality Agents-<version>.AppImage` |
+
+The installers are not code-signed yet: Windows shows the SmartScreen warning described in [3.0](#30-the-quickest-way-the-windows-installer); macOS blocks the first launch — right-click the app → **Open**, or **System Settings → Privacy & Security → Open Anyway**. On every system the first launch creates **Documents/Quality Agents**, as in 3.0.
+
+#### Linux: distributions and versions
+
+The Linux build is a single `.AppImage`: one file that runs without installation on any x64 distribution with **glibc 2.25 or newer** and a graphical desktop (GTK 3). Building it needs only Git and Node.js 22.18+ — no compiler or extra packages.
+
+| Distribution | Versions | FUSE 2 package the AppImage needs |
+|---|---|---|
+| Ubuntu | 22.04 LTS | `sudo apt install libfuse2` |
+| Ubuntu | 24.04 LTS or newer | `sudo apt install libfuse2t64` (see the AppArmor note below) |
+| Debian | 12 or newer | `sudo apt install libfuse2` (Debian 13: `libfuse2t64`) |
+| Linux Mint / Pop!_OS / elementary OS | Mint 21+, Pop!_OS 22.04+, elementary OS 7+ | same package as the Ubuntu version they are based on |
+| Fedora | 42 or newer | `sudo dnf install fuse-libs` |
+| RHEL / Rocky Linux / AlmaLinux | 9 or newer | `sudo dnf install fuse-libs` |
+| openSUSE | Leap 15.6, Tumbleweed | `sudo zypper install libfuse2` |
+| Arch / Manjaro | rolling | `sudo pacman -S fuse2` |
+
+To run it: `chmod +x "Quality Agents-<version>.AppImage"`, then double-click it or start it from a terminal.
+
+- **No menu entry** is created. Keep the file in a fixed folder (e.g. `~/Applications`); tools such as AppImageLauncher or Gear Lever can add it to the menu.
+- **Ubuntu 24.04 or newer:** AppArmor blocks the sandbox Electron apps use, and the AppImage may close right away with a *"sandbox"* error. Start it with `"./Quality Agents-<version>.AppImage" --no-sandbox` (this turns off Chromium's sandbox for this app).
+- **ARM64:** build on an ARM64 machine with `npm run app:build` then `npx electron-builder --linux AppImage --arm64`.
+
 ---
 
 ## 4. Choose how you will use it
@@ -227,7 +260,7 @@ Type `qa` (or use the shortcut, once the installer exists). Quality Agents opens
 | **File tree** | *Context* (what the AI knows about the system), *Inbox* (files you give the AI), *Activities* (each review, test design or analysis, with date and a status dot), proposed updates and activity log |
 | **Documents in tabs** | Markdown is shown formatted; **Ctrl+E** switches to editing, **Ctrl+S** saves, **Ctrl+W** closes. Word files show their text; JSON, text and images are previewed; Excel and PDF open in their own program |
 | **Side panel** | For an activity: status, current step, pending items, approvals and the files produced, plus *Continue in your AI tool*. Otherwise: project overview, **agents enabled in this project** (checkboxes) and open activities |
-| **Open in your AI tool** | Choose the activity, optionally **who should do it** (an agent), the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI or Cursor Agent open in a new terminal window; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web get the request and the list of files to upload |
+| **Open in your AI tool** | Choose the activity, optionally **who should do it** (an agent), the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI, Antigravity CLI or Cursor Agent open in a terminal tab of the app; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web get the request and the list of files to upload |
 | **Agent library** | From the start screen or the ribbon: agents by category, with their role, skills and access. **Duplicate** a built-in agent to make your own, then **Edit** and **Save** it (checked before saving) or delete it. Your agents stay in `workspace/library/agents/` |
 
 - **Live**: files the AI writes appear in the tree as soon as they are saved.
@@ -253,7 +286,7 @@ flowchart TD
   RUN --> N
   N --> L["Conversation language"]
   L --> T{"Open with<br/>tools not installed are greyed out"}
-  T -->|"Claude Code, Codex,<br/>Cursor Agent, Gemini CLI"| OPEN["Opens the tool in quality-agents<br/>with the request already typed"]
+  T -->|"Claude Code, Codex,<br/>Cursor Agent, Gemini CLI,<br/>Antigravity CLI"| OPEN["Opens the tool in quality-agents<br/>with the request already typed"]
   T -->|"Cursor editor"| CUR["Opens the folder,<br/>request copied to the clipboard"]
   T -->|"ChatGPT, claude.ai, Gemini web"| CHAT["Request copied,<br/>list of files to upload"]
   T -->|"Just show"| SHOW["Prints the request"]
@@ -336,7 +369,7 @@ qa --help
 | Option | Values |
 |---|---|
 | `--activity` | `review`, `tests`, `review-then-tests`, `failure`, `context`, `resume` |
-| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `cursor`, `chat`, `print` |
+| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `antigravity`, `cursor`, `chat`, `print` |
 | `--file` | Repeat for several files |
 | `--run` | Run id, for `resume` |
 | `--note` | Extra instructions |
@@ -1007,7 +1040,7 @@ Run all commands from the `quality-agents` folder. On Windows PowerShell, use `n
 | PowerShell: *"running scripts is disabled on this system"* | Use Git Bash, or type `npm.cmd` instead of `npm`, or run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
 | `qa` "is not recognized" / "command not found" | Run `npm link` inside the `quality-agents` folder and open a new terminal, or use `npm run qa` from that folder. |
 | `qa` says the app is not installed yet | Run `npm run setup` in the `quality-agents` folder (also needed after each `git pull`). |
-| `qa` shows your AI tool as "not installed" | The tool's command (`claude`, `codex`, `cursor-agent`, `gemini`, `cursor`) is not on your PATH. Install the tool's CLI, or choose "Just show the request" and paste it yourself. |
+| `qa` shows your AI tool as "not installed" | The tool's command (`claude`, `codex`, `cursor-agent`, `gemini`, `agy`, `cursor`) is not on your PATH. Install the tool's CLI, or choose "Just show the request" and paste it yourself. |
 | The AI does not seem to know the skills | Make sure you opened the **`quality-agents` folder itself** (not a parent folder). Start a new session after cloning or updating. In chat tools, check that you uploaded the skills. |
 | The AI answers generically instead of following the process | Name the skill explicitly ("use the requirements-review skill") or, in Claude Code, type `/requirements-review`. |
 | The AI asks which project | Expected when the project is ambiguous. Tell it the project id or name. |
