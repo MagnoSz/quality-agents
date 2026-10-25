@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { api, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo } from '../api';
 import { recall, remember } from '../prefs';
 import { lang, setLang, t, type Lang } from '../i18n';
-import { FirstRunDialog } from '../components/FirstRunDialog';
 import { PrefsCorner } from '../components/PrefsCorner';
 import { AddButton } from '../components/AddButton';
 import { IconChevron, IconEye, IconEyeOff, IconOpenProject, IconPin, IconX } from '../components/Icons';
@@ -42,8 +41,7 @@ const savedConversation = (): string => {
 export function Home({ projects, tools, version, onOpen, onCreate, settings, onSettings, onBack, backLabel, project, onTerminal }: Props) {
   const [theme, setTheme] = useState<Theme>(currentTheme);
   const [conversation, setConversation] = useState(savedConversation);
-  const [needPrefs, setNeedPrefs] = useState(() => recall('qa-ui-language') == null && recall('qa-language') == null);
-  const [creating, setCreating] = useState(projects.length === 0);
+  const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [folder, setFolder] = useState(''); // an existing folder to link, from "Link an existing folder"
   const [starter, setStarter] = useState<Starter>(recall('qa-starter') === 'blank' ? 'blank' : 'qa'); // the last choice is the default
@@ -111,7 +109,6 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
     remember('qa-language', language);
     setLang(UI_OF[language] ?? 'en');
     setConversation(language);
-    setNeedPrefs(false);
   };
   const chooseTheme = (next: Theme) => { persistTheme(next); setTheme(next); };
 
@@ -220,7 +217,7 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
               {error && <p className="error small">{error}</p>}
               <div className="row-actions">
                 <button type="submit" className="btn" disabled={busy || !name.trim()}>{busy ? t('Creating…') : t('Create project')}</button>
-                {projects.length > 0 && <button type="button" className="btn btn-ghost" onClick={() => { setCreating(false); setFolder(''); setError(''); }}>{t('Cancel')}</button>}
+                <button type="button" className="btn btn-ghost" onClick={() => { setCreating(false); setName(''); setFolder(''); setError(''); }}>{t('Cancel')}</button>
               </div>
             </form>
           )}
@@ -240,7 +237,6 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
         </p>
       </main>
       )}
-      {needPrefs && <FirstRunDialog theme={theme} onLanguage={chooseLanguage} onTheme={chooseTheme} />}
     </div>
   );
 }
