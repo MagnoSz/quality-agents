@@ -169,6 +169,9 @@ function createWindow(): void {
   });
 }
 
+// A UI test sets this so it does not share the profile, or the single-instance lock, with the app you have open.
+if (process.env.QA_USER_DATA) app.setPath('userData', process.env.QA_USER_DATA);
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {

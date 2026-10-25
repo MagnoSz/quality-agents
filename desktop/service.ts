@@ -7,7 +7,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync,
 import { homedir } from 'node:os';
 import { basename, extname, isAbsolute, join, relative, sep } from 'node:path';
 import {
-  ACTIVITIES, LANGUAGES, TOOLS, agentFiles, agentMarkdown, buildPrompt, createProject, detectTools, installedAgents, installedSkills, isActivity, isTool, isUsable, linkedFolder, listProjects,
+  ACTIVITIES, LANGUAGES, TOOLS, agentFiles, agentMarkdown, buildPrompt, copyToInbox, createProject, detectTools, installedAgents, installedSkills, isActivity, isTool, isUsable, linkedFolder, listProjects,
   listRuns, listSkills, openRuns, projectAgentsDir, projectRepository, projectSkillsDir, projectSummary, projectsDir, skillFolders, skillStatus, slugify, windowsSafePrompt, STARTERS, type ProjectSummary, type Starter, type ToolKey,
 } from '../scripts/lib/core.ts';
 import { CATEGORIES, MAX_PAGE, installSkill, searchSkills } from './skill-registry.ts';
@@ -534,6 +534,27 @@ export function createService(root: string, deps: Deps) {
     },
 
     inbox: (project: string) => inboxFiles(projectDir(project)),
+
+    // Files dropped on the workspace are copied into the project inbox and stay there.
+    // Folders and anything that is not a real file are skipped; nothing outside the project is written.
+    importFiles: (project: string, paths: unknown) => {
+      projectDir(project);
+      if (!Array.isArray(paths) || paths.some((p) => typeof p !== 'string')) throw new ServiceError('Drop files from your computer.');
+      const list = paths as string[];
+      if (!list.length) throw new ServiceError('Drop files from your computer.');
+      if (list.length > 40) throw new ServiceError('Drop up to 40 files.');
+      const saved: string[] = [];
+      const skipped: string[] = [];
+      for (const source of list) {
+        const name = basename(source) || source;
+        if (!isAbsolute(source) || !existsSync(source)) { skipped.push(name); continue; }
+        const st = statSync(source);
+        if (!st.isFile() || st.size > 200 * 1024 * 1024) { skipped.push(name); continue; }
+        saved.push(`inbox/${basename(copyToInbox(project, source, root))}`);
+      }
+      if (!saved.length) throw new ServiceError('Nothing was added. Drop files from your computer, not folders.');
+      return { saved, skipped };
+    },
 
     openRuns: (project: string) => {
       projectDir(project);

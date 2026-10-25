@@ -16,5 +16,6 @@
     "skipLibCheck": true,
     "noUnusedLocals": true
   },
-  "include": ["scripts/**/*.ts", "desktop/**/*.ts", "tests/**/*.ts"]
+  "include": ["scripts/**/*.ts", "desktop/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["tests/ui"]
 }

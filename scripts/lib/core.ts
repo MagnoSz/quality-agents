@@ -5,6 +5,7 @@
 import { existsSync, readdirSync, statSync, copyFileSync, cpSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, basename, extname, resolve, sep } from 'node:path';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { ROOT, SLUG, readJson } from './repo.mjs';
 import { parseFrontmatter } from './frontmatter.mjs';
 
@@ -345,7 +346,8 @@ export function buildPrompt({ project, activity, files = [], note = '', run = ''
 
 export function which(command: string): string | null {
   try {
-    const out = execFileSync(process.platform === 'win32' ? 'where' : 'which', [command], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    // A missing command returns at once. A hung lookup must not freeze the app (the desktop window shares this process).
+    const out = execFileSync(process.platform === 'win32' ? 'where' : 'which', [command], { encoding: 'utf8', timeout: 8000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
     return out.split(/\r?\n/).find(Boolean) || null;
   } catch { return null; }
 }
@@ -354,14 +356,29 @@ export function detectTools(): Record<ToolKey, boolean> {
   return Object.fromEntries(Object.entries(TOOLS).map(([key, t]) => [key, t.command ? Boolean(which(t.command)) : true])) as Record<ToolKey, boolean>;
 }
 
+const nodeRequire = createRequire(import.meta.url);
+
+// clip.exe, started from the desktop app, waits forever for a console that a windowed process does not have.
+// The app then stays on "Opening…" and never shows what happened. Electron's own clipboard returns immediately.
+function electronClipboard(text: string): boolean {
+  try {
+    const electron = nodeRequire('electron') as { clipboard?: { writeText?: (value: string) => void } } | string;
+    const write = typeof electron === 'object' ? electron.clipboard?.writeText : undefined;
+    if (typeof write !== 'function') return false;
+    write(text);
+    return true;
+  } catch { return false; }
+}
+
 export function copyToClipboard(text: string): boolean {
+  if (electronClipboard(text)) return true;
   const attempts: [string, string[]][] = process.platform === 'win32' ? [['clip', []]]
     : process.platform === 'darwin' ? [['pbcopy', []]]
       : [['wl-copy', []], ['xclip', ['-selection', 'clipboard']], ['xsel', ['--clipboard', '--input']]];
   // clip.exe reads UTF-16LE (with BOM) correctly; other tools take UTF-8.
-  const input = process.platform === 'win32' ? Buffer.from(`﻿${text}`, 'utf16le') : Buffer.from(text, 'utf8');
+  const input = process.platform === 'win32' ? Buffer.from(`\uFEFF${text}`, 'utf16le') : Buffer.from(text, 'utf8');
   for (const [cmd, args] of attempts) {
-    const r = spawnSync(cmd, args, { input });
+    const r = spawnSync(cmd, args, { input, timeout: 4000, windowsHide: true });
     if (r.status === 0) return true;
   }
   return false;

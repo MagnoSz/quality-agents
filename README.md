@@ -10,9 +10,11 @@
   &nbsp;·&nbsp; <a href="#30-the-quickest-way-the-windows-installer">how to install</a>
 </p>
 
-A portable library of **AI agent skills for software quality engineering**. Clone it once, register each system you test, and run the same QA activities — requirements review, test design, failure analysis — with Claude Code, Cursor, Codex, ChatGPT, claude.ai, Gemini or other AI tools.
+A local app and a portable library of **instructions for AI agents**. Moki keeps each project on your computer and opens the AI tool you already use — Claude Code, Cursor, Codex, ChatGPT, claude.ai, Gemini or another — with the request ready. It has no AI of its own.
 
-This guide is written for QA professionals. No programming knowledge is needed: you will copy a few commands, open a folder in your AI tool and talk to it in plain language.
+It started as a way to run software quality work the same way in every tool: review stories, design tests, analyze a failure, assemble evidence. That work still ships with Moki. A project can now also be anything you describe: a blank project whose context the AI plans with you, a folder you already have, and skills and agents you install or write (programming, design, security, documentation, or a procedure of your own).
+
+This guide is for anyone using Moki. The app and the activities that ship with it need no programming: install, open a project and talk to your AI tool in plain language.
 
 ---
 
@@ -23,7 +25,7 @@ This guide is written for QA professionals. No programming knowledge is needed: 
 3. [Install (once per computer)](#3-install-once-per-computer)
 4. [Choose how you will use it](#4-choose-how-you-will-use-it)
 5. [Quick start: your first activity in 10 minutes](#5-quick-start-your-first-activity-in-10-minutes)
-6. [Register a system you test (project)](#6-register-a-system-you-test-project)
+6. [Create a project](#6-create-a-project)
 7. [Skill guides, step by step](#7-skill-guides-step-by-step)
 8. [Workflows: several activities in sequence](#8-workflows-several-activities-in-sequence)
 9. [Stop and resume an activity](#9-stop-and-resume-an-activity)
@@ -43,18 +45,20 @@ This guide is written for QA professionals. No programming knowledge is needed: 
 
 **It is**
 
-- A set of **skills**: written instructions, in the open [Agent Skills](https://agentskills.io) format, that tell an AI exactly how to perform a QA activity — the steps, the rules, the output format and where it must stop for your approval.
-- A **project context** mechanism: each system you test gets its own folder with its glossary, business rules, modules and conventions. The same skills then work for any application.
-- A **persistence** mechanism: every activity is recorded in files, so you can stop and resume later — even in a different AI tool.
+- A **desktop app** (Windows installer, or `qa` from a clone). It lists your projects, shows their files and opens your AI tool with a prepared request. There is no account and no server to deploy.
+- A set of **skills**: written instructions, in the open [Agent Skills](https://agentskills.io) format — the steps, the rules, the output format and where the work must stop for your approval. Some ship with Moki. Others you install from the public [SkillMD](https://skillmd.com) registry or ask your AI tool to draft.
+- **Agents**: a role that uses one or more skills, with an access level. The built-in roles cover the quality activities. You can duplicate them or create your own, for one project or for every project.
+- A **project context**: the knowledge you have confirmed, in Markdown and JSON, isolated per project. A quality project starts with glossary, business rules, modules and conventions. A blank project gets its files only after you approve a plan.
+- A **record of every activity**: inputs, outputs and a `state.json`, so you can stop and resume later — even in a different AI tool.
 
 **It is not**
 
-- Not an application, chatbot, website, server or database. There is nothing to deploy or log into.
-- Not tied to one AI vendor. The AI tool you already use does the work.
-- Not a replacement for you. Decisions, approvals and responsibility stay with the QA professional.
-- Not a place for your project data. Everything about your systems stays in the `workspace/` folder on your computer, which is never uploaded to this repository.
+- Not an AI, a chatbot or a hosted service. Moki does not answer the request. The tool you choose does, and an online tool follows that provider's data policy.
+- Not tied to one AI vendor.
+- Not a substitute for your decision. The skills that ship with Moki stop at approval gates and wait for an explicit answer.
+- Not a store for project data inside this Git repository. Projects, results, notes and installed skills for a project stay under `workspace/` on your computer (or in a folder you link). That tree is never uploaded here.
 
-### Available skills
+### Skills that ship with Moki
 
 | Skill | What it does | Status |
 |---|---|---|
@@ -62,12 +66,14 @@ This guide is written for QA professionals. No programming knowledge is needed: 
 | `test-design` | Maps test scenarios, waits for your OK, then writes detailed manual test cases and exports them to Excel. | draft |
 | `failure-analysis` | Short pre-analysis of an error from your description and the log, to point developers to the probable cause. | draft |
 | `evidence-collection`, `evidence-sheet`, `evidence-document` | Test evidence end to end (agent `evidence-builder`): reads the work item (Azure DevOps/Jira via MCP, or pasted) and the Jam recordings, gets your approval, then builds the evidence spreadsheet (one row per test case) and the Word document with the prints, in your own models. | draft |
-| `project-context` | Creates and maintains the knowledge about each system you test. | draft |
+| `project-context` | Creates and maintains the confirmed knowledge of a project. For a blank project, interviews you and writes a plan you approve before any context file is created. | draft |
 | `qa-orchestrator` | Chains activities ("review, then design the tests"), enforces approvals, resumes interrupted work. | draft |
 | `automation` | Automation engineering: builds new automation projects (Playwright + TypeScript first) already documented and AI-ready, automates documented FLX scenarios in existing projects, and evolves existing projects. | pending migration |
 | `documentation`, `smoke-test` | Planned for a future version. If you ask for them, the AI will tell you they are not available. | planned |
 
 **draft** = complete and usable, still being validated across AI tools (see [docs/compatibility-tests.md](docs/compatibility-tests.md)). **pending migration** = fully defined, waiting for the team's reference material before it can run. **planned** = not available yet.
+
+Skills you install or create are extra. They live with the project or in your user folder, and the request the app builds names them so the AI reads their `SKILL.md` when one fits. See [Skills and agents you add](#79-skills-and-agents-you-add).
 
 ---
 
@@ -75,10 +81,10 @@ This guide is written for QA professionals. No programming knowledge is needed: 
 
 | Term | Meaning |
 |---|---|
-| **Skill** | The instructions for one QA activity. You never need to open them — the AI reads them. |
-| **Agent** | A role that does the work using one or more skills (e.g. `requirements-analyst`), with an access level. Built-in agents can be duplicated and customized — see [docs/agents.md](docs/agents.md). |
-| **Project** | One system you test (e.g. "Billing Portal"). Identified by a short id in lowercase with hyphens: `billing-portal`. |
-| **Project context** | What the AI knows about a project: glossary, business rules, modules, flows, permissions, environments, conventions. Only definitions **you confirmed** are stored. |
+| **Skill** | The instructions for one activity. The AI reads them; you open a skill file only when you want to change it. |
+| **Agent** | A role that does the work using one or more skills (e.g. `requirements-analyst`), with an access level. Built-in agents can be duplicated, and you can create your own — see [docs/agents.md](docs/agents.md). |
+| **Project** | One body of work on this computer: a system you test, a repository you link, or a blank project you describe. Identified by a short id in lowercase with hyphens: `billing-portal`. |
+| **Project context** | What the AI may treat as known: only definitions **you confirmed**. A quality project starts with glossary, rules, modules, flows, permissions, environments and conventions. A blank project proposes its own files in a plan. |
 | **Run** | One execution of an activity (e.g. "review of story US-310"). Each run has an id like `20261020-0930-requirements-review-us-310` and its own folder with inputs, outputs and a `state.json` file. |
 | **state.json** | The "save game" of a run: current step, completed steps, pending questions, your approvals, files produced. It is what makes resuming possible. |
 | **Approval gate** | A point where the AI must stop and wait for your explicit answer before continuing (e.g. "May I generate the QA Review Matrix?"). |
@@ -88,13 +94,16 @@ This guide is written for QA professionals. No programming knowledge is needed: 
 
 ```mermaid
 flowchart TD
-  U["QA (you)"] -->|"request in plain language"| T["AI tool<br/>Claude Code, Cursor, Codex, chat"]
-  T -->|reads| A["AGENTS.md<br/>rules + skill catalog"]
-  A --> O{"One activity<br/>or several?"}
-  O -->|one| S["Activity skill<br/>requirements-review, test-design,<br/>failure-analysis, automation"]
+  U["You"] -->|"plain language"| APP["Moki app<br/>or the folder opened in your tool"]
+  APP -->|"prepared request"| T["AI tool you already use<br/>Claude Code, Cursor, Codex, chat"]
+  T -->|reads| A["AGENTS.md<br/>+ the skills named in the request"]
+  A --> O{"Built-in activity<br/>or a skill you added?"}
+  O -->|built-in, one| S["Skill that ships with Moki"]
   O -->|"several or resume"| W["qa-orchestrator<br/>workflow"]
+  O -->|installed or created| X["That skill's SKILL.md"]
   W --> S
   S <-->|"relevant context / proposals"| C["project-context<br/>workspace/projects/ID/context"]
+  X --> C
   S -->|"state, outputs, evidence"| R["Run folder<br/>workspace/projects/ID/runs/RUN-ID"]
   S -.->|"approval gates"| U
 ```
@@ -107,13 +116,13 @@ flowchart TD
 
 ### 3.0 The quickest way: the Windows installer
 
-1. Download **Moki Setup <version>.exe** from the [Releases page](https://github.com/Orsi88/quality-agents/releases).
+1. Download the Windows installer from the [Releases page](https://github.com/Orsi88/quality-agents/releases). The v0.1.0 file is named `Quality.Agents.Setup.0.1.0.exe`. Installers built from this repository are named `Moki Setup <version>.exe`.
 2. Run it. Windows may show *"Windows protected your PC"* because the installer is not digitally signed yet: click **More info → Run anyway**.
 3. Choose the installation folder and finish. A **Moki** shortcut is created on the desktop and in the Start menu.
 
 On first launch the app creates **Documents\Moki** — the framework (skills, `AGENTS.md`, templates) plus your `workspace/`, where projects and results live. Your AI tool is opened in that folder. Installing a newer version refreshes the framework files there and **never touches `workspace/`**; uninstalling the app keeps that folder too.
 
-You still need an AI tool (Claude Code, Codex, Cursor…). Node.js is optional: it is only used by the skills' helper commands (Excel/PDF generation).
+You still need an AI tool (Claude Code, Codex, Cursor…). Node.js is optional on this path: the installed app opens without it. It is only needed for the helper commands (Excel, Word and PDF).
 
 Prefer the terminal, contribute to the framework, or use macOS/Linux? Follow the steps below; to build the installer for your system, see [3.7](#37-build-the-desktop-app-installer-windows-macos-linux).
 
@@ -121,8 +130,8 @@ Prefer the terminal, contribute to the framework, or use macOS/Linux? Follow the
 
 | Software | Why | Required? |
 |---|---|---|
-| **Git** | To download (clone) and update the framework | Yes |
-| **Node.js 22.18 or newer** (LTS) | Runs the `qa` app and the helper commands: creating projects and runs, generating Excel and PDF, checking that no project data is committed | Strongly recommended (without it, the skills still work in your AI tool, but the app and those steps are not available) |
+| **Git** | To download (clone) and update the framework from this repository | Only for the clone path below. The Windows installer does not need Git. |
+| **Node.js 22.18 or newer** (LTS) | From a clone: runs `qa`, builds the app and runs the helper commands (projects, runs, Excel, Word, PDF, commit checks). The installed app opens AI tools without Node.js; those helper commands still need it. | For a clone, yes. For the installer, only when you want the helper commands. |
 | **Microsoft Edge or Google Chrome** | Used in the background to create PDF reports | Only for PDF generation (Edge already comes with Windows) |
 | An **AI tool** | Claude Code, Cursor, Codex, claude.ai, ChatGPT, Gemini... | Yes |
 
@@ -205,7 +214,7 @@ Optional: for whoever publishes the installers, or to get the app on macOS/Linux
 |---|---|---|
 | Windows 10/11 (x64) | `npm run dist:win` | `Moki Setup <version>.exe` |
 | macOS (Intel or Apple Silicon) | `npm run dist:mac` | `Moki-<version>.dmg` (`-arm64` in the name on Apple Silicon) |
-| Linux (x64) | `npm run dist:linux` | `Moki-<version>.AppImage` |
+| Linux (x64) | `npm run dist:linux` | `Moki-<version>.AppImage`, plus `.deb` and `.rpm` |
 
 The installers are not code-signed yet: Windows shows the SmartScreen warning described in [3.0](#30-the-quickest-way-the-windows-installer); macOS blocks the first launch — right-click the app → **Open**, or **System Settings → Privacy & Security → Open Anyway**. On every system the first launch creates **Documents/Moki**, as in 3.0.
 
@@ -243,33 +252,36 @@ And three ways to work, whatever the tool:
 
 | Way | For whom |
 |---|---|
-| **The desktop app — `qa`**: a start screen with your projects, then an Obsidian-like workspace to browse, read and edit the project files and **open the project in your AI tool with the request ready**. | Everyone — the easiest way |
+| **The desktop app — `qa`**: a start screen with your projects and loose notes, then an Obsidian-like workspace to browse, read and edit the project files and **open the project in your AI tool with the request ready**. | Everyone — the easiest way |
 | **The terminal menu — `qa --terminal`**: project → activity → files → AI tool; prepares everything and opens your AI tool with the request ready. | Anyone who does not want to deal with folders and prompts |
-| **Open the `quality-agents` folder** in your AI tool and ask in plain language | People comfortable with the AI tool |
+| **Open the `quality-agents` folder** in your AI tool and ask in plain language | People comfortable with the AI tool. `AGENTS.md` routes that conversation through the built-in skills. A skill you installed is named when the app or `qa --terminal` builds the request; in a session you opened yourself, name that skill. |
 
 ### 4.1 The desktop app (`qa`)
 
-Type `qa` (or use the shortcut, once the installer exists). Moki opens in its own window — no browser, no server.
+Type `qa`, or use the desktop shortcut from the installer. Moki opens in its own window — no browser, no server.
 
-**Start screen** — your projects on the left; create a new one by just typing its name. The last project you used reopens automatically. The corner chooses **English or Portuguese** and a **light or dark** theme; the first launch asks for both.
+**Start screen** — your projects on the left. Pin one to keep it at the top. Hide one and its files stay on this computer; it moves under **Hidden**, and the eye button shows it again. Create a project by typing its name. That form still says "one project per system you test"; a blank project and a linked folder use the same form. The last project you used reopens automatically. The corner chooses **English or Portuguese** and a **light or dark** theme; the first launch asks for both.
 
 **Workspace** (like Obsidian):
 
 | Area | What it does |
 |---|---|
 | **Left ribbon** | All projects · Open in your AI tool · New terminal · Open the project folder · Link a folder · Settings · Refresh · Show/hide the side panel |
-| **File tree** | *Context* (what the AI knows about the system), *Inbox* (files you give the AI), *Activities* (each review, test design or analysis, with date and a status dot), proposed updates and activity log |
+| **File tree** | *Context* (confirmed knowledge), *Inbox* (files you give the AI), *Activities* (each run, with date and a status dot), *Notes*, proposed updates and activity log |
 | **Documents in tabs** | Markdown is shown formatted; **Ctrl+E** switches to editing, **Ctrl+S** saves, **Ctrl+W** closes. Word files show their text; JSON, text and images are previewed; Excel and PDF open in their own program |
-| **Side panel** | For an activity: status, current step, pending items, approvals and the files produced, plus *Continue in your AI tool*. Otherwise: project overview, **agents enabled in this project** (checkboxes) and open activities |
-| **Open in your AI tool** | Choose the activity, optionally **who should do it** (an agent), the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI, Antigravity CLI or Cursor Agent open in a terminal tab of the app; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web get the request and the list of files to upload |
+| **Side panel** | For an activity: status, current step, pending items, approvals and the files produced, plus *Continue in your AI tool*. Otherwise: project overview, **agents enabled in this project** (checkboxes), open activities, and **Graph view** (the tab says it is under construction) |
+| **Open in your AI tool** | Choose the activity, optionally **who should do it** (an agent), the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI, Antigravity CLI or Cursor Agent open in a terminal tab of the app; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web, and *Just show the request*, leave the text on the review step ready to copy. The request names the linked folder and the skills and agents installed for that project. If opening is still running after about 20 seconds, the wizard says the request is taking too long instead of staying on "Opening…". |
 | **Settings** | The gear on the ribbon. Three tabs: **Agents**, **Skills** and **Documents**. |
-| **Agents** | Agents by category, with their role, skills and access. **Duplicate** a built-in agent to make your own, then **Edit** and **Save** it (checked before saving) or delete it. Create an agent for this project or for every project. Your agents stay in `workspace/library/agents/` |
-| **Skills** | **Already installed** (each skill shows where it lives), **Native and created** (the skills that come with Moki and the ones you created — this list does not create skills) and **Add a skill**. Adding a skill searches the public SkillMD registry, or **Create skill** describes one for your AI tool to draft. |
+| **Agents** | Agents by category, with their role, skills and access. **Duplicate** a built-in agent into `workspace/library/agents/`, then **Edit** and **Save** it (checked before saving) or delete it. **Create agent** writes a new one for this project (`<linked folder>/.claude/agents/`, or `workspace/projects/<id>/agents/` when nothing is linked) or for every project (`~/.claude/agents/`). |
+| **Skills** | **Already installed** (each skill shows where it lives), **Native and created** (the skills that come with Moki and the ones you created — this list does not create skills) and **Add a skill**. Adding a skill searches the public SkillMD registry (programming, design, QA and testing, security, docs and writing), or **Create skill** describes one for your AI tool to draft. A skill for this project is stored in `<linked folder>/.claude/skills/` or `workspace/projects/<id>/skills/`. A skill for every project is stored in `~/.claude/skills/` and `~/.agents/skills/`. |
 | **Documents** | How the PDF, Word and Excel files that activities and agents generate look: font, colours, header, footer, logo and a text watermark, with a live page preview. One style for every project, or a project's own. The logo (PNG, JPEG, WebP or GIF) and the watermark go to PDF and Word; Excel keeps the header texts when printing. **Save** applies to new files. |
 
+- **Drop files**: drop files onto the workspace and they are copied into that project's inbox. Folders are skipped. Up to 40 files, each up to 200 MB. The same hide action as the start screen is on the file tree (*Hide from Moki*).
 - **Live**: files the AI writes appear in the tree as soon as they are saved.
-- **Word stories**: `.docx` files are converted to text automatically so any AI can read them.
-- **Local and private**: everything comes from the files in `workspace/`; no account, no hosting, no database.
+- **Word files**: `.docx` files are converted to text automatically so any AI can read them.
+- **Notes**: project notes are Markdown files under the project's `notes/` folder and open in their own window. Loose notes on the start screen stay in the app until you send one to a project.
+- **Sessions the app opens**: Claude Code and Codex started from Moki also load the plugins in `adapters/app-plugins/` (ponytail, and rtk when that command is installed). The same tool started outside the app does not load them. A plugin whose requirement is missing is skipped.
+- **Local and private**: project data comes from the files in `workspace/` and from a folder you link. No account, no hosting, no database.
 - How it is built (for contributors): [docs/desktop-app.md](docs/desktop-app.md).
 
 Everything below describes **agent mode** first. Chat-mode differences are noted where relevant.
@@ -284,19 +296,19 @@ flowchart TD
   P -->|existing| A
   P -->|new| NP["Asks id and name,<br/>creates the project folder"]
   NP --> A{"Activity<br/>unavailable skills are greyed out"}
-  A -->|"review, tests, workflow,<br/>failure, context"| F["Files: type or drag paths<br/>copied to the project inbox"]
+  A -->|"open, review, tests, evidence,<br/>context, setup, plan…"| F["Files: type or drag paths<br/>copied to the project inbox"]
   A -->|"resume"| RUN["Pick an open run<br/>read from state.json"]
   F --> N["Optional extra instructions"]
   RUN --> N
   N --> L["Conversation language"]
   L --> T{"Open with<br/>tools not installed are greyed out"}
   T -->|"Claude Code, Codex,<br/>Cursor Agent, Gemini CLI,<br/>Antigravity CLI"| OPEN["Opens the tool in quality-agents<br/>with the request already typed"]
-  T -->|"Cursor editor"| CUR["Opens the folder,<br/>request copied to the clipboard"]
+  T -->|"Cursor or VS Code"| CUR["Opens the folder,<br/>request copied to the clipboard"]
   T -->|"ChatGPT, claude.ai, Gemini web"| CHAT["Request copied,<br/>list of files to upload"]
   T -->|"Just show"| SHOW["Prints the request"]
 ```
 
-Example session:
+Example session. The question *Which project (system under test)?* is the menu's own label; a blank project or a project with a linked folder uses the same question.
 
 Use **↑/↓** to move, **Enter** to select (or type the option number), **Ctrl+C** to cancel. Each answer collapses after you choose it, so the screen stays clean. While a question is open it looks like this:
 
@@ -308,12 +320,15 @@ Use **↑/↓** to move, **Enter** to select (or type the option number), **Ctrl
 │  billing-portal
 │
 ◆  What do you want to do?
-│  ● Review user stories  ambiguities, gaps, interview, matrix, report
+│  ● Just open the project  loads the context and asks what you need
+│  ○ Review user stories  ambiguities, gaps, interview, matrix, report
 │  ○ Design tests
 │  ○ Review, then design tests
 │  ○ Failure pre-analysis
 │  ○ Build test evidence  work item + Jam recordings, then spreadsheet and Word document
 │  ○ Project context
+│  ○ Prepare the project  adapts the context to the project description
+│  ○ Plan the project with the AI  interview, then a plan you review in the app
 │  ○ Automation  (not available yet: pending-migration)
 │  ○ Resume a run  (no open runs)
 └  ↑/↓ move · Enter select · Ctrl+C cancel
@@ -373,8 +388,8 @@ qa --help
 
 | Option | Values |
 |---|---|
-| `--activity` | `review`, `tests`, `review-then-tests`, `failure`, `context`, `resume` |
-| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `antigravity`, `cursor`, `chat`, `print` |
+| `--activity` | `open`, `review`, `tests`, `review-then-tests`, `failure`, `evidence`, `context`, `setup`, `plan`, `automation`, `resume` |
+| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `antigravity`, `cursor`, `vscode`, `chat`, `print` |
 | `--file` | Repeat for several files |
 | `--run` | Run id, for `resume` |
 | `--note` | Extra instructions |
@@ -384,7 +399,7 @@ qa --help
 
 ## 5. Quick start: your first activity in 10 minutes
 
-This uses the fictional system **Acme Library** included in [examples/](examples/README.md).
+This walkthrough uses one built-in quality activity and the fictional system **Acme Library** in [examples/](examples/README.md). The same steps — project, request, run folder — are how every activity is recorded. A blank project or a skill you installed follows its own instructions once the request names it.
 
 > **Shortcut:** if you installed the `qa` command ([3.6](#36-install-the-qa-command-recommended)), type `qa --terminal` and follow the menu — it does steps 1 and 2 for you.
 
@@ -416,11 +431,21 @@ You just used the framework. The next sections explain each part in detail.
 
 ---
 
-## 6. Register a system you test (project)
+## 6. Create a project
+
+A project is one body of work on this computer. It has a short id (`billing-portal`) and a folder under `workspace/projects/`. Three ways to start:
+
+| Start | What you get |
+|---|---|
+| **QA context files** (the default) | The quality folder in [6.3](#63-what-is-inside-a-project-folder): glossary, rules, modules, flows, permissions and the rest. Use this for a system you test. |
+| **A blank project** | No `context/` yet. You describe the goal; the AI interviews you and writes a plan. Context files are created only after you approve it. In the app, choose *A blank project*. From a terminal: `npm run new-project -- <id> "<Name>" --blank`. |
+| **An existing folder** | On the start screen, *Open a project* picks a folder. The project is named after it (you can edit the name), linked, and opened in *Set up &lt;name&gt;*. The folder's AI settings (`.claude`, `.agents`, `.codex`, `.gemini`, `.cursor`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) are copied to `.moki-backup/link-<date>/` inside that folder. Nothing else in the folder changes. Requests opened from the project name that folder. |
+
+Linking a folder from a project that already exists is the link button on the ribbon. Installing a skill or agent into that folder's `.claude` asks you to confirm, backs up `.claude` first, and is refused when that repository's entry says `writeAllowed: false`.
 
 ### 6.1 Automatic (recommended)
 
-Just mention the system when asking for an activity:
+Just mention the project when asking for an activity:
 
 > Review this story for the **Billing Portal**.
 
@@ -445,6 +470,8 @@ npm run new-project -- billing-portal "Billing Portal"
 Then fill in `workspace/projects/billing-portal/project.json` (or let the AI do it in the next activity).
 
 ### 6.3 What is inside a project folder
+
+A project that starts with the QA context files looks like this. A blank project has the same `project.json`, `proposed-updates.md`, `activity-log.md`, `inbox/` and `runs/`, plus `plan.json` once the interview has a plan, and no `context/` until you approve that plan. `project.json` records `"starter": "qa"` or `"starter": "blank"`.
 
 ```text
 workspace/projects/billing-portal/
@@ -513,7 +540,9 @@ The project folder already contains a `.gitignore` that keeps `runs/`, `inbox/` 
 
 ## 7. Skill guides, step by step
 
-All skills share the same habits:
+The guides in this section are the skills that **ship with Moki**. A skill you install or create follows its own `SKILL.md`; [7.9](#79-skills-and-agents-you-add) says where it lives and how a request names it.
+
+The built-in skills share the same habits:
 
 - The AI **identifies the project first** and loads only the context the activity needs.
 - It creates a **run** and saves everything under `workspace/projects/<project-id>/runs/<run-id>/`.
@@ -787,6 +816,31 @@ Rules it always follows: plan and approval before changing code; never weakens a
 
 `documentation` and `smoke-test` are not available yet. If you ask for them, the AI explains this and stops — it will not improvise.
 
+### 7.8 Test evidence (`evidence-collection`, `evidence-sheet`, `evidence-document`)
+
+**When:** a test was already executed and you want the evidence assembled. This does not design tests and does not decide a status on its own.
+
+**You provide:** the source item (Azure DevOps, Jira or similar, via MCP when that is configured, or pasted), who ran it and when, the environment, the actual result and status of each test case (Passed, Failed, Blocked, Not run), and at least one piece of proof per executed case — a Jam link or a print. Optional: your own `.xlsx` and `.docx` models.
+
+**How to start:** in the app or `qa --terminal`, choose **Build test evidence**. That starts the `test-evidence` workflow (agent `evidence-builder`).
+
+**How it works:**
+
+1. `evidence-collection` reads the item and the recordings, associates prints with a case and a step, and writes `outputs/evidence.json`. A status inferred from a recording is marked `proposed`. If something mandatory is missing, it asks only for that and stops.
+2. It shows a summary and **stops for your approval**. It does not invent results, statuses or ids.
+3. After you approve, `evidence-sheet` fills the spreadsheet (one row per test case, in your model or the default) and `evidence-document` builds the Word document with the images, keeping your model's styles, header, footer and logo when you provided one.
+
+### 7.9 Skills and agents you add
+
+Settings (the gear) is where this happens.
+
+- **Add a skill** searches the public SkillMD registry, or describes a skill for your AI tool to draft. Preset searches cover programming, design, QA and testing, security, and docs and writing. Each registry install shows the audit and checks every file's sha256. Third-party skills are their author's instructions.
+- **This project** stores them in `<linked folder>/.claude/skills/` or, with no linked folder, `workspace/projects/<id>/skills/`. **All projects** stores them in `~/.claude/skills/` and `~/.agents/skills/`. A project can also link global skills by name (`linkedSkills` in `project.json`) without copying them.
+- **Create agent** does the same split: `<linked folder>/.claude/agents/` or `workspace/projects/<id>/agents/`, or `~/.claude/agents/` for every project. Duplicating a built-in agent still writes `workspace/library/agents/`.
+- The request Moki builds names those skills and agents and tells the AI to read the matching `SKILL.md` or agent file when it fits the task. Moki does not run the skill itself. Installing into a linked folder's `.claude` asks you to confirm and backs up that folder first.
+
+A blank project's **Plan the project with the AI** activity (`--activity plan`) interviews you one question at a time, recommends only skills and agents that are already available, and writes `proposed-updates.md` plus `plan.json`. You review the plan in the app. Context files are created only after `"approved": true`.
+
 ---
 
 ## 8. Workflows: several activities in sequence
@@ -834,6 +888,7 @@ Available workflows:
 |---|---|
 | [requirements-to-tests](skills/qa-orchestrator/references/workflows/requirements-to-tests.md) | Review a story, then design its tests |
 | [failure-investigation](skills/qa-orchestrator/references/workflows/failure-investigation.md) | Pre-analyze a failure |
+| [test-evidence](skills/qa-orchestrator/references/workflows/test-evidence.md) | Assemble evidence of an executed test, then the spreadsheet and the Word document |
 | [quality-lifecycle](skills/qa-orchestrator/references/workflows/quality-lifecycle.md) | Full cycle for a change (steps for planned skills are skipped for now) |
 
 You can also ask for a custom sequence; the orchestrator shows it to you and asks for approval before starting.
@@ -991,12 +1046,18 @@ More: [adapters/chat/README.md](adapters/chat/README.md) · other tools: [adapte
 | — deliverables (Excel, PDF, reports, test cases) | `.../outputs/` |
 | — screenshots, traces | `.../evidence/` |
 | — logs | `.../logs/` |
-| Your own agents | `workspace/library/agents/<category>/` |
+| Project notes | `workspace/projects/<project-id>/notes/` |
+| Blank-project plan | `workspace/projects/<project-id>/plan.json` |
+| Document look (all projects, or one project) | `workspace/document-style.json`, or `workspace/projects/<project-id>/document-style.json` when that project has its own |
+| Skills and agents for this project | `workspace/projects/<project-id>/skills/` and `.../agents/`, or `<linked folder>/.claude/skills/` and `.../agents/` |
+| Skills for every project | `~/.claude/skills/` and `~/.agents/skills/` |
+| Agents for every project | `~/.claude/agents/` |
+| Copies of built-in agents | `workspace/library/agents/<category>/` |
 | Chat-tool packages | `dist/` |
 
 The AI never writes results into the framework folders (`skills/`, `core/`, `templates/`, `docs/`...). If you see a result somewhere else, ask it to move it to the run folder.
 
-**Exception:** if a future automation skill is authorized to change your system's code repository, that code goes into **that** repository and follows its own Git rules. Reports about it still go to the run folder.
+**Exception:** when you authorize a change to a linked repository (the automation skill, once it can run, or an agent with `repository-write` access after an approved plan), that code goes into **that** repository and follows its Git rules. Reports about the work still go to the run folder. Installing into a linked folder's `.claude` is a separate, confirmed action and backs up `.claude` first.
 
 ---
 
@@ -1033,11 +1094,10 @@ Run all commands from the `quality-agents` folder. On Windows PowerShell, use `n
 | `npm run xlsx -- inspect <file.xlsx>` | Show the first rows of every sheet (to read a model's headers) |
 | `npm run docx -- write --data <document.json> --out <file.docx> [--template <model.docx>]` | Create a Word document with images, no external dependencies; with `--template`, inside your own Word model |
 | `npm run docx -- inspect <model.docx>` | Show a Word model's placeholders, styles, header/footer and outline |
-
-In the desktop app (`qa`) and in the terminal menu (`qa --terminal`), the activity **Build test evidence** starts the `test-evidence` workflow (agent `evidence-builder`).
 | `npm run check-output -- <kind> <file> [options]` | Objective checks of a deliverable: `pre-analysis`, `missing-info --expect "a,b"`, `test-cases --source <doc>`, `review-matrix` |
 | `npm run bundle` | Create packages for chat tools in `dist/` |
 | `npm run check` | Validate the framework and check for artifacts/secrets |
+| `npm run test:ui` | Open Moki in Playwright and check Settings: the Documents screen (scroll, logo, watermark) and that Create skill stays on Add a skill |
 | `npm test` | Run the framework's own tests |
 | `npm run build` | Regenerate `.agents/skills/` and `.claude/skills/` after editing `skills/` or `core/` (contributors only) |
 
@@ -1051,11 +1111,11 @@ In the desktop app (`qa`) and in the terminal menu (`qa --terminal`), the activi
 | PowerShell: *"running scripts is disabled on this system"* | Use Git Bash, or type `npm.cmd` instead of `npm`, or run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
 | `qa` "is not recognized" / "command not found" | Run `npm link` inside the `quality-agents` folder and open a new terminal, or use `npm run qa` from that folder. |
 | `qa` says the app is not installed yet | Run `npm run setup` in the `quality-agents` folder (also needed after each `git pull`). |
-| `qa` shows your AI tool as "not installed" | The tool's command (`claude`, `codex`, `cursor-agent`, `gemini`, `agy`, `cursor`) is not on your PATH. Install the tool's CLI, or choose "Just show the request" and paste it yourself. |
+| `qa` shows your AI tool as "not installed" | The tool's command (`claude`, `codex`, `cursor-agent`, `gemini`, `agy`, `cursor`, `code`) is not on your PATH. Install the tool's CLI, or choose "Just show the request" and paste it yourself. |
 | The AI does not seem to know the skills | Make sure you opened the **`quality-agents` folder itself** (not a parent folder). Start a new session after cloning or updating. In chat tools, check that you uploaded the skills. |
 | The AI answers generically instead of following the process | Name the skill explicitly ("use the requirements-review skill") or, in Claude Code, type `/requirements-review`. |
 | The AI asks which project | Expected when the project is ambiguous. Tell it the project id or name. |
-| The AI saved a file in the wrong place | Ask it to move it to the run folder; the rules forbid writing outside `workspace/projects/<id>/`. |
+| The AI saved a file in the wrong place | Ask it to move the result to the run folder. Built-in skills write inside `workspace/projects/<id>/`. A linked repository changes only after an approved plan, and a write into its `.claude` only after you confirm it in the app. |
 | Excel not generated | Node.js missing, or the tool could not run commands. Ask the AI for `review-matrix.json` / `test-cases.json` and run the `npm run xlsx -- write ...` command yourself ([13](#13-command-reference)). |
 | `npm run pdf` says no browser found | Install Edge or Chrome, or set the variable `QA_AGENTS_BROWSER` to the browser's path. The `.html` file is still created — open it and print to PDF. |
 | A commit was blocked | Read the message: it lists the file and reason. Move project files to `workspace/`, remove secrets. Never bypass with `--no-verify`. |

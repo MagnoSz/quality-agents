@@ -148,6 +148,24 @@ test('MCPs: the last section lists the servers configured where the AI tools sta
   rmSync(join(root, '.codex'), { recursive: true });
 });
 
+test('files dropped on the workspace are copied into the inbox and stay there', () => {
+  const outside = join(root, 'dropped-story.md');
+  writeFileSync(outside, '# dropped');
+  const folder = join(root, 'dropped-folder');
+  mkdirSync(folder, { recursive: true });
+  const first = service.importFiles('acme', [outside, folder, 'relative.md', join(root, 'missing.txt')]);
+  assert.deepEqual(first.saved, ['inbox/dropped-story.md']);
+  assert.deepEqual(first.skipped.sort(), ['dropped-folder', 'missing.txt', 'relative.md']);
+  assert.equal(readFileSync(join(root, 'workspace', 'projects', 'acme', 'inbox', 'dropped-story.md'), 'utf8'), '# dropped');
+  assert.ok(service.tree('acme').some((n) => n.path === 'inbox' && n.children?.some((c) => c.path === 'inbox/dropped-story.md')));
+  const again = service.importFiles('acme', [outside]);
+  assert.deepEqual(again.saved, ['inbox/dropped-story-1.md']);
+  assert.equal(readFileSync(join(root, 'workspace', 'projects', 'acme', 'inbox', 'dropped-story-1.md'), 'utf8'), '# dropped');
+  assert.throws(() => service.importFiles('acme', []), /Drop files/);
+  assert.throws(() => service.importFiles('nope', [outside]), /Unknown project/);
+  assert.throws(() => service.importFiles('acme', [outside, 1]), /Drop files/);
+});
+
 test('open folder / open with default program are confined and filtered', () => {
   service.openFolder('acme', 'inbox');
   assert.ok(folders[0].endsWith(join('acme', 'inbox')));

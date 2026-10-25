@@ -5,6 +5,7 @@
 import { recall, remember } from './prefs';
 
 const PINS = 'qa-pinned-projects';
+const HIDDEN = 'qa-hidden-projects';
 const NOTES = 'qa-recent-notes';
 const LOOSE = 'qa-loose-notes';
 const NOTE_LIMIT = 6;
@@ -22,6 +23,22 @@ export const togglePin = (id: string): string[] => {
   const cur = pinnedIds();
   const next = cur.includes(id) ? cur.filter((x) => x !== id) : [id, ...cur];
   remember(PINS, JSON.stringify(next));
+  return next;
+};
+
+export const hiddenIds = (): string[] => readList(HIDDEN).filter((id): id is string => typeof id === 'string');
+
+// Hides the project from this computer's list. The folder stays. A pin is dropped so it does not come back pinned.
+export const hideProject = (id: string): string[] => {
+  const next = hiddenIds().includes(id) ? hiddenIds() : [id, ...hiddenIds()];
+  remember(HIDDEN, JSON.stringify(next));
+  remember(PINS, JSON.stringify(pinnedIds().filter((x) => x !== id)));
+  return next;
+};
+
+export const showProject = (id: string): string[] => {
+  const next = hiddenIds().filter((x) => x !== id);
+  remember(HIDDEN, JSON.stringify(next));
   return next;
 };
 
