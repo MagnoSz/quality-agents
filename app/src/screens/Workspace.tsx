@@ -2,7 +2,7 @@
 // (view and edit) and terminals (AI tools or a shell), and a side panel with
 // the activity or project details.
 
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import { api, type FileContent, type ProjectSummary, type TerminalRef, type ToolInfo, type TreeNode } from '../api';
 import { t } from '../i18n';
 import { recall, remember } from '../prefs';
@@ -13,7 +13,8 @@ import { NoteDialog } from '../components/NoteDialog';
 import { SidePanel } from '../components/SidePanel';
 import { SetupDialog } from '../components/SetupDialog';
 import { TerminalView } from '../components/TerminalView';
-import { IconPlay, IconTerminal, IconX } from '../components/Icons';
+import { IconEyeOff, IconGraph, IconPlay, IconTerminal, IconX } from '../components/Icons';
+import { hideProject } from '../side-menu';
 import { AddButton } from '../components/AddButton';
 import { FileIcon } from '../icons';
 import { Ribbon } from '../components/Ribbon';
@@ -24,7 +25,6 @@ interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void
 interface Tab { path: string; content: FileContent; draft: string; mode: 'preview' | 'edit'; saving: boolean }
 interface TermTab extends TerminalRef { running: boolean }
 
-const DEFAULT_EXPANDED = ['context', 'inbox', 'runs'];
 const textOf = (c: FileContent): string => (c.kind === 'markdown' || c.kind === 'text' ? c.text : '');
 const isDirty = (t: Tab): boolean => (t.content.kind === 'markdown' || t.content.kind === 'text') && t.content.editable && t.draft !== t.content.text;
 
@@ -45,7 +45,7 @@ export const linkedNotice = (r: ProjectSummary & { backup?: string }): string =>
 
 export function Workspace({ project, tools, onHome, settings, onSettings, onProjectChanged, launchOnOpen = false, startSetup = false, startNotice = '', pendingTerminal = null, onPendingTerminal, pendingPath = null, onPendingPath }: Props) {
   const [tree, setTree] = useState<TreeNode[]>([]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(DEFAULT_EXPANDED));
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [active, setActive] = useState<string | null>(null);
   // The right panel is open or collapsed to a thin rail; the choice is remembered.
@@ -57,10 +57,18 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
   const [notice, setNotice] = useState(startNotice);
   const [terms, setTerms] = useState<TermTab[]>([]);
   const [activeTerm, setActiveTerm] = useState<string | null>(null);
+  // Graph view is a placeholder tab. The rail button under the AI icon opens it.
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [graphFocus, setGraphFocus] = useState(false);
+  const openGraph = () => { setGraphOpen(true); setGraphFocus(true); setActiveTerm(null); };
+  const closeGraph = () => { setGraphOpen(false); setGraphFocus(false); };
+  const toggleGraph = () => { if (graphFocus) closeGraph(); else openGraph(); };
   const openedTerm = useRef<string | null>(null);
   const [showSetup, setShowSetup] = useState(startSetup); // after creating the project or linking a folder
   const [note, setNote] = useState<{ path: string | null } | null>(null); // open note popup; path null = new note
   const [termMenu, setTermMenu] = useState<{ left: number; top: number } | null>(null);
+  const [dropping, setDropping] = useState(false);
+  const dragDepth = useRef(0);
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
 
@@ -88,6 +96,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
   const openPath = useCallback((path: string) => {
     setError('');
     if (/^notes\/[^/]+\.md$/.test(path)) { setNote({ path }); return; } // notes open in a popup
+    setGraphFocus(false);
     setActiveTerm(null);
     if (tabsRef.current.some((t) => t.path === path)) { setActive(path); return; }
     api.readFile(project.id, path).then((content) => {
@@ -120,7 +129,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
     });
   }, []);
 
-  const addTerminal = useCallback((t: TerminalRef) => { setTerms((all) => (all.some((x) => x.id === t.id) ? all : [...all, { ...t, running: true }])); setActiveTerm(t.id); }, []);
+  const addTerminal = useCallback((t: TerminalRef) => { setTerms((all) => (all.some((x) => x.id === t.id) ? all : [...all, { ...t, running: true }])); setGraphFocus(false); setActiveTerm(t.id); }, []);
 
   // A skill draft started in Settings opens here, once, when this project comes back.
   useEffect(() => {
@@ -168,12 +177,18 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
     && !(terms.some((t) => t.running) && !window.confirm(t('Terminals are still running in this project. Leaving closes them. Leave anyway?')));
 
   const goHome = () => { if (canLeave()) onHome(); };
+  const hideThis = () => {
+    if (!window.confirm(t('Hide {name} from Moki? The files stay on this computer. You can show it again under Hidden.', { name: project.name }))) return;
+    if (!canLeave()) return;
+    hideProject(project.id);
+    onHome();
+  };
 
   const toggleSettings = () => { if (settings) onSettings(null); else if (canLeave()) onSettings('agents'); };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || !active || activeTerm || note) return; // in a terminal the keys belong to it
+      if (!(e.ctrlKey || e.metaKey) || !active || activeTerm || graphFocus || note) return; // in a terminal the keys belong to it
       const key = e.key.toLowerCase();
       if (key === 's') { e.preventDefault(); save(active); }
       if (key === 'w') { e.preventDefault(); close(active); }
@@ -184,7 +199,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, activeTerm, note, save, close]);
+  }, [active, activeTerm, graphFocus, note, save, close]);
 
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => { if (tabsRef.current.some(isDirty)) e.preventDefault(); };
@@ -207,9 +222,45 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
     api.openLinkedFolder(project.id).catch((e: Error) => setError(e.message));
   };
 
-  const tab = activeTerm ? null : tabs.find((t) => t.path === active) ?? null;
+  const tab = activeTerm || graphFocus ? null : tabs.find((t) => t.path === active) ?? null;
   const runId = active?.match(/^runs\/([^/]+)\//)?.[1] ?? null;
   const words = tab && tab.content.kind === 'markdown' ? tab.draft.split(/\s+/).filter(Boolean).length : null;
+
+  const fileDrag = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  const onDragEnter = (e: DragEvent) => {
+    if (!fileDrag(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDropping(true);
+  };
+  const onDragOver = (e: DragEvent) => {
+    if (!fileDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = (e: DragEvent) => {
+    if (!fileDrag(e)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDropping(false);
+  };
+  // A drop copies the files into the project inbox. They stay in the tree after this.
+  const onDrop = (e: DragEvent) => {
+    if (!fileDrag(e)) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDropping(false);
+    const paths = Array.from(e.dataTransfer.files).map((f) => window.qa?.filePath(f) ?? '').filter(Boolean);
+    if (!paths.length) { setError(t('Drop files from your computer.')); return; }
+    api.importFiles(project.id, paths).then((r) => {
+      loadTree();
+      setExpanded((s) => new Set(s).add('inbox'));
+      for (const p of r.saved.slice(0, 8)) openPath(p);
+      setNotice(r.saved.length === 1
+        ? t('Added {name} to the inbox. It stays in this project.', { name: r.saved[0].split('/').pop() ?? '' })
+        : t('Added {n} files to the inbox. They stay in this project.', { n: r.saved.length }));
+      setError(r.skipped.length ? t('Skipped {names}. Only files are kept, not folders.', { names: r.skipped.join(', ') }) : '');
+    }).catch((err: Error) => setError(t(err.message)));
+  };
 
   const onLink = (href: string) => {
     if (/^https?:\/\//.test(href)) { void api.openLink(href); return; }
@@ -219,7 +270,10 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
   };
 
   return (
-    <div className={`workspace${panelRail && !settings ? ' panel-rail' : ''}${settings ? ' is-settings' : ''}`}>
+    <div
+      className={`workspace${panelRail && !settings ? ' panel-rail' : ''}${settings ? ' is-settings' : ''}${dropping ? ' dropping' : ''}`}
+      onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+    >
       <Ribbon
         project={project}
         settingsOn={settings !== null}
@@ -241,11 +295,12 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
       <aside className="sidebar">
         <div className="sidebar-head">
           <button type="button" className="project-switch" onClick={goHome} title={t('Switch project')}>{project.name}</button>
+          <button type="button" className="icon-btn sidebar-hide" onClick={hideThis} title={t('Hide from Moki')} aria-label={t('Hide from Moki')}><IconEyeOff size={16} /></button>
         </div>
         <div className="sidebar-scroll">
           <FileTree
             nodes={tree}
-            activePath={activeTerm ? null : active}
+            activePath={activeTerm || graphFocus ? null : active}
             onOpen={openPath}
             expanded={expanded}
             onNewNote={() => setNote({ path: null })}
@@ -256,10 +311,17 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
 
       <main className="main">
         <div className="tabs" role="tablist">
+          {graphOpen && (
+            <div role="tab" aria-selected={graphFocus} className={`tab${graphFocus ? ' active' : ''}`} onClick={openGraph} title={t('Graph view')}>
+              <IconGraph size={14} />
+              <span className="tab-name">{t('Graph view')}</span>
+              <button type="button" className="tab-close" onClick={(e) => { e.stopPropagation(); closeGraph(); }} title={t('Close')}><IconX size={13} /></button>
+            </div>
+          )}
           {tabs.map((doc) => {
-            const on = !activeTerm && doc.path === active;
+            const on = !activeTerm && !graphFocus && doc.path === active;
             return (
-              <div key={doc.path} role="tab" aria-selected={on} className={`tab${on ? ' active' : ''}`} onClick={() => { setActive(doc.path); setActiveTerm(null); }} title={doc.path}
+              <div key={doc.path} role="tab" aria-selected={on} className={`tab${on ? ' active' : ''}`} onClick={() => { setGraphFocus(false); setActive(doc.path); setActiveTerm(null); }} title={doc.path}
                 onAuxClick={(e) => { if (e.button === 1) close(doc.path); }}>
                 <FileIcon name={doc.path} size={14} />
                 <span className="tab-name">{doc.path.split('/').pop()}</span>
@@ -270,7 +332,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
           })}
           {terms.map((term) => (
             <div key={term.id} role="tab" aria-selected={term.id === activeTerm} className={`tab tab-term${term.id === activeTerm ? ' active' : ''}${term.running ? '' : ' exited'}`}
-              onClick={() => setActiveTerm(term.id)} title={term.running ? term.title : t('{title} (finished)', { title: term.title })} onAuxClick={(e) => { if (e.button === 1) closeTerm(term.id); }}>
+              onClick={() => { setGraphFocus(false); setActiveTerm(term.id); }} title={term.running ? term.title : t('{title} (finished)', { title: term.title })} onAuxClick={(e) => { if (e.button === 1) closeTerm(term.id); }}>
               <IconTerminal size={13} />
               <span className="tab-name">{term.title}</span>
               <button type="button" className="tab-close" onClick={(e) => { e.stopPropagation(); closeTerm(term.id); }} title={t('Close the terminal')}><IconX size={13} /></button>
@@ -283,7 +345,12 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         {terms.map((t) => (
           <TerminalView key={t.id} id={t.id} active={t.id === activeTerm} onExit={() => setTerms((all) => all.map((x) => (x.id === t.id ? { ...x, running: false } : x)))} />
         ))}
-        {activeTerm ? null : tab ? (
+        {graphFocus ? (
+          <div className="welcome">
+            <h1>{t('Graph view')}</h1>
+            <p className="muted">{t('Under construction.')}</p>
+          </div>
+        ) : activeTerm ? null : tab ? (
           <DocView
             content={tab.content}
             mode={tab.mode}
@@ -299,7 +366,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         ) : (
           <div className="welcome">
             <h1>{project.name}</h1>
-            <p className="muted">{t('Open a file on the left, or start working with your AI tool.')}</p>
+            <p className="muted">{t('Open a file on the left, drop files here to keep them in the project, or start working with your AI tool.')}</p>
             <div className="welcome-tips muted small">
               <p><strong>{t('Inbox')}</strong> — {t('put the stories, logs and documents for the AI here.')}</p>
               <p><strong>{t('Activities')}</strong> — {t('every review, test design or analysis, with its results.')}</p>
@@ -309,8 +376,10 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         )}
       </main>
 
-      <SidePanel project={project} runId={runId} refreshKey={refreshKey} tools={tools} onOpenPath={openPath} onLaunch={(p) => setLaunch(p ?? { activity: 'open' })} onTerminal={addTerminal} onMyFolder={myFolder} onSetup={() => setShowSetup(true)} collapsed={panelRail} onToggle={togglePanel} />
+      <SidePanel project={project} runId={runId} refreshKey={refreshKey} tools={tools} onOpenPath={openPath} onLaunch={(p) => setLaunch(p ?? { activity: 'open' })} onTerminal={addTerminal} onMyFolder={myFolder} onSetup={() => setShowSetup(true)} collapsed={panelRail} onToggle={togglePanel} graphOn={graphFocus} onGraph={toggleGraph} />
       </>}
+
+      {dropping && <div className="drop-veil" role="status">{t('Drop to keep the files in this project')}</div>}
 
       <footer className="statusbar">
         <span>{project.name}</span>

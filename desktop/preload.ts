@@ -1,10 +1,12 @@
 // Bridge between the UI and the main process. The UI gets only these
 // functions; every call is validated again in main.ts / service.ts.
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 
 contextBridge.exposeInMainWorld('qa', {
   call: (method: string, ...args: unknown[]) => ipcRenderer.invoke('qa:call', method, args),
+  // The renderer cannot read a dropped file's path. This returns it, and the service copies the file in.
+  filePath: (file: Parameters<typeof webUtils.getPathForFile>[0]) => webUtils.getPathForFile(file),
   watch: (project: string) => ipcRenderer.invoke('qa:watch', project),
   onChanged: (callback: (project: string) => void) => {
     const listener = (_e: IpcRendererEvent, project: string) => callback(project);

@@ -2,7 +2,7 @@
 // prepares the request (activity, inbox files, agent, notes) and opens the AI
 // tool the QA already uses. Moki has no chat of its own.
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api, describeRun, type ActivityInfo, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type TerminalRef, type ToolInfo, type ToolKind } from '../api';
 import { conversationLanguage, t } from '../i18n';
 import { IconCheck, IconCode, IconCopy, IconFile, IconFolder, IconGlobe, IconPlay, IconRefresh, IconTerminal, IconX } from './Icons';
@@ -52,6 +52,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
   const [result, setResult] = useState<LaunchResult | null>(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const outcomeRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
     api.inbox(project.id).then((list) => { setInbox(list); setFiles((sel) => sel.filter((f) => list.some((x) => x.name === f))); }).catch(() => setInbox([]));
@@ -89,18 +90,38 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
   const submit = async () => {
     setBusy(true); setResult(null); setError(''); setCopied(false);
     remember('qa-tool', tool); remember('qa-language', language);
+    // The window shares the main process. If opening the tool never returns, say so instead of leaving "Opening…" up.
+    let late = false;
+    const timer = window.setTimeout(() => {
+      late = true;
+      setBusy(false);
+      setError(t('The request is taking too long. Close this and try again.'));
+    }, 20000);
     try {
       const r = await api.launch({ project: project.id, activity, tool, files, note, language, run: resume ? run : undefined, agent: agent || undefined });
+      if (late) return;
       if (r.terminal) { onTerminal(r.terminal); return; }
       setResult(r);
       if (!r.opened && r.message) setError(r.message);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+      else if (!r.opened && !r.prompt) setError(t('The request could not be prepared.'));
+    } catch (e) {
+      if (!late) setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      window.clearTimeout(timer);
+      setBusy(false);
+    }
   };
 
   const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); } };
 
   const buttonLabel = !selectedTool ? t('Open') : selectedTool.kind === 'print' ? t('Prepare the request')
     : selectedTool.kind === 'chat' ? t('Prepare for the web chat') : t('Open in {tool}', { tool: t(selectedTool.label).replace(/ \(.*\)$/, '') });
+  // "Just show the request" and the web chat never open a program. The request itself is the result.
+  const requestReady = Boolean(result && !error && !result.opened && result.prompt && (selectedTool?.kind === 'print' || selectedTool?.kind === 'chat'));
+
+  useEffect(() => {
+    if (result || error) outcomeRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [result, error]);
 
   const questions: Record<StepKey, { title: string; hint: string }> = {
     activity: { title: t('What do you want to do?'), hint: t('Choose one.') },
@@ -227,21 +248,16 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
 
           {step === 'review' && (
             <>
-              <dl className="wizard-summary">
-                {summary.map((s) => (
-                  <button type="button" key={s.label} className="wizard-summary-row" onClick={() => { setResult(null); setError(''); setStep(s.step); }} title={t('Change')}>
-                    <dt>{s.label}</dt><dd>{s.value}</dd>
-                  </button>
-                ))}
-              </dl>
-
               {(result || error) && (
-                <div className={`result${error ? ' warn' : ''}`} role="status">
-                  {result?.opened && <p className="result-title"><IconCheck size={17} /> {result.message}</p>}
+                <div className={`result${error ? ' warn' : ''}`} role="status" ref={outcomeRef}>
+                  {result?.opened && <p className="result-title"><IconCheck size={17} /> {result.message || t('The request is ready.')}</p>}
                   {error && <p className="result-title">{error}</p>}
+                  {result && !result.opened && !error && selectedTool?.kind === 'print' && (
+                    <p className="result-title"><IconCheck size={17} /> {t('The request is ready. Copy it below.')}</p>
+                  )}
                   {result && !result.opened && !error && selectedTool?.kind === 'chat' && (
                     <>
-                      <p className="result-title">{t('Ready for the web chat')}</p>
+                      <p className="result-title"><IconCheck size={17} /> {t('Ready for the web chat')}</p>
                       <p className="small">{t('Copy the request and upload these files to the chat')}{result.bundleReady ? '' : ` ${t('(run npm run bundle first to create the framework bundle)')}`}:</p>
                       <ul className="small upload-list">{result.upload?.map((u) => <li key={u}><code>{u}</code></li>)}</ul>
                     </>
@@ -257,6 +273,13 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
                   )}
                 </div>
               )}
+              <dl className="wizard-summary">
+                {summary.map((s) => (
+                  <button type="button" key={s.label} className="wizard-summary-row" onClick={() => { setResult(null); setError(''); setStep(s.step); }} title={t('Change')}>
+                    <dt>{s.label}</dt><dd>{s.value}</dd>
+                  </button>
+                ))}
+              </dl>
             </>
           )}
         </div>
@@ -270,7 +293,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
             </button>
           )}
           {step === 'details' && <button type="button" className="btn" onClick={next}>{note.trim() ? t('Continue') : t('Nothing else — continue')}</button>}
-          {step === 'review' && (result?.opened
+          {step === 'review' && (result?.opened || requestReady
             ? <button type="button" className="btn" onClick={onClose}>{t('Done')}</button>
             : <button type="button" className="btn" disabled={busy || !selectedTool} onClick={() => { void submit(); }}><IconPlay size={15} /> {busy ? t('Opening…') : buttonLabel}</button>)}
         </footer>

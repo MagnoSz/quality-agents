@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, describeRun, statusLabel, type ActivityInfo, type AgentInfo, type OpenRun, type ProjectSummary, type RunState, type TerminalRef, type ToolInfo, type ToolKind } from '../api';
 import { conversationLanguage, t } from '../i18n';
 import { recall, remember } from '../prefs';
-import { IconChevron, IconCode, IconEdit, IconFolder, IconPanel, IconPlay, IconTerminal } from './Icons';
+import { IconChevron, IconCode, IconEdit, IconFolder, IconGraph, IconPanel, IconPlay, IconTerminal } from './Icons';
 import { SectionIcon, type SectionIconName } from '../icons';
 import { ActivityCatalog } from './ActivityCatalog';
 import { ToolCatalog } from './ToolCatalog';
@@ -27,6 +27,8 @@ interface Props {
   onSetup: () => void; // description and the global skills the project uses
   collapsed: boolean; // shown as a thin rail
   onToggle: () => void; // collapse / expand
+  graphOn: boolean;
+  onGraph: () => void;
 }
 
 // Tools that open in one click with the project loaded. Web chat and "just show the
@@ -41,7 +43,7 @@ const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?
 
 const onboarding = (status: string): string => ({ 'not-started': t('Not started'), partial: t('In progress'), complete: t('Complete') } as Record<string, string>)[status] ?? status;
 
-export function SidePanel({ project, runId, refreshKey, tools, onOpenPath, onLaunch, onTerminal, onMyFolder, onSetup, collapsed, onToggle }: Props) {
+export function SidePanel({ project, runId, refreshKey, tools, onOpenPath, onLaunch, onTerminal, onMyFolder, onSetup, collapsed, onToggle, graphOn, onGraph }: Props) {
   const [run, setRun] = useState<RunState | null>(null);
   const [runs, setRuns] = useState<OpenRun[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -118,6 +120,7 @@ export function SidePanel({ project, runId, refreshKey, tools, onOpenPath, onLau
         <button type="button" className="icon-btn" onClick={onToggle} title={t('Expand the panel')} aria-label={t('Expand the panel')} aria-expanded="false"><IconPanel size={17} /></button>
         <button type="button" className="icon-btn accent" disabled={launching} onClick={() => { if (tool) start(); else onLaunch(); }}
           title={tool ? t('Open with {tool}', { tool: toolName(tool) }) : t('Open in your AI tool')}><IconPlay size={17} /></button>
+        <button type="button" className={`icon-btn${graphOn ? ' on' : ''}`} onClick={onGraph} title={t('Graph view')} aria-label={t('Graph view')} aria-pressed={graphOn}><IconGraph size={17} /></button>
         {needsYou.length > 0 && (
           <button type="button" className="rail-badge" onClick={onToggle} title={t('{n} need you', { n: needsYou.length })}>{needsYou.length}</button>
         )}

@@ -96,6 +96,7 @@ export interface GlobalAgentDetail { name: string; description: string; file: st
 
 interface Bridge {
   call(method: string, ...args: unknown[]): Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
+  filePath(file: File): string;
   watch(project: string | null): Promise<boolean>;
   onChanged(callback: (project: string) => void): () => void;
   openLink(url: string): Promise<void>;
@@ -145,6 +146,7 @@ export const api = {
   createNote: (project: string, title: string, text: string) => call<string>('createNote', project, title, text),
   run: (project: string, runId: string) => call<RunState>('run', project, runId),
   inbox: (project: string) => call<InboxFile[]>('inbox', project),
+  importFiles: (project: string, paths: string[]) => call<{ saved: string[]; skipped: string[] }>('importFiles', project, paths),
   openRuns: (project: string) => call<OpenRun[]>('openRuns', project),
   openFolder: (project: string, path = '') => call<boolean>('openFolder', project, path),
   openExternal: (project: string, path: string) => call<boolean>('openExternal', project, path),

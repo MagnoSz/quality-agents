@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, hasBridge, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo } from './api';
 import { t, useLang } from './i18n';
 import { NoteDialog } from './components/NoteDialog';
+import { hiddenIds } from './side-menu';
 import { Ribbon } from './components/Ribbon';
 import { Home } from './screens/Home';
 import { Workspace, linkedNotice } from './screens/Workspace';
@@ -56,7 +57,8 @@ export function App() {
         if (params.get('view') === 'library') setSettings('agents');
         if (params.get('view') === 'launch') setLaunchOnOpen(true);
         const last = requested || recall();
-        if (last && list.some((p) => p.id === last)) setProjectId(last);
+        // A project hidden from the list is not reopened on its own. An explicit request still opens it.
+        if (last && list.some((p) => p.id === last) && (requested || !hiddenIds().includes(last))) setProjectId(last);
         setReady(true);
       })
       .catch((e: Error) => setError(e.message));

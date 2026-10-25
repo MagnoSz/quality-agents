@@ -265,7 +265,7 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
   };
   const onDrop = (e: DragEvent<HTMLTextAreaElement>) => {
     const list = Array.from(e.dataTransfer.files);
-    if (list.some((f) => f.type.startsWith('image/'))) { e.preventDefault(); void addImages(list); }
+    if (list.some((f) => f.type.startsWith('image/'))) { e.preventDefault(); e.stopPropagation(); void addImages(list); }
   };
 
   // ---------- @ mentions ----------

@@ -140,12 +140,17 @@ textarea { width: 100%; resize: vertical; }
 .home-pinned { flex-shrink: 0; max-height: 38%; overflow: auto; padding-bottom: 4px; }
 .home-split { height: 0; margin: 8px 10px 12px; border: 0; border-top: 1px solid var(--border); }
 .home-row { position: relative; }
-.home-row .home-project-name { padding-right: 26px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-row .home-project-name { padding-right: 48px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-pin {
   position: absolute; top: 9px; right: 32px; width: 22px; height: 22px; padding: 0;
   display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--faint); cursor: pointer;
   opacity: 0; transition: opacity 0.12s, color 0.12s;
 }
+.home-hide { right: 56px; }
+.home-show { opacity: 1; }
+.home-hidden { margin: 4px 0 8px; }
+.home-hidden summary { cursor: pointer; }
+.home-hidden summary::-webkit-details-marker { display: none; }
 .home-row:hover .home-pin, .home-pin:focus-visible, .home-pin.on { opacity: 1; }
 .home-pin:hover { color: var(--text); background: var(--bg-3); }
 .home-pin.on { color: var(--accent); }
@@ -185,6 +190,7 @@ fieldset.field { border: 0; padding: 0; margin: 0; min-width: 0; }
 
 /* ---------- Workspace ---------- */
 .workspace {
+  position: relative;
   display: grid; height: 100%; min-height: 0; overflow: hidden;
   grid-template-columns: 46px 260px minmax(0, 1fr) 290px;
   grid-template-rows: minmax(0, 1fr) 24px;
@@ -199,7 +205,8 @@ fieldset.field { border: 0; padding: 0; margin: 0; min-width: 0; }
 .ribbon-spacer { flex: 1; }
 
 .sidebar { grid-area: sidebar; display: flex; flex-direction: column; min-height: 0; background: var(--bg-2); border-right: 1px solid var(--border); }
-.sidebar-head { padding: 10px 10px 6px; }
+.sidebar-head { display: flex; align-items: center; gap: 2px; padding: 10px 6px 6px 10px; }
+.sidebar-hide { flex-shrink: 0; width: 28px; height: 28px; color: var(--faint); }
 .project-switch { width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; font-weight: 700; font-size: 0.95rem; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-switch:hover { background: var(--bg-3); }
 .sidebar-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0 6px 16px; }
@@ -324,6 +331,11 @@ fieldset.field { border: 0; padding: 0; margin: 0; min-width: 0; }
 .binary-view { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; flex: 1; color: var(--muted); padding: 32px; text-align: center; }
 .binary-view strong { color: var(--text); }
 
+.drop-veil {
+  position: absolute; inset: 8px; z-index: 30; display: grid; place-items: center; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text); font-weight: 650; text-align: center; padding: 24px;
+}
 .welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: 1; min-height: 0; overflow: auto; padding: 32px; text-align: center; }
 .welcome h1 { font-size: 1.6rem; }
 .welcome-tips { max-width: 460px; text-align: left; border-top: 1px solid var(--border); padding-top: 16px; }

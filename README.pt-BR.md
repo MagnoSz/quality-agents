@@ -10,9 +10,11 @@
   &nbsp;·&nbsp; <a href="#30-o-jeito-mais-rápido-o-instalador-para-windows">como instalar</a>
 </p>
 
-Uma biblioteca portátil de **skills de agentes de IA para Engenharia de Qualidade de Software**. Clone uma vez, cadastre cada sistema que você testa e execute as mesmas atividades de QA — revisão de requisitos, projeto de testes, análise de falhas — com Claude Code, Cursor, Codex, ChatGPT, claude.ai, Gemini ou outras ferramentas de IA.
+Um app local e uma biblioteca portátil de **instruções para agentes de IA**. O Moki guarda cada projeto no seu computador e abre a ferramenta de IA que você já usa — Claude Code, Cursor, Codex, ChatGPT, claude.ai, Gemini ou outra — com o pedido pronto. Ele não tem IA própria.
 
-Este guia foi escrito para profissionais de QA. Não é preciso saber programar: você vai copiar alguns comandos, abrir uma pasta na sua ferramenta de IA e conversar com ela em linguagem natural.
+Nasceu para executar trabalho de qualidade de software do mesmo jeito em qualquer ferramenta: revisar histórias, projetar testes, analisar uma falha, montar evidências. Esse trabalho continua incluso. Um projeto hoje também pode ser qualquer coisa que você descreva: um projeto em branco cujo contexto a IA planeja com você, uma pasta que você já tem, e skills e agentes que você instala ou escreve (programação, design, segurança, documentação ou um procedimento seu).
+
+Este guia é para quem usa o Moki. O app e as atividades que vêm com ele não exigem programação: instale, abra um projeto e converse com a sua ferramenta de IA em linguagem natural.
 
 ---
 
@@ -23,7 +25,7 @@ Este guia foi escrito para profissionais de QA. Não é preciso saber programar:
 3. [Instalação (uma vez por computador)](#3-instalação-uma-vez-por-computador)
 4. [Escolha como vai usar](#4-escolha-como-vai-usar)
 5. [Início rápido: sua primeira atividade em 10 minutos](#5-início-rápido-sua-primeira-atividade-em-10-minutos)
-6. [Cadastre um sistema que você testa (projeto)](#6-cadastre-um-sistema-que-você-testa-projeto)
+6. [Crie um projeto](#6-crie-um-projeto)
 7. [Guia das skills, passo a passo](#7-guia-das-skills-passo-a-passo)
 8. [Workflows: várias atividades em sequência](#8-workflows-várias-atividades-em-sequência)
 9. [Pausar e retomar uma atividade](#9-pausar-e-retomar-uma-atividade)
@@ -43,18 +45,20 @@ Este guia foi escrito para profissionais de QA. Não é preciso saber programar:
 
 **O que é**
 
-- Um conjunto de **skills**: instruções escritas no formato aberto [Agent Skills](https://agentskills.io) que dizem a uma IA exatamente como executar uma atividade de QA — as etapas, as regras, o formato de saída e onde ela deve parar para pedir a sua aprovação.
-- Um mecanismo de **contexto de projeto**: cada sistema que você testa ganha uma pasta própria com glossário, regras de negócio, módulos e convenções. Assim as mesmas skills funcionam para qualquer aplicação.
-- Um mecanismo de **persistência**: toda atividade é registrada em arquivos, então você pode parar e continuar depois — inclusive em outra ferramenta de IA.
+- Um **app desktop** (instalador para Windows, ou `qa` a partir de um clone). Lista os seus projetos, mostra os arquivos e abre a sua ferramenta de IA com o pedido pronto. Não há conta nem servidor para implantar.
+- Um conjunto de **skills**: instruções escritas no formato aberto [Agent Skills](https://agentskills.io) — as etapas, as regras, o formato de saída e onde o trabalho deve parar para a sua aprovação. Algumas vêm com o Moki. Outras você instala no registro público [SkillMD](https://skillmd.com) ou pede para a sua ferramenta de IA redigir.
+- **Agentes**: um papel que usa uma ou mais skills, com um nível de acesso. Os papéis prontos cobrem as atividades de qualidade. Você pode duplicá-los ou criar os seus, para um projeto ou para todos.
+- Um **contexto de projeto**: o conhecimento que você confirmou, em Markdown e JSON, isolado por projeto. Um projeto de qualidade começa com glossário, regras de negócio, módulos e convenções. Um projeto em branco só ganha arquivos depois que você aprova um plano.
+- Um **registro de cada atividade**: entradas, saídas e um `state.json`, para você parar e continuar depois — inclusive em outra ferramenta de IA.
 
 **O que não é**
 
-- Não é um aplicativo, chatbot, site, servidor ou banco de dados. Não há nada para implantar nem para fazer login.
-- Não está preso a um fornecedor de IA. Quem faz o trabalho é a ferramenta de IA que você já usa.
-- Não substitui você. Decisões, aprovações e responsabilidade continuam com o profissional de QA.
-- Não é lugar para os dados dos seus projetos. Tudo sobre os seus sistemas fica na pasta `workspace/` do seu computador, que nunca é enviada para este repositório.
+- Não é uma IA, um chatbot nem um serviço hospedado. O Moki não responde o pedido. Quem responde é a ferramenta que você escolhe, e uma ferramenta online segue a política de dados desse fornecedor.
+- Não está preso a um fornecedor de IA.
+- Não substitui a sua decisão. As skills que vêm com o Moki param nos pontos de aprovação e esperam uma resposta explícita.
+- Não é um depósito de dados de projeto dentro deste repositório Git. Projetos, resultados, notas e skills instaladas para um projeto ficam em `workspace/` no seu computador (ou numa pasta que você vincula). Essa árvore nunca é enviada para cá.
 
-### Skills disponíveis
+### Skills que vêm com o Moki
 
 | Skill | O que faz | Status |
 |---|---|---|
@@ -62,12 +66,14 @@ Este guia foi escrito para profissionais de QA. Não é preciso saber programar:
 | `test-design` | Mapeia cenários de teste, espera o seu OK e depois escreve casos de teste manuais detalhados, exportados para Excel. | draft |
 | `failure-analysis` | Pré-análise curta de um erro a partir da sua descrição e do log, para direcionar o time de desenvolvimento à causa provável. | draft |
 | `evidence-collection`, `evidence-sheet`, `evidence-document` | Evidências de teste de ponta a ponta (agente `evidence-builder`): lê o item de trabalho (Azure DevOps/Jira via MCP, ou colado) e as gravações do Jam, pede sua aprovação e gera a planilha de evidências (uma linha por caso de teste) e o documento Word com os prints, nos seus próprios modelos. | draft |
-| `project-context` | Cria e mantém o conhecimento sobre cada sistema que você testa. | draft |
+| `project-context` | Cria e mantém o conhecimento confirmado de um projeto. Num projeto em branco, entrevista você e escreve um plano que você aprova antes de qualquer arquivo de contexto ser criado. | draft |
 | `qa-orchestrator` | Encadeia atividades ("revise e depois projete os testes"), garante as aprovações e retoma trabalhos interrompidos. | draft |
 | `automation` | Engenharia de automação: constrói projetos de automação novos (Playwright + TypeScript primeiro) já documentados e prontos para IA, automatiza cenários FLX documentados em projetos existentes e evolui projetos existentes. | pending migration |
 | `documentation`, `smoke-test` | Planejadas para uma versão futura. Se você pedir, a IA avisa que ainda não estão disponíveis. | planned |
 
 **draft** = completa e utilizável, ainda em validação entre ferramentas de IA (veja [docs/compatibility-tests.md](docs/compatibility-tests.md)). **pending migration** = totalmente definida, aguardando o material de referência do time para poder rodar. **planned** = ainda não disponível.
+
+Skills que você instala ou cria são extras. Elas ficam com o projeto ou na sua pasta de usuário, e o pedido que o app monta cita o nome delas para a IA ler o `SKILL.md` quando uma servir. Veja [Skills e agentes que você adiciona](#79-skills-e-agentes-que-você-adiciona).
 
 ---
 
@@ -75,10 +81,10 @@ Este guia foi escrito para profissionais de QA. Não é preciso saber programar:
 
 | Termo | Significado |
 |---|---|
-| **Skill** | As instruções de uma atividade de QA. Você nunca precisa abri-las — a IA lê. |
-| **Agente** | Um papel que faz o trabalho usando uma ou mais skills (ex.: `requirements-analyst`), com um nível de acesso. Agentes prontos podem ser duplicados e personalizados — veja [docs/agents.md](docs/agents.md). |
-| **Projeto** | Um sistema que você testa (ex.: "Billing Portal"). Identificado por um id curto em minúsculas com hífens: `billing-portal`. |
-| **Contexto do projeto** | O que a IA sabe sobre um projeto: glossário, regras de negócio, módulos, fluxos, permissões, ambientes, convenções. Só ficam registradas as definições que **você confirmou**. |
+| **Skill** | As instruções de uma atividade. A IA lê; você abre o arquivo de uma skill só quando quer alterá-lo. |
+| **Agente** | Um papel que faz o trabalho usando uma ou mais skills (ex.: `requirements-analyst`), com um nível de acesso. Agentes prontos podem ser duplicados, e você pode criar os seus — veja [docs/agents.md](docs/agents.md). |
+| **Projeto** | Um trabalho neste computador: um sistema que você testa, um repositório que você vincula ou um projeto em branco que você descreve. Identificado por um id curto em minúsculas com hífens: `billing-portal`. |
+| **Contexto do projeto** | O que a IA pode tratar como sabido: só definições que **você confirmou**. Um projeto de qualidade começa com glossário, regras, módulos, fluxos, permissões, ambientes e convenções. Um projeto em branco propõe os próprios arquivos num plano. |
 | **Execução (run)** | Uma execução de uma atividade (ex.: "revisão da história US-310"). Cada execução tem um id como `20261020-0930-requirements-review-us-310` e uma pasta própria com entradas, saídas e o arquivo `state.json`. |
 | **state.json** | O "save do jogo" de uma execução: etapa atual, etapas concluídas, perguntas pendentes, suas aprovações, arquivos gerados. É o que permite retomar. |
 | **Ponto de aprovação** | Um momento em que a IA precisa parar e esperar a sua resposta explícita antes de continuar (ex.: "Posso gerar a Matriz de Revisão QA?"). |
@@ -88,13 +94,16 @@ Este guia foi escrito para profissionais de QA. Não é preciso saber programar:
 
 ```mermaid
 flowchart TD
-  U["QA (você)"] -->|"pedido em linguagem natural"| T["Ferramenta de IA<br/>Claude Code, Cursor, Codex, chat"]
-  T -->|lê| A["AGENTS.md<br/>regras + catálogo de skills"]
-  A --> O{"Uma atividade<br/>ou várias?"}
-  O -->|uma| S["Skill da atividade<br/>requirements-review, test-design,<br/>failure-analysis, automation"]
+  U["Você"] -->|"linguagem natural"| APP["App Moki<br/>ou a pasta aberta na sua ferramenta"]
+  APP -->|"pedido pronto"| T["Ferramenta de IA que você já usa<br/>Claude Code, Cursor, Codex, chat"]
+  T -->|lê| A["AGENTS.md<br/>+ as skills citadas no pedido"]
+  A --> O{"Atividade inclusa<br/>ou uma skill que você adicionou?"}
+  O -->|inclusa, uma| S["Skill que vem com o Moki"]
   O -->|"várias ou retomar"| W["qa-orchestrator<br/>workflow"]
+  O -->|instalada ou criada| X["SKILL.md dessa skill"]
   W --> S
   S <-->|"contexto relevante / propostas"| C["project-context<br/>workspace/projects/ID/context"]
+  X --> C
   S -->|"estado, saídas, evidências"| R["Pasta da execução<br/>workspace/projects/ID/runs/RUN-ID"]
   S -.->|"pontos de aprovação"| U
 ```
@@ -107,13 +116,13 @@ flowchart TD
 
 ### 3.0 O jeito mais rápido: o instalador para Windows
 
-1. Baixe o **Moki Setup <versão>.exe** na [página de Releases](https://github.com/Orsi88/quality-agents/releases).
+1. Baixe o instalador para Windows na [página de Releases](https://github.com/Orsi88/quality-agents/releases). O arquivo da v0.1.0 se chama `Quality.Agents.Setup.0.1.0.exe`. Instaladores gerados a partir deste repositório se chamam `Moki Setup <versão>.exe`.
 2. Execute. O Windows pode mostrar *"O Windows protegeu o computador"*, porque o instalador ainda não tem assinatura digital: clique em **Mais informações → Executar assim mesmo**.
 3. Escolha a pasta de instalação e conclua. Um atalho **Moki** é criado na área de trabalho e no menu Iniciar.
 
 Na primeira abertura o app cria **Documentos\Moki** — o framework (skills, `AGENTS.md`, templates) e a sua `workspace/`, onde ficam os projetos e resultados. A sua ferramenta de IA é aberta nessa pasta. Instalar uma versão nova atualiza os arquivos do framework ali e **nunca mexe na `workspace/`**; desinstalar o app também mantém essa pasta.
 
-Você continua precisando de uma ferramenta de IA (Claude Code, Codex, Cursor…). O Node.js é opcional: só é usado pelos comandos auxiliares das skills (geração de Excel/PDF).
+Você continua precisando de uma ferramenta de IA (Claude Code, Codex, Cursor…). O Node.js é opcional neste caminho: o app instalado abre sem ele. Ele só é necessário para os comandos auxiliares (Excel, Word e PDF).
 
 Prefere o terminal, quer contribuir com o framework ou usa macOS/Linux? Siga os passos abaixo; para gerar o instalador do seu sistema, veja a [3.7](#37-gerar-o-instalador-do-app-desktop-windows-macos-linux).
 
@@ -121,8 +130,8 @@ Prefere o terminal, quer contribuir com o framework ou usa macOS/Linux? Siga os 
 
 | Software | Para quê | Obrigatório? |
 |---|---|---|
-| **Git** | Baixar (clonar) e atualizar o framework | Sim |
-| **Node.js 22.18 ou mais recente** (LTS) | Roda o app `qa` e os comandos auxiliares: criar projetos e execuções, gerar Excel e PDF, verificar que nenhum dado de projeto vai para o Git | Muito recomendado (sem ele as skills continuam funcionando na sua ferramenta de IA, mas o app e essas etapas ficam indisponíveis) |
+| **Git** | Baixar (clonar) e atualizar o framework a partir deste repositório | Só no caminho do clone, abaixo. O instalador para Windows não precisa de Git. |
+| **Node.js 22.18 ou mais recente** (LTS) | A partir de um clone: roda o `qa`, constrói o app e os comandos auxiliares (projetos, execuções, Excel, Word, PDF, verificação de commits). O app instalado abre as ferramentas de IA sem Node.js; esses comandos auxiliares ainda precisam dele. | Num clone, sim. No instalador, só quando você quiser os comandos auxiliares. |
 | **Microsoft Edge ou Google Chrome** | Usado em segundo plano para gerar os relatórios em PDF | Só para gerar PDF (o Edge já vem no Windows) |
 | Uma **ferramenta de IA** | Claude Code, Cursor, Codex, claude.ai, ChatGPT, Gemini... | Sim |
 
@@ -205,7 +214,7 @@ Opcional: para quem publica os instaladores, ou para ter o app no macOS/Linux co
 |---|---|---|
 | Windows 10/11 (x64) | `npm run dist:win` | `Moki Setup <versão>.exe` |
 | macOS (Intel ou Apple Silicon) | `npm run dist:mac` | `Moki-<versão>.dmg` (com `-arm64` no nome em Apple Silicon) |
-| Linux (x64) | `npm run dist:linux` | `Moki-<versão>.AppImage` |
+| Linux (x64) | `npm run dist:linux` | `Moki-<versão>.AppImage`, além de `.deb` e `.rpm` |
 
 Os instaladores ainda não têm assinatura digital: o Windows mostra o aviso do SmartScreen descrito na [3.0](#30-o-jeito-mais-rápido-o-instalador-para-windows); o macOS bloqueia a primeira abertura — clique com o botão direito no app → **Abrir**, ou **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**. Em todos os sistemas, a primeira abertura cria **Documentos/Moki**, como na 3.0.
 
@@ -243,33 +252,36 @@ E três formas de trabalhar, seja qual for a ferramenta:
 
 | Forma | Para quem |
 |---|---|
-| **O app desktop — `qa`**: tela inicial com seus projetos e depois um workspace no estilo do Obsidian para navegar, ler e editar os arquivos do projeto e **abrir o projeto na sua ferramenta de IA com o pedido pronto**. | Todo mundo — o jeito mais fácil |
+| **O app desktop — `qa`**: tela inicial com seus projetos e notas soltas, e depois um workspace no estilo do Obsidian para navegar, ler e editar os arquivos do projeto e **abrir o projeto na sua ferramenta de IA com o pedido pronto**. | Todo mundo — o jeito mais fácil |
 | **O menu de terminal — `qa --terminal`**: projeto → atividade → arquivos → ferramenta de IA; prepara tudo e abre a sua ferramenta de IA com o pedido pronto. | Quem não quer lidar com pastas e prompts |
-| **Abrir a pasta `quality-agents`** na sua ferramenta de IA e pedir em linguagem natural | Quem já está à vontade com a ferramenta de IA |
+| **Abrir a pasta `quality-agents`** na sua ferramenta de IA e pedir em linguagem natural | Quem já está à vontade com a ferramenta de IA. O `AGENTS.md` encaminha essa conversa pelas skills inclusas. Uma skill que você instalou é citada quando o app ou o `qa --terminal` monta o pedido; numa sessão que você mesmo abriu, cite o nome dessa skill. |
 
 ### 4.1 O app desktop (`qa`)
 
-Digite `qa` (ou use o atalho, quando o instalador existir). O Moki abre numa janela própria — sem navegador, sem servidor.
+Digite `qa`, ou use o atalho da área de trabalho criado pelo instalador. O Moki abre numa janela própria — sem navegador, sem servidor.
 
-**Tela inicial** — seus projetos à esquerda; para criar um novo, basta digitar o nome. O último projeto usado reabre automaticamente. O canto escolhe **inglês ou português** e o tema **claro ou escuro**; a primeira abertura pergunta os dois.
+**Tela inicial** — seus projetos à esquerda. Fixe um para mantê-lo no topo. *Desvisualizar* tira o projeto da lista e os arquivos continuam neste computador; ele vai para **Ocultos**, e o olho mostra de novo. Para criar um projeto, basta digitar o nome. Esse formulário ainda diz "um projeto por sistema que você testa"; um projeto em branco e uma pasta vinculada usam o mesmo formulário. O último projeto usado reabre automaticamente. O canto escolhe **inglês ou português** e o tema **claro ou escuro**; a primeira abertura pergunta os dois.
 
 **Workspace** (como o Obsidian):
 
 | Área | O que faz |
 |---|---|
 | **Faixa de ícones à esquerda** | Todos os projetos · Abrir na sua ferramenta de IA · Novo terminal · Abrir a pasta do projeto · Vincular uma pasta · Configurações · Atualizar · Mostrar/ocultar o painel lateral |
-| **Árvore de arquivos** | *Context* (o que a IA sabe sobre o sistema), *Inbox* (arquivos que você entrega à IA), *Activities* (cada revisão, projeto de testes ou análise, com data e ponto de status), atualizações propostas e histórico |
+| **Árvore de arquivos** | *Context* (conhecimento confirmado), *Inbox* (arquivos que você entrega à IA), *Activities* (cada execução, com data e ponto de status), *Notes*, atualizações propostas e histórico |
 | **Documentos em abas** | Markdown aparece formatado; **Ctrl+E** alterna para edição, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word mostram o texto; JSON, texto e imagens têm pré-visualização; Excel e PDF abrem no programa deles |
-| **Painel lateral** | Numa atividade: status, etapa atual, pendências, aprovações e arquivos gerados, além de *Continuar na sua ferramenta de IA*. Fora dela: visão geral do projeto, **agentes habilitados no projeto** (caixas de seleção) e atividades em aberto |
-| **Abrir na sua ferramenta de IA** | Escolha a atividade, opcionalmente **quem deve fazer** (um agente), os arquivos do inbox, adicione uma observação e escolha a ferramenta: Claude Code, Codex, Gemini CLI, Antigravity CLI ou Cursor Agent abrem numa aba de terminal do app; Cursor ou VS Code abrem a pasta com o pedido copiado; ChatGPT / claude.ai / Gemini web recebem o pedido e a lista de arquivos para enviar |
+| **Painel lateral** | Numa atividade: status, etapa atual, pendências, aprovações e arquivos gerados, além de *Continuar na sua ferramenta de IA*. Fora dela: visão geral do projeto, **agentes habilitados no projeto** (caixas de seleção), atividades em aberto e **Visualização em grafo** (a aba diz que está em construção) |
+| **Abrir na sua ferramenta de IA** | Escolha a atividade, opcionalmente **quem deve fazer** (um agente), os arquivos do inbox, adicione uma observação e escolha a ferramenta: Claude Code, Codex, Gemini CLI, Antigravity CLI ou Cursor Agent abrem numa aba de terminal do app; Cursor ou VS Code abrem a pasta com o pedido copiado; ChatGPT / claude.ai / Gemini web, e *Just show the request*, deixam o texto na etapa de revisão pronto para copiar. O pedido cita a pasta vinculada e as skills e os agentes instalados naquele projeto. Se a abertura ainda estiver rodando depois de cerca de 20 segundos, o assistente avisa que o pedido está demorando, em vez de ficar em "Opening…". |
 | **Configurações** | A engrenagem na faixa de ícones. Três abas: **Agentes**, **Skills** e **Modelos**. |
-| **Agentes** | Agentes por categoria, com papel, skills e acesso. **Duplicar** cria a sua cópia de um agente pronto, que você pode editar e salvar (validado antes de salvar) ou excluir. Dá para criar um agente só deste projeto ou de todos. Seus agentes ficam em `workspace/library/agents/` |
-| **Skills** | **Já instaladas** (cada skill mostra onde mora), **Nativas e criadas** (as skills que vêm com o Moki e as que você criou — essa lista não cria skill) e **Adicionar skill**. Adicionar uma skill busca no registro público SkillMD, ou **Criar skill** descreve uma para a sua ferramenta de IA redigir. |
+| **Agentes** | Agentes por categoria, com papel, skills e acesso. **Duplicar** grava a cópia de um agente pronto em `workspace/library/agents/`; depois você **Edita** e **Salva** (validado antes de salvar) ou exclui. **Criar agente** grava um novo só deste projeto (`<pasta vinculada>/.claude/agents/`, ou `workspace/projects/<id>/agents/` quando nada está vinculado) ou de todos os projetos (`~/.claude/agents/`). |
+| **Skills** | **Já instaladas** (cada skill mostra onde mora), **Nativas e criadas** (as skills que vêm com o Moki e as que você criou — essa lista não cria skill) e **Adicionar skill**. Adicionar uma skill busca no registro público SkillMD (programação, design, QA e testes, segurança, documentação e escrita), ou **Criar skill** descreve uma para a sua ferramenta de IA redigir. Uma skill deste projeto fica em `<pasta vinculada>/.claude/skills/` ou em `workspace/projects/<id>/skills/`. Uma skill de todos os projetos fica em `~/.claude/skills/` e `~/.agents/skills/`. |
 | **Modelos** | Como ficam os arquivos PDF, Word e Excel que as atividades e os agentes geram: fonte, cores, cabeçalho, rodapé, logo e marca d'água em texto, com uma prévia da página. Um estilo para todos os projetos, ou o estilo próprio de um projeto. O logo (PNG, JPEG, WebP ou GIF) e a marca d'água vão para PDF e Word; o Excel guarda os textos do cabeçalho na impressão. **Salvar** vale para os arquivos novos. |
 
+- **Soltar arquivos**: solte arquivos sobre o workspace e eles são copiados para o inbox daquele projeto. Pastas são ignoradas. Até 40 arquivos, cada um de até 200 MB. A mesma ação de ocultar da tela inicial fica na árvore (*Desvisualizar*).
 - **Ao vivo**: os arquivos que a IA grava aparecem na árvore assim que são salvos.
-- **Histórias em Word**: arquivos `.docx` são convertidos em texto automaticamente para qualquer IA conseguir ler.
-- **Local e privado**: tudo vem dos arquivos em `workspace/`; sem conta, sem hospedagem, sem banco de dados.
+- **Arquivos Word**: arquivos `.docx` são convertidos em texto automaticamente para qualquer IA conseguir ler.
+- **Notas**: as notas do projeto são arquivos Markdown em `notes/` e abrem numa janela própria. As notas soltas da tela inicial ficam no app até você enviar uma para um projeto.
+- **Sessões que o app abre**: Claude Code e Codex iniciados pelo Moki também carregam os plugins de `adapters/app-plugins/` (ponytail, e rtk quando esse comando está instalado). A mesma ferramenta iniciada fora do app não carrega esses plugins. Um plugin cujo requisito falta é ignorado.
+- **Local e privado**: os dados do projeto vêm dos arquivos em `workspace/` e de uma pasta que você vincula. Sem conta, sem hospedagem, sem banco de dados.
 - Como foi construído (para quem contribui): [docs/desktop-app.md](docs/desktop-app.md).
 
 As seções a seguir descrevem primeiro o **modo agente**. As diferenças do modo chat aparecem onde for relevante.
@@ -284,19 +296,21 @@ flowchart TD
   P -->|existente| A
   P -->|novo| NP["Pede id e nome,<br/>cria a pasta do projeto"]
   NP --> A{"Atividade<br/>skills indisponíveis ficam apagadas"}
-  A -->|"revisão, testes, workflow,<br/>falha, contexto"| F["Arquivos: digite ou arraste<br/>copiados para o inbox do projeto"]
+  A -->|"abrir, revisão, testes, evidência,<br/>contexto, preparar, planejar…"| F["Arquivos: digite ou arraste<br/>copiados para o inbox do projeto"]
   A -->|"retomar"| RUN["Escolha uma execução aberta<br/>lida do state.json"]
   F --> N["Instruções extras opcionais"]
   RUN --> N
   N --> L["Idioma da conversa"]
   L --> T{"Abrir com<br/>ferramentas não instaladas ficam apagadas"}
   T -->|"Claude Code, Codex,<br/>Cursor Agent, Gemini CLI,<br/>Antigravity CLI"| OPEN["Abre a ferramenta em quality-agents<br/>com o pedido já digitado"]
-  T -->|"Cursor (editor)"| CUR["Abre a pasta,<br/>pedido copiado para a área de transferência"]
+  T -->|"Cursor ou VS Code"| CUR["Abre a pasta,<br/>pedido copiado para a área de transferência"]
   T -->|"ChatGPT, claude.ai, Gemini web"| CHAT["Pedido copiado,<br/>lista de arquivos para enviar"]
   T -->|"Só mostrar"| SHOW["Mostra o pedido"]
 ```
 
-Use **↑/↓** para mover, **Enter** para escolher (ou digite o número da opção) e **Ctrl+C** para cancelar. Cada resposta "recolhe" depois de escolhida, então a tela fica limpa. A interface do `qa` é em inglês; enquanto uma pergunta está aberta, ela fica assim:
+A interface do `qa` é em inglês. A pergunta *Which project (system under test)?* é o rótulo do próprio menu; um projeto em branco ou com pasta vinculada usa a mesma pergunta.
+
+Use **↑/↓** para mover, **Enter** para escolher (ou digite o número da opção) e **Ctrl+C** para cancelar. Cada resposta "recolhe" depois de escolhida, então a tela fica limpa. Enquanto uma pergunta está aberta, ela fica assim:
 
 ```text
 ┌  Moki
@@ -306,12 +320,15 @@ Use **↑/↓** para mover, **Enter** para escolher (ou digite o número da opç
 │  billing-portal
 │
 ◆  What do you want to do?
-│  ● Review user stories  ambiguities, gaps, interview, matrix, report
+│  ● Just open the project  loads the context and asks what you need
+│  ○ Review user stories  ambiguities, gaps, interview, matrix, report
 │  ○ Design tests
 │  ○ Review, then design tests
 │  ○ Failure pre-analysis
 │  ○ Build test evidence  work item + Jam recordings, then spreadsheet and Word document
 │  ○ Project context
+│  ○ Prepare the project  adapts the context to the project description
+│  ○ Plan the project with the AI  interview, then a plan you review in the app
 │  ○ Automation  (not available yet: pending-migration)
 │  ○ Resume a run  (no open runs)
 └  ↑/↓ move · Enter select · Ctrl+C cancel
@@ -373,8 +390,8 @@ qa --help
 
 | Opção | Valores |
 |---|---|
-| `--activity` | `review` (revisão), `tests` (testes), `review-then-tests` (revisão e depois testes), `failure` (falha), `context` (contexto), `resume` (retomar) |
-| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `antigravity`, `cursor`, `chat`, `print` |
+| `--activity` | `open` (só abrir), `review` (revisão), `tests` (testes), `review-then-tests` (revisão e depois testes), `failure` (falha), `evidence` (evidências), `context` (contexto), `setup` (preparar), `plan` (planejar), `automation` (automação), `resume` (retomar) |
+| `--tool` | `claude`, `codex`, `cursor-agent`, `gemini`, `antigravity`, `cursor`, `vscode`, `chat`, `print` |
 | `--file` | Repita para vários arquivos |
 | `--run` | Id da execução, para `resume` |
 | `--note` | Instruções extras |
@@ -384,7 +401,7 @@ qa --help
 
 ## 5. Início rápido: sua primeira atividade em 10 minutos
 
-Este exemplo usa o sistema fictício **Acme Library**, incluído em [examples/](examples/README.md).
+Este passo a passo usa uma atividade de qualidade que vem com o Moki e o sistema fictício **Acme Library**, em [examples/](examples/README.md). Os mesmos passos — projeto, pedido, pasta da execução — são como toda atividade fica registrada. Um projeto em branco ou uma skill que você instalou segue as próprias instruções quando o pedido cita o nome dela.
 
 > **Atalho:** se você instalou o comando `qa` ([3.6](#36-instalar-o-comando-qa-recomendado)), digite `qa --terminal` e siga o menu — ele faz os passos 1 e 2 por você.
 
@@ -416,11 +433,21 @@ Pronto, você já usou o framework. As próximas seções explicam cada parte em
 
 ---
 
-## 6. Cadastre um sistema que você testa (projeto)
+## 6. Crie um projeto
+
+Um projeto é um trabalho neste computador. Ele tem um id curto (`billing-portal`) e uma pasta em `workspace/projects/`. Três jeitos de começar:
+
+| Começo | O que você ganha |
+|---|---|
+| **Arquivos de contexto de QA** (o padrão) | A pasta de qualidade da [6.3](#63-o-que-existe-dentro-da-pasta-de-um-projeto): glossário, regras, módulos, fluxos, permissões e o resto. Use isto para um sistema que você testa. |
+| **Um projeto em branco** | Ainda sem `context/`. Você descreve o objetivo; a IA entrevista você e escreve um plano. Os arquivos de contexto só são criados depois da sua aprovação. No app, escolha *Um projeto em branco*. No terminal: `npm run new-project -- <id> "<Nome>" --blank`. |
+| **Uma pasta que já existe** | Na tela inicial, *Abrir um projeto* escolhe uma pasta. O projeto recebe o nome dela (você pode editar), é vinculado e abre em *Configurar &lt;nome&gt;*. As configurações de IA dessa pasta (`.claude`, `.agents`, `.codex`, `.gemini`, `.cursor`, `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`) são copiadas para `.moki-backup/link-<data>/` dentro dela. Nada mais na pasta muda. Pedidos abertos a partir do projeto citam essa pasta. |
+
+Vincular uma pasta a um projeto que já existe é o botão de vínculo na faixa de ícones. Instalar uma skill ou um agente no `.claude` dessa pasta pede a sua confirmação, faz backup do `.claude` antes e é recusado quando a entrada daquele repositório diz `writeAllowed: false`.
 
 ### 6.1 Automático (recomendado)
 
-Basta mencionar o sistema ao pedir uma atividade:
+Basta mencionar o projeto ao pedir uma atividade:
 
 > Revise esta história do **Billing Portal**.
 
@@ -445,6 +472,8 @@ npm run new-project -- billing-portal "Billing Portal"
 Depois preencha `workspace/projects/billing-portal/project.json` (ou deixe a IA fazer isso na próxima atividade).
 
 ### 6.3 O que existe dentro da pasta de um projeto
+
+Um projeto que começa com os arquivos de contexto de QA fica assim. Um projeto em branco tem o mesmo `project.json`, `proposed-updates.md`, `activity-log.md`, `inbox/` e `runs/`, mais o `plan.json` quando a entrevista já tem um plano, e não tem `context/` até você aprovar esse plano. O `project.json` registra `"starter": "qa"` ou `"starter": "blank"`.
 
 ```text
 workspace/projects/billing-portal/
@@ -513,7 +542,9 @@ A pasta do projeto já vem com um `.gitignore` que deixa de fora `runs/`, `inbox
 
 ## 7. Guia das skills, passo a passo
 
-Todas as skills seguem os mesmos hábitos:
+Os guias desta seção são as skills que **vêm com o Moki**. Uma skill que você instala ou cria segue o próprio `SKILL.md`; a [7.9](#79-skills-e-agentes-que-você-adiciona) diz onde ela fica e como um pedido cita o nome dela.
+
+As skills inclusas seguem os mesmos hábitos:
 
 - A IA **identifica o projeto primeiro** e carrega só o contexto que a atividade precisa.
 - Ela cria uma **execução** e salva tudo em `workspace/projects/<project-id>/runs/<run-id>/`.
@@ -793,6 +824,31 @@ Regras que ela sempre segue: plano e aprovação antes de mexer no código; nunc
 
 `documentation` e `smoke-test` ainda não estão disponíveis. Se você pedir, a IA explica isso e para — ela não improvisa.
 
+### 7.8 Evidências de teste (`evidence-collection`, `evidence-sheet`, `evidence-document`)
+
+**Quando:** um teste já foi executado e você quer a evidência montada. Isto não projeta testes e não decide um status por conta própria.
+
+**Você fornece:** o item de origem (Azure DevOps, Jira ou similar, via MCP quando estiver configurado, ou colado), quem executou e quando, o ambiente, o resultado obtido e o status de cada caso de teste (Passed, Failed, Blocked, Not run) e pelo menos uma prova por caso executado — um link do Jam ou um print. Opcional: os seus próprios modelos `.xlsx` e `.docx`.
+
+**Como começar:** no app ou no `qa --terminal`, escolha **Build test evidence**. Isso inicia o workflow `test-evidence` (agente `evidence-builder`).
+
+**Como funciona:**
+
+1. `evidence-collection` lê o item e as gravações, associa os prints a um caso e a um passo e grava `outputs/evidence.json`. Um status deduzido de uma gravação fica marcado como `proposed`. Se faltar algo obrigatório, ela pede só isso e para.
+2. Ela mostra um resumo e **para para a sua aprovação**. Não inventa resultados, status nem ids.
+3. Depois da sua aprovação, `evidence-sheet` preenche a planilha (uma linha por caso de teste, no seu modelo ou no padrão) e `evidence-document` gera o documento Word com as imagens, mantendo estilos, cabeçalho, rodapé e logo do seu modelo quando você entregou um.
+
+### 7.9 Skills e agentes que você adiciona
+
+Isso fica em Configurações (a engrenagem).
+
+- **Adicionar skill** busca no registro público SkillMD, ou descreve uma skill para a sua ferramenta de IA redigir. As buscas prontas cobrem programação, design, QA e testes, segurança, e documentação e escrita. Cada instalação do registro mostra a auditoria e confere o sha256 de cada arquivo. Skills de terceiros são as instruções do autor delas.
+- **Este projeto** guarda em `<pasta vinculada>/.claude/skills/` ou, sem pasta vinculada, em `workspace/projects/<id>/skills/`. **Todos os projetos** guarda em `~/.claude/skills/` e `~/.agents/skills/`. Um projeto também pode vincular skills globais pelo nome (`linkedSkills` no `project.json`) sem copiá-las.
+- **Criar agente** faz a mesma divisão: `<pasta vinculada>/.claude/agents/` ou `workspace/projects/<id>/agents/`, ou `~/.claude/agents/` para todos os projetos. Duplicar um agente pronto continua gravando em `workspace/library/agents/`.
+- O pedido que o Moki monta cita essas skills e esses agentes e manda a IA ler o `SKILL.md` ou o arquivo do agente quando servir à tarefa. O Moki não executa a skill. Instalar no `.claude` de uma pasta vinculada pede a sua confirmação e faz backup dessa pasta antes.
+
+A atividade **Plan the project with the AI** de um projeto em branco (`--activity plan`) entrevista você uma pergunta por vez, recomenda só skills e agentes que já estão disponíveis e grava `proposed-updates.md` e `plan.json`. Você revisa o plano no app. Os arquivos de contexto só são criados depois de `"approved": true`.
+
 ---
 
 ## 8. Workflows: várias atividades em sequência
@@ -840,6 +896,7 @@ Workflows disponíveis:
 |---|---|
 | [requirements-to-tests](skills/qa-orchestrator/references/workflows/requirements-to-tests.md) | Revisar uma história e depois projetar os testes |
 | [failure-investigation](skills/qa-orchestrator/references/workflows/failure-investigation.md) | Fazer a pré-análise de uma falha |
+| [test-evidence](skills/qa-orchestrator/references/workflows/test-evidence.md) | Montar a evidência de um teste já executado, e depois a planilha e o documento Word |
 | [quality-lifecycle](skills/qa-orchestrator/references/workflows/quality-lifecycle.md) | Ciclo completo de uma mudança (as etapas de skills planejadas são puladas por enquanto) |
 
 Você também pode pedir uma sequência personalizada; o orquestrador mostra a sequência e pede aprovação antes de começar.
@@ -1000,12 +1057,18 @@ Mais detalhes: [adapters/chat/README.md](adapters/chat/README.md) · outras ferr
 | — entregáveis (Excel, PDF, relatórios, casos de teste) | `.../outputs/` |
 | — prints, traces | `.../evidence/` |
 | — logs | `.../logs/` |
-| Seus próprios agentes | `workspace/library/agents/<categoria>/` |
+| Notas do projeto | `workspace/projects/<project-id>/notes/` |
+| Plano de um projeto em branco | `workspace/projects/<project-id>/plan.json` |
+| Aparência dos documentos (todos os projetos, ou um) | `workspace/document-style.json`, ou `workspace/projects/<project-id>/document-style.json` quando o projeto tem a sua |
+| Skills e agentes deste projeto | `workspace/projects/<project-id>/skills/` e `.../agents/`, ou `<pasta vinculada>/.claude/skills/` e `.../agents/` |
+| Skills de todos os projetos | `~/.claude/skills/` e `~/.agents/skills/` |
+| Agentes de todos os projetos | `~/.claude/agents/` |
+| Cópias de agentes prontos | `workspace/library/agents/<categoria>/` |
 | Pacotes para ferramentas de chat | `dist/` |
 
 A IA nunca grava resultados nas pastas do framework (`skills/`, `core/`, `templates/`, `docs/`...). Se você encontrar um resultado em outro lugar, peça para ela movê-lo para a pasta da execução.
 
-**Exceção:** quando a skill de automação estiver autorizada a alterar o repositório de código do seu sistema, esse código vai para **aquele** repositório e segue as regras de Git dele. Os relatórios sobre esse trabalho continuam indo para a pasta da execução.
+**Exceção:** quando você autoriza uma mudança num repositório vinculado (a skill de automação, quando puder rodar, ou um agente com acesso `repository-write` depois de um plano aprovado), esse código vai para **aquele** repositório e segue as regras de Git dele. Os relatórios sobre o trabalho continuam na pasta da execução. Instalar no `.claude` de uma pasta vinculada é uma ação separada, confirmada por você, e faz backup do `.claude` antes.
 
 ---
 
@@ -1042,11 +1105,10 @@ Rode todos os comandos de dentro da pasta `quality-agents`. No PowerShell do Win
 | `npm run xlsx -- inspect <arquivo.xlsx>` | Mostra as primeiras linhas de cada aba (para ler os cabeçalhos de um modelo) |
 | `npm run docx -- write --data <document.json> --out <arquivo.docx> [--template <modelo.docx>]` | Gera um documento Word com imagens, sem dependências externas; com `--template`, dentro do seu modelo de Word |
 | `npm run docx -- inspect <modelo.docx>` | Mostra placeholders, estilos, cabeçalho/rodapé e a estrutura de um modelo de Word |
-
-No app desktop (`qa`) e no menu do terminal (`qa --terminal`), a atividade **Build test evidence** inicia o workflow `test-evidence` (agente `evidence-builder`).
 | `npm run check-output -- <tipo> <arquivo> [opções]` | Verificações objetivas de um entregável: `pre-analysis`, `missing-info --expect "a,b"`, `test-cases --source <doc>`, `review-matrix` |
 | `npm run bundle` | Gera os pacotes para ferramentas de chat em `dist/` |
 | `npm run check` | Valida o framework e procura artefatos/segredos |
+| `npm run test:ui` | Abre o Moki no Playwright e confere Configurações: a tela Modelos (rolagem, logo, marca d'água) e que Criar skill fica só em Adicionar skill |
 | `npm test` | Roda os testes do próprio framework |
 | `npm run build` | Regera `.agents/skills/` e `.claude/skills/` depois de editar `skills/` ou `core/` (só para quem contribui) |
 
@@ -1060,11 +1122,11 @@ No app desktop (`qa`) e no menu do terminal (`qa --terminal`), a atividade **Bui
 | PowerShell: *"a execução de scripts foi desabilitada neste sistema"* | Use o Git Bash, ou digite `npm.cmd` em vez de `npm`, ou rode uma vez: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`. |
 | `qa` "não é reconhecido" / "command not found" | Rode `npm link` dentro da pasta `quality-agents` e abra um terminal novo, ou use `npm run qa` de dentro dessa pasta. |
 | O `qa` diz que o app ainda não está instalado | Rode `npm run setup` na pasta `quality-agents` (também necessário depois de cada `git pull`). |
-| O `qa` mostra a sua ferramenta de IA como "not installed" | O comando da ferramenta (`claude`, `codex`, `cursor-agent`, `gemini`, `agy`, `cursor`) não está no PATH. Instale a CLI da ferramenta, ou escolha "Just show the request" e cole o pedido você mesmo. |
+| O `qa` mostra a sua ferramenta de IA como "not installed" | O comando da ferramenta (`claude`, `codex`, `cursor-agent`, `gemini`, `agy`, `cursor`, `code`) não está no PATH. Instale a CLI da ferramenta, ou escolha "Just show the request" e cole o pedido você mesmo. |
 | A IA parece não conhecer as skills | Confira se você abriu **a própria pasta `quality-agents`** (e não uma pasta acima dela). Abra uma sessão nova depois de clonar ou atualizar. Em ferramentas de chat, confira se você enviou as skills. |
 | A IA responde de forma genérica em vez de seguir o processo | Cite a skill explicitamente ("use a skill requirements-review") ou, no Claude Code, digite `/requirements-review`. |
 | A IA pergunta qual é o projeto | É o esperado quando o projeto é ambíguo. Informe o id ou o nome do projeto. |
-| A IA salvou um arquivo no lugar errado | Peça para mover para a pasta da execução; as regras proíbem gravar fora de `workspace/projects/<id>/`. |
+| A IA salvou um arquivo no lugar errado | Peça para mover o resultado para a pasta da execução. As skills inclusas gravam dentro de `workspace/projects/<id>/`. Um repositório vinculado só muda depois de um plano aprovado, e uma gravação no `.claude` dele só depois que você confirma no app. |
 | O Excel não foi gerado | Falta o Node.js ou a ferramenta não conseguiu rodar comandos. Peça à IA o `review-matrix.json` / `test-cases.json` e rode você mesmo o comando `npm run xlsx -- write ...` ([13](#13-referência-de-comandos)). |
 | O `npm run pdf` diz que não encontrou navegador | Instale o Edge ou o Chrome, ou defina a variável `QA_AGENTS_BROWSER` com o caminho do navegador. O arquivo `.html` é gerado mesmo assim — abra e imprima em PDF. |
 | Um commit foi bloqueado | Leia a mensagem: ela mostra o arquivo e o motivo. Mova arquivos de projeto para `workspace/` e remova segredos. Nunca contorne com `--no-verify`. |

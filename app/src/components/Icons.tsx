@@ -43,6 +43,14 @@ export const IconDot = ({ size }: IconProps) => (
 export const IconPlay = ({ size }: IconProps) => (
   <svg {...base(size)}><path d="M7 4.5v15l12-7.5z" /></svg>
 );
+export const IconGraph = ({ size }: IconProps) => (
+  <svg {...base(size)}>
+    <path d="M12 8.2 7.8 15M12 8.2 16.2 15M9.2 17.2h5.6" />
+    <circle cx="12" cy="5.4" r="2.7" fill="currentColor" stroke="none" />
+    <circle cx="6.2" cy="17.6" r="2.7" fill="currentColor" stroke="none" />
+    <circle cx="17.8" cy="17.6" r="2.7" fill="currentColor" stroke="none" />
+  </svg>
+);
 export const IconTerminal = ({ size }: IconProps) => (
   <svg {...base(size)}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 9l3 3-3 3M12 15h5" /></svg>
 );
@@ -72,6 +80,9 @@ export const IconEdit = ({ size }: IconProps) => (
 );
 export const IconEye = ({ size }: IconProps) => (
   <svg {...base(size)}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+);
+export const IconEyeOff = ({ size }: IconProps) => (
+  <svg {...base(size)}><path d="M3 3l18 18" /><path d="M10.6 6.1A9.5 9.5 0 0 1 12 6c6.5 0 10 6 10 6a18 18 0 0 1-3.2 3.8" /><path d="M6.1 6.1C3.5 7.9 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 4.2-.9" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
 );
 export const IconExternal = ({ size }: IconProps) => (
   <svg {...base(size)}><path d="M14 4h6v6" /><path d="M20 4l-9 9" /><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg>

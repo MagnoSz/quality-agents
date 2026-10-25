@@ -8,8 +8,8 @@ import { lang, setLang, t, type Lang } from '../i18n';
 import { FirstRunDialog } from '../components/FirstRunDialog';
 import { PrefsCorner } from '../components/PrefsCorner';
 import { AddButton } from '../components/AddButton';
-import { IconChevron, IconOpenProject, IconPin, IconX } from '../components/Icons';
-import { looseNotes, pinnedIds, recentNotes, togglePin } from '../side-menu';
+import { IconChevron, IconEye, IconEyeOff, IconOpenProject, IconPin, IconX } from '../components/Icons';
+import { hiddenIds, hideProject, looseNotes, pinnedIds, recentNotes, showProject, togglePin } from '../side-menu';
 import { currentTheme, persistTheme, type Theme } from '../theme';
 import { Settings, type SettingsTab } from './Settings';
 
@@ -50,17 +50,26 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [pins, setPins] = useState<string[]>(pinnedIds);
+  const [hidden, setHidden] = useState<string[]>(hiddenIds);
   const [noteTick, setNoteTick] = useState(0);
   useEffect(() => api.onNotesChanged(() => setNoteTick((n) => n + 1)), []);
   const notes = useMemo(() => recentNotes(), [noteTick]);
   const loose = useMemo(() => looseNotes(), [noteTick]);
   const installed = tools.filter((t) => t.command && t.available);
-  const pinned = pins.map((id) => projects.find((p) => p.id === id)).filter((p): p is ProjectSummary => Boolean(p));
-  const rest = projects.filter((p) => !pins.includes(p.id));
+  const visible = projects.filter((p) => !hidden.includes(p.id));
+  const hiddenProjects = projects.filter((p) => hidden.includes(p.id));
+  const pinned = pins.map((id) => visible.find((p) => p.id === id)).filter((p): p is ProjectSummary => Boolean(p));
+  const rest = visible.filter((p) => !pins.includes(p.id));
   const notesShown = [
     ...loose.map((n) => ({ kind: 'loose' as const, id: n.id, title: n.title, at: n.at })),
-    ...notes.filter((n) => projects.some((p) => p.id === n.project)).map((n) => ({ kind: 'project' as const, ...n })),
+    ...notes.filter((n) => visible.some((p) => p.id === n.project)).map((n) => ({ kind: 'project' as const, ...n })),
   ].sort((a, b) => b.at - a.at);
+
+  const hide = (p: ProjectSummary) => {
+    if (!window.confirm(t('Hide {name} from Moki? The files stay on this computer. You can show it again under Hidden.', { name: p.name }))) return;
+    setHidden(hideProject(p.id));
+    setPins(pinnedIds());
+  };
 
   const projectRow = (p: ProjectSummary, pinnedRow: boolean) => (
     <li key={p.id} className="home-row">
@@ -75,6 +84,9 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
       <button type="button" className={`home-pin${pinnedRow ? ' on' : ''}`} title={pinnedRow ? t('Unpin') : t('Pin')} aria-pressed={pinnedRow}
         onClick={() => setPins(togglePin(p.id))}>
         <IconPin size={13} />
+      </button>
+      <button type="button" className="home-pin home-hide" title={t('Hide from Moki')} aria-label={t('Hide from Moki')} onClick={() => hide(p)}>
+        <IconEyeOff size={13} />
       </button>
     </li>
   );
@@ -118,6 +130,28 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
           <div className="home-list-head">{t('Projects')}</div>
           {projects.length === 0 && <p className="muted small home-empty">{t('No projects yet.')}</p>}
           <ul>{rest.map((p) => projectRow(p, false))}</ul>
+          {hiddenProjects.length > 0 && (
+            <details className="home-hidden">
+              <summary className="home-list-head">{t('Hidden ({n})', { n: hiddenProjects.length })}</summary>
+              <ul>
+                {hiddenProjects.map((p) => (
+                  <li key={p.id} className="home-row">
+                    <button type="button" className="home-project" onClick={() => { setHidden(showProject(p.id)); onOpen(p.id); }}>
+                      <span className="home-project-name">{p.name}</span>
+                      <span className="home-project-meta">
+                        {onboarding(p.onboardingStatus)} · {p.runs} {p.runs === 1 ? t('activity') : t('activities')}
+                      </span>
+                      <IconChevron size={16} />
+                    </button>
+                    <button type="button" className="home-pin home-show" title={t('Show in the list')} aria-label={t('Show in the list')}
+                      onClick={() => setHidden(showProject(p.id))}>
+                      <IconEye size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <hr className="home-split" />
           <div className="home-list-head with-action">
             <span>{t('Loose notes')}</span>

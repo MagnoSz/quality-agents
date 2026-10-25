@@ -21,6 +21,7 @@
     "validate": "node scripts/validate.mjs",
     "check": "node scripts/validate.mjs && node scripts/check-artifacts.mjs --all && node scripts/check-secrets.mjs --all",
     "test": "node --test",
+    "test:ui": "node scripts/build-desktop.mjs && playwright test -c tests/ui/playwright.config.ts",
     "bundle": "node scripts/bundle.mjs",
     "new-project": "node scripts/new-project.mjs",
     "new-run": "node scripts/new-run.mjs",
@@ -34,6 +35,7 @@
     "dist:linux": "node scripts/build-desktop.mjs && electron-builder --linux AppImage deb rpm"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "22.18.12",
     "@types/react": "19.1.17",
     "@types/react-dom": "19.1.11",
