@@ -251,18 +251,21 @@ And three ways to work, whatever the tool:
 
 Type `qa` (or use the shortcut, once the installer exists). Moki opens in its own window — no browser, no server.
 
-**Start screen** — your projects on the left; create a new one by just typing its name. The last project you used reopens automatically.
+**Start screen** — your projects on the left; create a new one by just typing its name. The last project you used reopens automatically. The corner chooses **English or Portuguese** and a **light or dark** theme; the first launch asks for both.
 
 **Workspace** (like Obsidian):
 
 | Area | What it does |
 |---|---|
-| **Left ribbon** | All projects · Open in your AI tool · Open the project folder · Agent library · Refresh · Show/hide the side panel |
+| **Left ribbon** | All projects · Open in your AI tool · New terminal · Open the project folder · Link a folder · Settings · Refresh · Show/hide the side panel |
 | **File tree** | *Context* (what the AI knows about the system), *Inbox* (files you give the AI), *Activities* (each review, test design or analysis, with date and a status dot), proposed updates and activity log |
 | **Documents in tabs** | Markdown is shown formatted; **Ctrl+E** switches to editing, **Ctrl+S** saves, **Ctrl+W** closes. Word files show their text; JSON, text and images are previewed; Excel and PDF open in their own program |
 | **Side panel** | For an activity: status, current step, pending items, approvals and the files produced, plus *Continue in your AI tool*. Otherwise: project overview, **agents enabled in this project** (checkboxes) and open activities |
 | **Open in your AI tool** | Choose the activity, optionally **who should do it** (an agent), the inbox files, add a note, pick the tool: Claude Code, Codex, Gemini CLI, Antigravity CLI or Cursor Agent open in a terminal tab of the app; Cursor or VS Code open the folder with the request copied; ChatGPT / claude.ai / Gemini web get the request and the list of files to upload |
-| **Agent library** | From the start screen or the ribbon: agents by category, with their role, skills and access. **Duplicate** a built-in agent to make your own, then **Edit** and **Save** it (checked before saving) or delete it. Your agents stay in `workspace/library/agents/` |
+| **Settings** | The gear on the ribbon. Three tabs: **Agents**, **Skills** and **Documents**. |
+| **Agents** | Agents by category, with their role, skills and access. **Duplicate** a built-in agent to make your own, then **Edit** and **Save** it (checked before saving) or delete it. Create an agent for this project or for every project. Your agents stay in `workspace/library/agents/` |
+| **Skills** | **Already installed** (each skill shows where it lives), **Native and created** (the skills that come with Moki and the ones you created — this list does not create skills) and **Add a skill**. Adding a skill searches the public SkillMD registry, or **Create skill** describes one for your AI tool to draft. |
+| **Documents** | How the PDF, Word and Excel files that activities and agents generate look: font, colours, header, footer, logo and a text watermark, with a live page preview. One style for every project, or a project's own. The logo (PNG, JPEG, WebP or GIF) and the watermark go to PDF and Word; Excel keeps the header texts when printing. **Save** applies to new files. |
 
 - **Live**: files the AI writes appear in the tree as soon as they are saved.
 - **Word stories**: `.docx` files are converted to text automatically so any AI can read them.

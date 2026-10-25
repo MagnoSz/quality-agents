@@ -91,3 +91,30 @@ export const IconUsers = ({ size }: IconProps) => (
 export const IconTrash = ({ size }: IconProps) => (
   <svg {...base(size)}><path d="M4 7h16M10 11v6M14 11v6" /><path d="M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
 );
+export const IconSun = ({ size }: IconProps) => (
+  <svg {...base(size)}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4" /></svg>
+);
+export const IconMoon = ({ size }: IconProps) => (
+  <svg {...base(size)}><path d="M21 14.5A8.5 8.5 0 1 1 9.5 3 7 7 0 0 0 21 14.5z" /></svg>
+);
+export const IconSettings = ({ size }: IconProps) => (
+  <svg {...base(size)}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+);
+export const IconOpenProject = ({ size }: IconProps) => (
+  <svg {...base(size)}><path d="M3.5 17.5V6a1 1 0 0 1 1-1h4.2l2 2H17a1 1 0 0 1 1 1v2"/><path d="M3.5 18.5l2.7-7.4a1.4 1.4 0 0 1 1.3-.9H20.6a.9.9 0 0 1 .85 1.2l-2.4 6.6a1.4 1.4 0 0 1-1.3.9H4.4a.9.9 0 0 1-.9-.4Z"/></svg>
+);
+export const IconNotes = ({ size }: IconProps) => (
+  <svg {...base(size)}><path d="M5 4h14a1 1 0 0 1 1 1v9.5L14.5 20H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 20v-4.5a1 1 0 0 1 1-1h5"/><path d="M8 8.5h8M8 12h4.5"/></svg>
+);
+export const IconMcp = ({ size }: IconProps) => (
+  <svg {...base(size)}><rect x="4" y="4" width="16" height="6.5" rx="2"/><rect x="4" y="13.5" width="16" height="6.5" rx="2"/><path d="M7.5 7.25h.01M7.5 16.75h.01M11 7.25h5.5M11 16.75h5.5"/></svg>
+);
+export const IconSkill = ({ size }: IconProps) => (
+  <svg {...base(size)}><path d="M12 3c.6 4.4 2.6 6.4 7 7-4.4.6-6.4 2.6-7 7-.6-4.4-2.6-6.4-7-7 4.4-.6 6.4-2.6 7-7z"/><path d="M19 16.5v4M17 18.5h4"/></svg>
+);
+export const IconAgent = ({ size }: IconProps) => (
+  <svg {...base(size)}><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4.5"/><circle cx="12" cy="3.5" r="1"/><path d="M9 13.5v1M15 13.5v1"/><path d="M2 13v3M22 13v3"/></svg>
+);
+export const IconPin = ({ size }: IconProps) => (
+  <svg {...base(size)}><path className="pin-head" d="M10 3.5h4v5.2l2.8 3.3H7.2L10 8.7z" /><path d="M8.8 3.5h6.4M12 12v8.3" /></svg>
+);

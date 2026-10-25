@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type GlobalItems } from '../api';
 import { t } from '../i18n';
 import { IconFolder, IconPlus, IconSearch } from './Icons';
+import { SkillCat } from './SkillCat';
 
 interface Props { onFindSkills?: () => void; onCreateAgent?: () => void } // without them (start screen) the buttons are hidden
 
@@ -53,6 +54,7 @@ export function GlobalPanel({ onFindSkills, onCreateAgent }: Props) {
           {items?.skills.map((s) => (
             <li key={s.name} className="skill-card">
               <div className="skill-card-head">
+                <SkillCat name={s.name} />
                 <span className="choice-title">{s.name}</span>
                 <span className="statusbar-spacer" />
                 {actions('skill', s.name, s.linkedBy)}

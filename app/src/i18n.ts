@@ -5,22 +5,26 @@
 
 import { useSyncExternalStore } from 'react';
 import { recall, remember } from './prefs';
+import ptBR from './i18n/pt-BR.json';
 
 export type Lang = 'en' | 'pt-BR';
+
+// Inlined on purpose. A dynamic import() is a separate file, and Electron loads this
+// UI from file:// — that fetch fails, the failure was swallowed, and the app stayed
+// in English no matter which language the user picked.
+const PT_BR = ptBR as Record<string, string>;
 
 let dict: Record<string, string> | null = null;
 export let lang: Lang = 'en';
 const listeners = new Set<() => void>();
 
-// Only Portuguese loads a dictionary; English costs nothing. Anything that goes wrong
-// (storage unavailable, unknown value, dictionary not loaded) falls back to English.
-async function load(next: Lang): Promise<Lang> {
-  dict = next === 'pt-BR' ? await import('./i18n/pt-BR.json').then((m) => m.default as Record<string, string>, () => null) : null;
-  lang = dict ? 'pt-BR' : 'en';
+function apply(next: Lang): Lang {
+  dict = next === 'pt-BR' ? PT_BR : null;
+  lang = next === 'pt-BR' ? 'pt-BR' : 'en';
   document.documentElement.lang = lang;
   return lang;
 }
-await load(recall('qa-ui-language') === 'pt-BR' ? 'pt-BR' : 'en');
+apply(recall('qa-ui-language') === 'pt-BR' ? 'pt-BR' : 'en');
 
 // t('Back to {name}', { name }) — placeholders in braces are replaced after translating.
 export const t = (text: string, vars?: Record<string, string | number>): string => {
@@ -28,8 +32,8 @@ export const t = (text: string, vars?: Record<string, string | number>): string 
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 };
 
-export const setLang = async (next: Lang) => {
-  remember('qa-ui-language', await load(next));
+export const setLang = (next: Lang): void => {
+  remember('qa-ui-language', apply(next));
   listeners.forEach((l) => l());
 };
 

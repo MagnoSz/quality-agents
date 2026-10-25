@@ -57,6 +57,19 @@ export interface AgentInfo {
 export interface AgentDetail extends AgentInfo { text: string; html: string }
 export interface Category { id: string; label: string; description: string; source: 'builtin' | 'custom' }
 
+// How generated PDF, Word and Excel files look (scripts/lib/doc-style.mjs). Texts may use
+// {project}, {title}, {date}, {page}, {pages}.
+export interface DocumentStyle {
+  font: { family: string; size: number; color: string };
+  accent: string;
+  table: { header: string; headerText: string; border: string };
+  background: string;
+  header: { left: string; center: string; right: string; logo: string; logoSide: 'left' | 'right' };
+  footer: { left: string; center: string; right: string };
+  watermark: { text: string; color: string; opacity: number };
+}
+export const DOCUMENT_FONTS = ['Calibri', 'Arial', 'Segoe UI', 'Helvetica', 'Verdana', 'Tahoma', 'Georgia', 'Times New Roman', 'Cambria', 'Garamond', 'Consolas'];
+
 export interface LaunchRequest { project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string; agent?: string }
 export interface LaunchResult { opened: boolean; message?: string; copied?: boolean; prompt: string; upload?: string[]; bundleReady?: boolean; terminal?: TerminalRef }
 export interface TerminalRef { id: string; title: string }
@@ -86,6 +99,14 @@ interface Bridge {
   watch(project: string | null): Promise<boolean>;
   onChanged(callback: (project: string) => void): () => void;
   openLink(url: string): Promise<void>;
+  openNoteWindow(target: { project?: string | null; path?: string | null; loose?: string | null; theme?: string }): Promise<boolean>;
+  notesChanged(): void;
+  onNotesChanged(callback: () => void): () => void;
+  noteMax(): void;
+  showTerminal?(project: string, terminal: TerminalRef): void;
+  openInMain?(project: string, path: string): void;
+  onShowTerminal?(callback: (project: string, terminal: TerminalRef) => void): () => void;
+  onOpenInMain?(callback: (project: string, path: string) => void): () => void;
   term: {
     create(tool: string): Promise<{ terminal?: TerminalRef; error?: string }>; // tool '' = the user's shell
     start(id: string, cols: number, rows: number): Promise<string>;
@@ -119,6 +140,8 @@ export const api = {
   readFile: (project: string, path: string) => call<FileContent>('readFile', project, path),
   writeFile: (project: string, path: string, text: string) => call<FileContent>('writeFile', project, path, text),
   renderMarkdown: (text: string) => call<string>('renderMarkdown', text),
+  documentStyle: (project?: string | null) => call<{ global: DocumentStyle; project: DocumentStyle | null }>('documentStyle', project ?? null),
+  saveDocumentStyle: (project: string | null, style: DocumentStyle | null) => call<boolean>('saveDocumentStyle', project, style),
   createNote: (project: string, title: string, text: string) => call<string>('createNote', project, title, text),
   run: (project: string, runId: string) => call<RunState>('run', project, runId),
   inbox: (project: string) => call<InboxFile[]>('inbox', project),
@@ -157,6 +180,8 @@ export const api = {
   watch: (project: string | null) => window.qa?.watch(project ?? '') ?? Promise.resolve(false),
   onChanged: (cb: (project: string) => void) => window.qa?.onChanged(cb) ?? (() => {}),
   openLink: (url: string) => window.qa?.openLink(url),
+  openNoteWindow: (target: { project?: string | null; path?: string | null; loose?: string | null }) => window.qa?.openNoteWindow({ ...target, theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark' }) ?? Promise.resolve(false),
+  onNotesChanged: (cb: () => void) => window.qa?.onNotesChanged(cb) ?? (() => {}),
   // Embedded terminals (desktop/terminals.ts); only available inside the app.
   term: () => window.qa?.term ?? null,
 };

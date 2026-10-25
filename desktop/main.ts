@@ -3,7 +3,7 @@
 // the embedded terminals, and watches the open project folder so files written
 // by the AI tools appear live.
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { existsSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,10 +38,79 @@ const METHODS = new Set(Object.keys(service));
 
 let win: BrowserWindow | null = null;
 let watcher: FSWatcher | null = null;
+const noteWindows = new Map<string, BrowserWindow>();
+
+function isNoteWindow(contents: WebContents): boolean {
+  for (const note of noteWindows.values()) if (!note.isDestroyed() && note.webContents === contents) return true;
+  return false;
+}
 
 // Only our own UI (loaded from app/dist) may call the service.
 function trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
-  return Boolean(event.senderFrame?.url.startsWith('file://')) && event.sender === win?.webContents;
+  return Boolean(event.senderFrame?.url.startsWith('file://')) && (event.sender === win?.webContents || isNoteWindow(event.sender));
+}
+
+interface NoteRequest { project: string | null; path: string | null; loose: string | null; theme: 'light' | 'dark' }
+
+function parseNoteRequest(raw: unknown): NoteRequest | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const project = typeof r.project === 'string' && r.project ? r.project : null;
+  const path = typeof r.path === 'string' && r.path ? r.path : null;
+  const loose = typeof r.loose === 'string' && r.loose ? r.loose : null;
+  if (project && !listProjects(ROOT).includes(project)) return null;
+  if (path && !/^notes\/[^/]+\.md$/.test(path)) return null;
+  if (loose && loose !== 'new' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(loose)) return null;
+  if (path && !project) return null;
+  if (project && loose) return null;
+  if (!project && !loose) return null;
+  return { project, path, loose, theme: r.theme === 'light' ? 'light' : 'dark' };
+}
+
+// A note is its own window, so it can be dragged past the main window onto the desktop.
+function openNoteWindow(target: NoteRequest): void {
+  const key = target.loose && target.loose !== 'new' ? `loose:${target.loose}` : target.project && target.path ? `file:${target.project}:${target.path}` : '';
+  const existing = key ? noteWindows.get(key) : undefined;
+  if (existing && !existing.isDestroyed()) { existing.focus(); return; }
+  const width = 760;
+  const height = 640;
+  const anchor = win?.getBounds() ?? screen.getPrimaryDisplay().workArea;
+  const area = screen.getDisplayMatching(anchor).workArea;
+  const offset = noteWindows.size * 28;
+  const x = Math.min(Math.max(Math.round(anchor.x + (anchor.width - width) / 2) + offset, area.x), area.x + area.width - width);
+  const y = Math.min(Math.max(Math.round(anchor.y + 48) + offset, area.y), area.y + area.height - height);
+  const note = new BrowserWindow({
+    width, height, x, y, minWidth: 440, minHeight: 360,
+    title: 'Moki',
+    frame: false,
+    thickFrame: true,
+    backgroundColor: target.theme === 'light' ? '#fbf8f1' : '#1c1b19',
+    icon: existsSync(ICON) ? ICON : undefined,
+    autoHideMenuBar: true,
+    show: false,
+    webPreferences: {
+      preload: join(DIST, 'preload.cjs'),
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webSecurity: true,
+      spellcheck: true,
+    },
+  });
+  const id = key || `new:${Date.now()}:${note.id}`;
+  noteWindows.set(id, note);
+  note.once('ready-to-show', () => note.show());
+  note.on('closed', () => noteWindows.delete(id));
+  const query: Record<string, string> = { view: 'note' };
+  if (target.project) query.project = target.project;
+  if (target.path) query.path = target.path;
+  if (target.loose) query.loose = target.loose;
+  void note.loadFile(join(UI, 'index.html'), { query });
+  note.webContents.on('will-navigate', (e) => e.preventDefault());
+  note.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    return { action: 'deny' };
+  });
 }
 
 function createWindow(): void {
@@ -90,7 +159,14 @@ function createWindow(): void {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
-  win.on('closed', () => { win = null; watcher?.close(); watcher = null; terminals.killAll(); });
+  win.on('closed', () => {
+    win = null;
+    for (const note of noteWindows.values()) if (!note.isDestroyed()) note.close();
+    noteWindows.clear();
+    watcher?.close();
+    watcher = null;
+    terminals.killAll();
+  });
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -160,6 +236,34 @@ if (!app.requestSingleInstanceLock()) {
 
     ipcMain.handle('qa:open-link', (event, url: unknown) => {
       if (trusted(event) && typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url);
+    });
+
+    ipcMain.handle('qa:note-window', (event, raw: unknown) => {
+      if (event.sender !== win?.webContents || !trusted(event)) return false;
+      const target = parseNoteRequest(raw);
+      if (!target) return false;
+      openNoteWindow(target);
+      return true;
+    });
+    ipcMain.on('qa:notes-changed', (event) => { if (trusted(event)) win?.webContents.send('qa:notes-changed'); });
+    // A note window asks the main window to show a terminal it started, or a file it mentions.
+    const fromNote = (event: IpcMainEvent, project: unknown): project is string =>
+      trusted(event) && isNoteWindow(event.sender) && typeof project === 'string' && listProjects(ROOT).includes(project);
+    const toFront = () => { if (!win) return; if (win.isMinimized()) win.restore(); win.focus(); };
+    ipcMain.on('qa:show-terminal', (event, project: unknown, id: unknown, title: unknown) => {
+      if (!fromNote(event, project) || typeof id !== 'string' || !/^[\w-]{1,80}$/.test(id) || typeof title !== 'string') return;
+      win?.webContents.send('qa:show-terminal', project, { id, title: title.slice(0, 120) });
+      toFront();
+    });
+    ipcMain.on('qa:open-in-main', (event, project: unknown, path: unknown) => {
+      if (!fromNote(event, project) || typeof path !== 'string' || path.length > 400 || path.startsWith('/') || path.split(/[\\/]/).includes('..')) return;
+      win?.webContents.send('qa:open-in-main', project, path);
+      toFront();
+    });
+    ipcMain.on('qa:note-max', (event) => {
+      const note = BrowserWindow.fromWebContents(event.sender);
+      if (!note || !isNoteWindow(event.sender)) return;
+      if (note.isMaximized()) note.unmaximize(); else note.maximize();
     });
 
     createWindow();

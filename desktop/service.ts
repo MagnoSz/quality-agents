@@ -14,6 +14,7 @@ import { CATEGORIES, MAX_PAGE, installSkill, searchSkills } from './skill-regist
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
 import { readableInputs, docxToMarkdown } from '../scripts/lib/docx.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
+import { STYLE_FILE, normalizeStyle } from '../scripts/lib/doc-style.mjs';
 import { xlsxSheets } from '../scripts/xlsx.mjs';
 import { cleanPrompt, type LaunchResult } from './launcher.ts';
 import { isEditable, isOpenable, PathError, resolveInside } from './fs-guard.ts';
@@ -443,6 +444,26 @@ export function createService(root: string, deps: Deps) {
 
     // Preview of unsaved Markdown (the note popup); same renderer as readFile.
     renderMarkdown: (text: unknown) => markdownToHtml(typeof text === 'string' ? text.slice(0, TEXT_LIMIT) : ''),
+
+    // Document style (Settings › Documents): how the PDF, Word and Excel files the activities
+    // generate look. One for all projects (workspace/) and, optionally, one per project.
+    documentStyle: (project?: unknown) => {
+      const read = (file: string): unknown => { try { return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null; } catch { return null; } };
+      const global = normalizeStyle(read(join(root, 'workspace', STYLE_FILE)));
+      if (project == null || project === '') return { global, project: null };
+      const own = read(join(projectDir(project), STYLE_FILE));
+      return { global, project: own ? normalizeStyle(own, global) : null };
+    },
+    // style null: for a project, go back to the style for all projects; for all projects, the defaults.
+    saveDocumentStyle: (project: unknown, style: unknown) => {
+      const dir = project == null || project === '' ? join(root, 'workspace') : projectDir(project);
+      const file = join(dir, STYLE_FILE);
+      if (style == null) { rmSync(file, { force: true }); return true; }
+      if (typeof style !== 'object' || JSON.stringify(style).length > 1_000_000) throw new ServiceError('Invalid document style.');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(file, `${JSON.stringify(normalizeStyle(style), null, 2)}\n`, 'utf8');
+      return true;
+    },
 
     // A new note: notes/<title slug>.md, numbered when the name is taken. Returns its path.
     createNote: (project: string, title: unknown, text: unknown) => {

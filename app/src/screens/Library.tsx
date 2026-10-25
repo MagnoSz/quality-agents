@@ -1,13 +1,32 @@
 // Agent library: built-in agents (read-only) and the user's own agents, by
 // category. A built-in agent is customized by duplicating it; the copy lives in
-// workspace/library/agents/ and can be edited or deleted.
+// workspace/library/agents/ and can be edited or deleted. Agents created for a
+// project or for every project are listed under those headings.
 
-import { useCallback, useEffect, useState } from 'react';
-import { api, type AgentDetail, type AgentInfo, type Category } from '../api';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { api, type AgentDetail, type AgentInfo, type Category, type ProjectSummary } from '../api';
 import { t } from '../i18n';
-import { IconCopy, IconEdit, IconEye, IconHome, IconTrash, IconX } from '../components/Icons';
+import { IconCopy, IconEdit, IconEye, IconFolder, IconHome, IconTrash, IconX } from '../components/Icons';
+import { AddButton } from '../components/AddButton';
 
-interface Props { onBack: () => void; backLabel: string }
+interface ScopeAgent { name: string; description: string }
+type Sel = { kind: 'library' | 'project' | 'global'; name: string };
+
+interface Props {
+  onBack: () => void;
+  backLabel: string;
+  embedded?: boolean;
+  /** Yellow plus in the list. Opens the create-agent form in this tab. */
+  onCreate?: () => void;
+  creating?: boolean;
+  /** Called when an agent in the list is chosen, so the form can close. */
+  onBrowse?: () => void;
+  create?: ReactNode;
+  /** Project whose installed agents are listed beside the library. */
+  project?: ProjectSummary | null;
+  /** Bumped after an agent is created, so that list reloads. */
+  installedTick?: number;
+}
 
 export const accessLabel = (access: string): string => ({
   'read-only': t('Reads only — writes nothing'),
@@ -17,11 +36,13 @@ export const accessLabel = (access: string): string => ({
 
 const statusText = (status: string): string => ({ stable: t('Stable'), draft: t('Draft'), 'pending-migration': t('Pending migration'), planned: t('Planned') } as Record<string, string>)[status] ?? status;
 
-export function Library({ onBack, backLabel }: Props) {
+export function Library({ onBack, backLabel, embedded = false, onCreate, creating = false, onBrowse, create, project = null, installedTick = 0 }: Props) {
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [sel, setSel] = useState<Sel | null>(null);
   const [detail, setDetail] = useState<AgentDetail | null>(null);
+  const [projectAgents, setProjectAgents] = useState<ScopeAgent[]>([]);
+  const [globalAgents, setGlobalAgents] = useState<ScopeAgent[]>([]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
@@ -31,22 +52,38 @@ export function Library({ onBack, backLabel }: Props) {
     const [list, cats] = await Promise.all([api.agents(), api.categories()]);
     setAgents(list);
     setCategories(cats);
-    setSelected((cur) => select ?? (cur && list.some((a) => a.name === cur) ? cur : (list.find((a) => a.usable) ?? list[0])?.name ?? null));
+    setSel((cur) => {
+      if (select) return { kind: 'library', name: select };
+      if (cur?.kind === 'library' && list.some((a) => a.name === cur.name)) return cur;
+      if (cur && cur.kind !== 'library') return cur;
+      const name = (list.find((a) => a.usable) ?? list[0])?.name;
+      return name ? { kind: 'library', name } : null;
+    });
   }, []);
 
-  useEffect(() => { load().catch((e: Error) => setError(e.message)); }, [load]);
+  const loadInstalled = useCallback(() => {
+    const local = project ? api.projectItems(project.id).then((items) => items.agents) : Promise.resolve([]);
+    Promise.all([local, api.globalItems().then((items) => items.agents)])
+      .then(([localAgents, global]) => { setProjectAgents(localAgents); setGlobalAgents(global); })
+      .catch((e: Error) => setError(e.message));
+  }, [project]);
 
+  useEffect(() => { load().catch((e: Error) => setError(e.message)); }, [load]);
+  useEffect(() => { loadInstalled(); }, [loadInstalled, installedTick]);
+
+  const libraryName = sel?.kind === 'library' ? sel.name : null;
   useEffect(() => {
     setEditing(false);
-    if (!selected) { setDetail(null); return; }
-    api.agent(selected).then((d) => { setDetail(d); setDraft(d.text); }).catch((e: Error) => setError(e.message));
-  }, [selected]);
+    if (!libraryName) { setDetail(null); return; }
+    api.agent(libraryName).then((d) => { setDetail(d); setDraft(d.text); }).catch((e: Error) => setError(e.message));
+  }, [libraryName]);
 
   const dirty = editing && detail !== null && draft !== detail.text;
-  const choose = (name: string) => {
+  const choose = (next: Sel) => {
     if (dirty && !window.confirm(t('Discard unsaved changes?'))) return;
     setError('');
-    setSelected(name);
+    setSel(next);
+    if (creating) onBrowse?.();
   };
 
   const run = async (action: () => Promise<void>) => {
@@ -76,10 +113,29 @@ export function Library({ onBack, backLabel }: Props) {
 
   const leave = () => { if (!dirty || window.confirm(t('Discard unsaved changes?'))) onBack(); };
 
+  const scopeAgent = sel?.kind === 'project' ? projectAgents.find((a) => a.name === sel.name)
+    : sel?.kind === 'global' ? globalAgents.find((a) => a.name === sel.name) : undefined;
+
+  const removeScope = () => run(async () => {
+    if (!sel || sel.kind === 'library' || !scopeAgent) return;
+    if (sel.kind === 'project' && project) {
+      const where = project.repository
+        ? t("the repository {folder}?\n\nThis CHANGES its .claude (the current .claude is backed up to the project's backups/ first).", { folder: project.repository })
+        : t('the project {name}?', { name: project.name });
+      if (!window.confirm(`${t('Remove the agent "{name}" from', { name: sel.name })} ${where} ${t('It goes to the trash.')}`)) return;
+      await api.removeProjectItem(project.id, 'agent', sel.name, Boolean(project.repository));
+    } else {
+      if (!window.confirm(t('Remove the agent "{name}" from all projects? It goes to the trash.', { name: sel.name }))) return;
+      await api.removeGlobal('agent', sel.name);
+    }
+    setSel(agents[0] ? { kind: 'library', name: agents[0].name } : null);
+    loadInstalled();
+  });
+
   return (
     <div className="library">
       <aside className="home-list">
-        <button type="button" className="btn btn-ghost btn-sm library-back" onClick={leave}><IconHome size={15} /> {backLabel}</button>
+        {!embedded && <button type="button" className="btn btn-ghost btn-sm library-back" onClick={leave}><IconHome size={15} /> {backLabel}</button>}
         <div className="home-list-head">{t('Agents')}</div>
         {categories.map((c) => {
           const group = agents.filter((a) => a.category === c.id);
@@ -90,7 +146,7 @@ export function Library({ onBack, backLabel }: Props) {
               <ul>
                 {group.map((a) => (
                   <li key={a.name}>
-                    <button type="button" className={`library-item${a.name === selected ? ' active' : ''}`} onClick={() => choose(a.name)}>
+                    <button type="button" className={`library-item${sel?.kind === 'library' && a.name === sel.name ? ' active' : ''}`} onClick={() => choose({ kind: 'library', name: a.name })}>
                       <span className={`dot ${a.usable ? 'dot-ok' : 'dot-muted'}`} title={statusText(a.status)} />
                       <span className="library-item-name">{a.name}</span>
                       {a.source === 'custom' && <span className="chip">{t('yours')}</span>}
@@ -101,11 +157,47 @@ export function Library({ onBack, backLabel }: Props) {
             </section>
           );
         })}
+        {([
+          ['project', project?.name ?? t('This project'), projectAgents],
+          ['global', t('All projects'), globalAgents],
+        ] as const).map(([kind, label, group]) => group.length > 0 && (
+          <section key={kind} className="library-group">
+            <div className="library-group-head">{label}</div>
+            <ul>
+              {group.map((a) => (
+                <li key={a.name}>
+                  <button type="button" className={`library-item${sel?.kind === kind && a.name === sel.name ? ' active' : ''}`} onClick={() => choose({ kind, name: a.name })}>
+                    <span className="dot dot-ok" />
+                    <span className="library-item-name">{a.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </aside>
 
       <main className="library-main">
         {error && <div className="error-bar">{error}<button type="button" className="icon-btn" onClick={() => setError('')}><IconX size={14} /></button></div>}
-        {!detail ? <div className="welcome"><p className="muted">{t('No agents found.')}</p></div> : (
+        {creating && create ? <div className="library-detail library-create">{create}</div>
+          : sel && sel.kind !== 'library' && scopeAgent ? (
+            <div className="library-detail">
+              <header className="library-head">
+                <div>
+                  <h1>{scopeAgent.name}</h1>
+                  {scopeAgent.description && <p className="muted">{scopeAgent.description}</p>}
+                </div>
+                <div className="row-actions">
+                  {onCreate && <AddButton title={t('Create agent')} pressed={creating} onClick={onCreate} />}
+                  {sel.kind === 'global' && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => { api.openGlobal('agent', scopeAgent.name).catch((e: Error) => setError(e.message)); }} title={t('Open the agent file')}><IconFolder size={15} /> {t('Open')}</button>
+                  )}
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { void removeScope(); }}>{busy ? t('Removing…') : t('Remove')}</button>
+                </div>
+              </header>
+              <p className="muted small">{sel.kind === 'project' ? t('Installed for this project.') : t('Installed for all projects.')}</p>
+            </div>
+          ) : !detail ? <div className="welcome"><p className="muted">{t('No agents found.')}</p></div> : (
           <div className="library-detail">
             <header className="library-head">
               <div>
@@ -114,6 +206,9 @@ export function Library({ onBack, backLabel }: Props) {
               </div>
               <div className="row-actions">
                 <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { void duplicate(); }} title={t('Copy to your library to customize it')}><IconCopy size={15} /> {t('Duplicate')}</button>
+                {onCreate && (
+                  <AddButton title={t('Create agent')} pressed={creating} onClick={onCreate} />
+                )}
                 {detail.source === 'custom' && !editing && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}><IconEdit size={15} /> {t('Edit')}</button>}
                 {detail.source === 'custom' && editing && <>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDraft(detail.text); setEditing(false); }}><IconEye size={15} /> {t('Cancel')}</button>

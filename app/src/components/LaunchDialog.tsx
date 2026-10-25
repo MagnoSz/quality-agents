@@ -6,11 +6,12 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, describeRun, type ActivityInfo, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type TerminalRef, type ToolInfo, type ToolKind } from '../api';
 import { conversationLanguage, t } from '../i18n';
 import { IconCheck, IconCode, IconCopy, IconFile, IconFolder, IconGlobe, IconPlay, IconRefresh, IconTerminal, IconX } from './Icons';
+import { FileIcon } from '../icons';
 
 interface Props {
   project: ProjectSummary;
   tools: ToolInfo[];
-  preset?: { activity: string; run?: string };
+  preset?: { activity: string; run?: string; skipActivity?: boolean }; // skipActivity: the activity was already chosen (side panel)
   onClose: () => void;
   onTerminal: (terminal: TerminalRef) => void; // the tool opened in a terminal tab of the app
 }
@@ -46,7 +47,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
     const saved = recall('qa-tool');
     return tools.some((t) => t.id === saved && t.available) ? saved as string : '';
   });
-  const [step, setStep] = useState<StepKey>(preset?.activity === 'resume' && preset.run ? 'details' : 'activity');
+  const [step, setStep] = useState<StepKey>(preset?.activity === 'resume' && preset.run ? 'details' : preset?.skipActivity && preset.activity ? 'files' : 'activity');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<LaunchResult | null>(null);
   const [error, setError] = useState('');
@@ -179,7 +180,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
                     <li key={f.name}>
                       <label className={files.includes(f.name) ? 'on' : ''}>
                         <input type="checkbox" checked={files.includes(f.name)} onChange={() => setFiles((s) => (s.includes(f.name) ? s.filter((x) => x !== f.name) : [...s, f.name]))} />
-                        <IconFile size={15} />
+                        <FileIcon name={f.name} size={16} />
                         <span className="file-name">{f.name}</span>
                         <span className="muted small">{formatSize(f.size)}</span>
                       </label>

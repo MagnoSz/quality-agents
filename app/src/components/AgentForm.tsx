@@ -7,7 +7,7 @@ import { api, type ProjectSummary, type ScopeAgents, type SkillScope } from '../
 import { t } from '../i18n';
 import { IconCheck, IconInfo } from './Icons';
 
-interface Props { project: ProjectSummary; scope: SkillScope; onFindSkills: () => void }
+interface Props { project: ProjectSummary; scope: SkillScope; onFindSkills: () => void; onCreated?: () => void }
 
 // @name preceded by a space or the start of a line (not e-mail addresses); a trailing "." ends the sentence.
 const mentionsIn = (text: string): string[] =>
@@ -17,7 +17,7 @@ const typedMention = (text: string, caret: number) => text.slice(0, caret).match
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export function AgentForm({ project, scope, onFindSkills }: Props) {
+export function AgentForm({ project, scope, onFindSkills, onCreated }: Props) {
   const [data, setData] = useState<ScopeAgents | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -85,6 +85,7 @@ export function AgentForm({ project, scope, onFindSkills }: Props) {
       setCreated(await api.createScopeAgent(project.id, { name, description, skills: chosen, scope }, toClaude));
       setName(''); setDescription(''); setPicked([]);
       load();
+      onCreated?.();
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
 

@@ -78,7 +78,9 @@ export function markdownToHtml(md) {
         const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
         while (stack.length > depth + 1 || (depth === 0 && stack.length && stack[0] !== tag)) html.push(`</li></${stack.pop()}>`);
         if (stack.length === depth) { html.push(`<${tag}><li>`); stack.push(tag); } else html.push('</li><li>');
-        html.push(inline(m[3]));
+        // "- [ ] item" / "- [x] item": a checklist item (the box is drawn, not editable here).
+        const task = m[3].match(/^\[([ xX])\]\s+(.*)$/);
+        html.push(task ? `<input type="checkbox" class="task" disabled${task[1] === ' ' ? '' : ' checked'}> ${inline(task[2])}` : inline(m[3]));
         i++;
       }
       while (stack.length) html.push(`</li></${stack.pop()}>`);

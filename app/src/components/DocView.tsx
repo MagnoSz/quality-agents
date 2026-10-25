@@ -1,7 +1,8 @@
-import { useState, type CSSProperties, type MouseEvent } from 'react';
-import type { FileContent } from '../api';
+import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react';
+import { api, type FileContent } from '../api';
 import { t } from '../i18n';
-import { IconEdit, IconExternal, IconEye, IconFile } from './Icons';
+import { IconEdit, IconExternal, IconEye } from './Icons';
+import { FileIcon } from '../icons';
 
 interface Props {
   content: FileContent;
@@ -100,6 +101,17 @@ const formatSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1
 export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, onSave, onOpenExternal, onLink }: Props) {
   const editable = (content.kind === 'markdown' || content.kind === 'text') && content.editable;
   const crumbs = content.path.split('/');
+  const savedHtml = content.kind === 'markdown' ? content.html : '';
+  const [html, setHtml] = useState(savedHtml);
+
+  // The formatted view follows the text on screen, including edits not saved yet.
+  useEffect(() => {
+    if (content.kind !== 'markdown' || mode !== 'preview') return;
+    if (draft === content.text) { setHtml(content.html); return; }
+    let cancel = false;
+    api.renderMarkdown(draft).then((next) => { if (!cancel) setHtml(next); }).catch(() => { if (!cancel) setHtml(content.html); });
+    return () => { cancel = true; };
+  }, [content, draft, mode]);
 
   // Links inside rendered Markdown never navigate the window.
   const onClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -117,11 +129,11 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
           {crumbs.map((c, i) => <span key={`${c}-${i}`} className={i === crumbs.length - 1 ? 'crumb-last' : ''}>{c}</span>)}
         </div>
         <div className="doc-actions">
-          {editable && mode === 'preview' && content.kind === 'markdown' && (
-            <button type="button" className="icon-btn" onClick={() => onMode('edit')} title={t('Edit (Ctrl+E)')}><IconEdit size={17} /></button>
-          )}
-          {editable && mode === 'edit' && content.kind === 'markdown' && (
-            <button type="button" className="icon-btn" onClick={() => onMode('preview')} title={t('Reading view (Ctrl+E)')}><IconEye size={17} /></button>
+          {content.kind === 'markdown' && (
+            <div className="view-toggle" role="group" aria-label={t('Markdown view')}>
+              <button type="button" className={mode === 'preview' ? 'on' : ''} aria-pressed={mode === 'preview'} onClick={() => onMode('preview')} title={t('Reading view (Ctrl+E)')} aria-label={t('Reading view (Ctrl+E)')}><IconEye size={16} /></button>
+              <button type="button" className={mode === 'edit' ? 'on' : ''} aria-pressed={mode === 'edit'} onClick={() => onMode('edit')} title={t('Edit (Ctrl+E)')} aria-label={t('Edit (Ctrl+E)')}><IconEdit size={15} /></button>
+            </div>
           )}
           {editable && (dirty || saving) && (
             <button type="button" className="btn btn-sm" onClick={onSave} disabled={saving}>{saving ? t('Saving…') : t('Save')}</button>
@@ -133,7 +145,7 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
       <div className="doc-body">
         {content.kind === 'markdown' && mode === 'preview' && (
           // HTML comes from the main process renderer, which escapes all markup from the file.
-          <div className="markdown" onClick={onClick} dangerouslySetInnerHTML={{ __html: content.html }} />
+          <div className="markdown" onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
         )}
         {(content.kind === 'markdown' || content.kind === 'text') && (mode === 'edit' || content.kind === 'text') && (
           content.editable
@@ -151,7 +163,7 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
         {content.kind === 'image' && <div className="image-view"><img src={content.dataUrl} alt={content.path} /></div>}
         {content.kind === 'binary' && (
           <div className="binary-view">
-            <IconFile size={40} />
+            <FileIcon name={content.path} size={40} />
             <strong>{crumbs[crumbs.length - 1]}</strong>
             <span className="muted small">{formatSize(content.size)}{content.reason ? ` · ${content.reason}` : ''}</span>
             {content.openable

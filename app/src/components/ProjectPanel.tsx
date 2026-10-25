@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type ProjectItems, type ProjectSummary } from '../api';
 import { t } from '../i18n';
+import { SkillCat } from './SkillCat';
 
 interface Props { project: ProjectSummary }
 
@@ -40,6 +41,7 @@ export function ProjectPanel({ project }: Props) {
         {list?.map((s) => (
           <li key={s.name} className="skill-card">
             <div className="skill-card-head">
+              {kind === 'skill' && <SkillCat name={s.name} />}
               <span className="choice-title">{s.name}</span>
               <span className="statusbar-spacer" />
               <button type="button" className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={() => { void remove(kind, s.name); }}>

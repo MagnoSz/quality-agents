@@ -2,7 +2,9 @@
 // allowed values) so every AI tool produces the same file. No dependencies.
 //
 // Usage:
-//   node scripts/xlsx.mjs write --layout <layout.json> --data <data.json> --out <file.xlsx> [--lang en|pt-BR]  (default en)
+//   node scripts/xlsx.mjs write --layout <layout.json> --data <data.json> --out <file.xlsx> [--lang en|pt-BR] [--style <document-style.json>]  (default en)
+//   The project's document style (scripts/lib/doc-style.mjs) sets the font, the header row colours
+//   and the printed header and footer. Excel has no real watermark or page colour.
 //   node scripts/xlsx.mjs read <file.xlsx> --layout <layout.json> [--out <data.json>]
 //   node scripts/xlsx.mjs fill --template <model.xlsx> --data <rows.json> --out <file.xlsx> [--sheet <name>]
 //   node scripts/xlsx.mjs inspect <file.xlsx>      (first rows of every sheet, to read a model's headers)
@@ -15,6 +17,7 @@ import { pathToFileURL } from 'node:url';
 import { zip, unzip } from './lib/zip.mjs';
 import { parseArgs } from './lib/repo.mjs';
 import { BUILTIN_FORMATS, formatNumber } from './lib/numfmt.mjs';
+import { DEFAULT_STYLE, fillVars, hasFooter, hasHeader, styleFor } from './lib/doc-style.mjs';
 
 const esc = (s) => String(s)
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -38,7 +41,17 @@ function colIndex(letters) {
 
 const label = (obj, lang) => obj[lang] ?? obj.en ?? Object.values(obj)[0];
 
-export function buildXlsx(layout, data, lang = 'en') {
+// Printed header/footer codes: &L &C &R zones, &P page, &N pages; a literal & is &&.
+const hfZone = (value, vars) => fillVars(value, vars).replace(/&/g, '&&').replace(/\{page\}/g, '&P').replace(/\{pages\}/g, '&N');
+const headerFooter = (style, vars) => {
+  const part = (z) => `&L${hfZone(z.left, vars)}&C${hfZone(z.center, vars)}&R${hfZone(z.right, vars)}`;
+  const head = hasHeader(style) && (style.header.left || style.header.center || style.header.right) ? `<oddHeader>${esc(part(style.header))}</oddHeader>` : '';
+  const foot = hasFooter(style) ? `<oddFooter>${esc(part(style.footer))}</oddFooter>` : '';
+  return head || foot ? `<pageMargins left="0.5" right="0.5" top="0.9" bottom="0.8" header="0.3" footer="0.3"/><headerFooter>${head}${foot}</headerFooter>` : '';
+};
+const argb = (c) => `FF${c.replace('#', '').toUpperCase()}`;
+
+export function buildXlsx(layout, data, lang = 'en', { style = DEFAULT_STYLE, vars = {} } = {}) {
   const files = [];
   const sheetEntries = layout.sheets.map((sheet, i) => {
     const rows = data[sheet.key] || [];
@@ -60,6 +73,7 @@ export function buildXlsx(layout, data, lang = 'en') {
       + `<sheetData>${header}${body}</sheetData>`
       + `<autoFilter ref="A1:${lastCol}${lastRow}"/>`
       + (validations.length ? `<dataValidations count="${validations.length}">${validations.join('')}</dataValidations>` : '')
+      + headerFooter(style, { ...vars, title: vars.title || label(sheet.title, lang) })
       + '</worksheet>';
     files.push([`xl/worksheets/sheet${i + 1}.xml`, xml]);
     const title = label(sheet.title, lang).slice(0, 31);
@@ -79,9 +93,9 @@ export function buildXlsx(layout, data, lang = 'en') {
     + '</Relationships>';
   const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     + '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-    + '<fonts count="2"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>'
-    + '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill></fills>'
-    + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom><diagonal/></border></borders>'
+    + `<fonts count="2"><font><sz val="${style.font.size === DEFAULT_STYLE.font.size ? 10 : style.font.size}"/><color rgb="${argb(style.font.color)}"/><name val="${esc(style.font.family)}"/></font><font><b/><sz val="${style.font.size === DEFAULT_STYLE.font.size ? 10 : style.font.size}"/><color rgb="${argb(style.table.headerText)}"/><name val="${esc(style.font.family)}"/></font></fonts>`
+    + `<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="${argb(style.table.header)}"/><bgColor indexed="64"/></patternFill></fill></fills>`
+    + `<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border>${['left', 'right', 'top', 'bottom'].map((side) => `<${side} style="thin"><color rgb="${argb(style.table.border)}"/></${side}>`).join('')}<diagonal/></border></borders>`
     + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
     + '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
     + '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
@@ -336,7 +350,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const problems = checkValues(layout, data);
     problems.forEach((p) => console.warn(`warning: ${p}`));
     mkdirSync(dirname(args.out), { recursive: true });
-    writeFileSync(args.out, buildXlsx(layout, data, args.lang || 'en'));
+    writeFileSync(args.out, buildXlsx(layout, data, args.lang || 'en', styleFor(args.out, { styleFile: args.style })));
     console.log(`Wrote ${args.out}`);
   } else if (command === 'read') {
     if (!input) fail('Usage: read <file.xlsx> --layout <layout.json> [--out <data.json>]');

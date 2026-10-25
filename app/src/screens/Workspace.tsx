@@ -5,17 +5,21 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { api, type FileContent, type ProjectSummary, type TerminalRef, type ToolInfo, type TreeNode } from '../api';
 import { t } from '../i18n';
+import { recall, remember } from '../prefs';
 import { DocView } from '../components/DocView';
 import { FileTree } from '../components/FileTree';
 import { LaunchDialog } from '../components/LaunchDialog';
 import { NoteDialog } from '../components/NoteDialog';
 import { SidePanel } from '../components/SidePanel';
 import { SetupDialog } from '../components/SetupDialog';
-import { SkillsDialog } from '../components/SkillsDialog';
 import { TerminalView } from '../components/TerminalView';
-import { IconBox, IconFolder, IconHome, IconLink, IconPanel, IconPlay, IconPlus, IconRefresh, IconTerminal, IconUsers, IconX } from '../components/Icons';
+import { IconPlay, IconTerminal, IconX } from '../components/Icons';
+import { AddButton } from '../components/AddButton';
+import { FileIcon } from '../icons';
+import { Ribbon } from '../components/Ribbon';
+import { Settings, type SettingsTab } from './Settings';
 
-interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; onLibrary: () => void; onProjectChanged: () => void; launchOnOpen?: boolean; startSetup?: boolean; startNotice?: string }
+interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; settings: SettingsTab | null; onSettings: (tab: SettingsTab | null) => void; onProjectChanged: () => void; launchOnOpen?: boolean; startSetup?: boolean; startNotice?: string; pendingTerminal?: TerminalRef | null; onPendingTerminal?: () => void; pendingPath?: string | null; onPendingPath?: () => void }
 
 interface Tab { path: string; content: FileContent; draft: string; mode: 'preview' | 'edit'; saving: boolean }
 interface TermTab extends TerminalRef { running: boolean }
@@ -39,19 +43,21 @@ export const linkedNotice = (r: ProjectSummary & { backup?: string }): string =>
   ? t('Linked {folder}. Its AI settings were backed up to {backup}', { folder: r.repository, backup: r.backup })
   : t('Linked {folder}. It has no AI settings (.claude, AGENTS.md…) to back up.', { folder: r.repository }));
 
-export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged, launchOnOpen = false, startSetup = false, startNotice = '' }: Props) {
+export function Workspace({ project, tools, onHome, settings, onSettings, onProjectChanged, launchOnOpen = false, startSetup = false, startNotice = '', pendingTerminal = null, onPendingTerminal, pendingPath = null, onPendingPath }: Props) {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(DEFAULT_EXPANDED));
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [active, setActive] = useState<string | null>(null);
-  const [showPanel, setShowPanel] = useState(true);
-  const [launch, setLaunch] = useState<{ activity: string; run?: string } | null>(launchOnOpen ? { activity: 'open' } : null);
+  // The right panel is open or collapsed to a thin rail; the choice is remembered.
+  const [panelRail, setPanelRail] = useState(() => recall('qa-panel') === 'rail');
+  const togglePanel = () => setPanelRail((v) => { remember('qa-panel', v ? 'open' : 'rail'); return !v; });
+  const [launch, setLaunch] = useState<{ activity: string; run?: string; skipActivity?: boolean } | null>(launchOnOpen ? { activity: 'open' } : null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(startNotice);
   const [terms, setTerms] = useState<TermTab[]>([]);
   const [activeTerm, setActiveTerm] = useState<string | null>(null);
-  const [showSkills, setShowSkills] = useState(false);
+  const openedTerm = useRef<string | null>(null);
   const [showSetup, setShowSetup] = useState(startSetup); // after creating the project or linking a folder
   const [note, setNote] = useState<{ path: string | null } | null>(null); // open note popup; path null = new note
   const [termMenu, setTermMenu] = useState<{ left: number; top: number } | null>(null);
@@ -114,7 +120,22 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
     });
   }, []);
 
-  const addTerminal = useCallback((t: TerminalRef) => { setTerms((all) => [...all, { ...t, running: true }]); setActiveTerm(t.id); }, []);
+  const addTerminal = useCallback((t: TerminalRef) => { setTerms((all) => (all.some((x) => x.id === t.id) ? all : [...all, { ...t, running: true }])); setActiveTerm(t.id); }, []);
+
+  // A skill draft started in Settings opens here, once, when this project comes back.
+  useEffect(() => {
+    if (!pendingTerminal || openedTerm.current === pendingTerminal.id) return;
+    openedTerm.current = pendingTerminal.id;
+    addTerminal(pendingTerminal);
+    onPendingTerminal?.();
+  }, [pendingTerminal, addTerminal, onPendingTerminal]);
+
+  // A file a note window mentions (clicked in its reading view) opens here.
+  useEffect(() => {
+    if (!pendingPath) return;
+    openPath(pendingPath);
+    onPendingPath?.();
+  }, [pendingPath, openPath, onPendingPath]);
 
   // tool '' opens the user's shell; otherwise the AI tool starts right away in the tab.
   const newTerminal = (tool: string) => {
@@ -148,7 +169,7 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
 
   const goHome = () => { if (canLeave()) onHome(); };
 
-  const goLibrary = () => { if (canLeave()) onLibrary(); };
+  const toggleSettings = () => { if (settings) onSettings(null); else if (canLeave()) onSettings('agents'); };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -158,7 +179,7 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
       if (key === 'w') { e.preventDefault(); close(active); }
       if (key === 'e') {
         e.preventDefault();
-        setTabs((all) => all.map((t) => (t.path === active && t.content.kind === 'markdown' && t.content.editable ? { ...t, mode: t.mode === 'edit' ? 'preview' : 'edit' } : t)));
+        setTabs((all) => all.map((t) => (t.path === active && t.content.kind === 'markdown' ? { ...t, mode: t.mode === 'edit' ? 'preview' : 'edit' } : t)));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -198,21 +219,25 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
   };
 
   return (
-    <div className={`workspace${showPanel ? '' : ' no-panel'}`}>
-      <nav className="ribbon" aria-label={t('Actions')}>
-        <button type="button" className="icon-btn" onClick={goHome} title={t('All projects')}><IconHome size={19} /></button>
-        <button type="button" className="icon-btn accent" onClick={() => setLaunch({ activity: 'open' })} title={t('Open in your AI tool')}><IconPlay size={19} /></button>
-        <button type="button" className="icon-btn" onClick={openTermMenu} title={t('New terminal')}><IconTerminal size={19} /></button>
-        <button type="button" className="icon-btn" onClick={() => { void api.openFolder(project.id); }} title={t('Open the project folder')}><IconFolder size={19} /></button>
-        <button type="button" className={`icon-btn${project.repository ? ' accent' : ''}`} onClick={linkFolder}
-          title={project.repository ? t('Linked folder: {folder} (click to link another)', { folder: project.repository }) : t('Link a folder of this computer to the project')}><IconLink size={19} /></button>
-        <button type="button" className="icon-btn" onClick={goLibrary} title={t('Agent library')}><IconUsers size={19} /></button>
-        <button type="button" className="icon-btn" onClick={() => setShowSkills(true)} title={t('Skills & agents')}><IconBox size={19} /></button>
-        <button type="button" className="icon-btn" onClick={() => { loadTree(); setRefreshKey((k) => k + 1); }} title={t('Refresh')}><IconRefresh size={19} /></button>
-        <span className="ribbon-spacer" />
-        <button type="button" className="icon-btn" onClick={() => setShowPanel((v) => !v)} title={t('Show or hide the side panel')}><IconPanel size={19} /></button>
-      </nav>
+    <div className={`workspace${panelRail && !settings ? ' panel-rail' : ''}${settings ? ' is-settings' : ''}`}>
+      <Ribbon
+        project={project}
+        settingsOn={settings !== null}
+        onHome={goHome}
+        onSettings={toggleSettings}
+        onPlay={() => setLaunch({ activity: 'open' })}
+        onTerminal={openTermMenu}
+        onFolder={() => { void api.openFolder(project.id); }}
+        onLink={linkFolder}
+        onRefresh={() => { loadTree(); setRefreshKey((k) => k + 1); }}
+        onPanel={togglePanel}
+      />
 
+      {settings ? (
+        <main className="main">
+          <Settings tab={settings} onTab={onSettings} onClose={() => onSettings(null)} project={project} projects={[project]} tools={tools} onTerminal={(term) => { onSettings(null); addTerminal(term); }} />
+        </main>
+      ) : <>
       <aside className="sidebar">
         <div className="sidebar-head">
           <button type="button" className="project-switch" onClick={goHome} title={t('Switch project')}>{project.name}</button>
@@ -236,6 +261,7 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
             return (
               <div key={doc.path} role="tab" aria-selected={on} className={`tab${on ? ' active' : ''}`} onClick={() => { setActive(doc.path); setActiveTerm(null); }} title={doc.path}
                 onAuxClick={(e) => { if (e.button === 1) close(doc.path); }}>
+                <FileIcon name={doc.path} size={14} />
                 <span className="tab-name">{doc.path.split('/').pop()}</span>
                 {isDirty(doc) && <span className="tab-dirty" title={t('Unsaved changes')}>●</span>}
                 <button type="button" className="tab-close" onClick={(e) => { e.stopPropagation(); close(doc.path); }} title={t('Close (Ctrl+W)')}><IconX size={13} /></button>
@@ -250,7 +276,7 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
               <button type="button" className="tab-close" onClick={(e) => { e.stopPropagation(); closeTerm(term.id); }} title={t('Close the terminal')}><IconX size={13} /></button>
             </div>
           ))}
-          <button type="button" className="tab-new" onClick={openTermMenu} title={t('New terminal')}><IconPlus size={15} /></button>
+          <AddButton size="sm" variant="ghost" title={t('New terminal')} onClick={openTermMenu} />
         </div>
         {notice && <div className="error-bar info-bar" role="status">{notice}<button type="button" className="icon-btn" onClick={() => setNotice('')}><IconX size={14} /></button></div>}
         {error && <div className="error-bar">{error}<button type="button" className="icon-btn" onClick={() => setError('')}><IconX size={14} /></button></div>}
@@ -274,11 +300,6 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
           <div className="welcome">
             <h1>{project.name}</h1>
             <p className="muted">{t('Open a file on the left, or start working with your AI tool.')}</p>
-            <div className="welcome-actions">
-              <button type="button" className="btn" onClick={() => setLaunch({ activity: 'open' })}><IconPlay size={15} /> {t('Open in your AI tool')}</button>
-              <button type="button" className="btn btn-ghost" onClick={openTermMenu}><IconTerminal size={15} /> {t('New terminal')}</button>
-              <button type="button" className="btn btn-ghost" onClick={myFolder} title={project.repository || t('Link a folder of this computer to the project')}><IconFolder size={15} /> {project.repository ? t('Open my folder') : t('Choose my folder')}</button>
-            </div>
             <div className="welcome-tips muted small">
               <p><strong>{t('Inbox')}</strong> — {t('put the stories, logs and documents for the AI here.')}</p>
               <p><strong>{t('Activities')}</strong> — {t('every review, test design or analysis, with its results.')}</p>
@@ -288,7 +309,8 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
         )}
       </main>
 
-      {showPanel && <SidePanel project={project} runId={runId} refreshKey={refreshKey} onOpenPath={openPath} onLaunch={(p) => setLaunch(p ?? { activity: 'open' })} onLibrary={goLibrary} onMyFolder={myFolder} onSetup={() => setShowSetup(true)} />}
+      <SidePanel project={project} runId={runId} refreshKey={refreshKey} tools={tools} onOpenPath={openPath} onLaunch={(p) => setLaunch(p ?? { activity: 'open' })} onTerminal={addTerminal} onMyFolder={myFolder} onSetup={() => setShowSetup(true)} collapsed={panelRail} onToggle={togglePanel} />
+      </>}
 
       <footer className="statusbar">
         <span>{project.name}</span>
@@ -313,7 +335,6 @@ export function Workspace({ project, tools, onHome, onLibrary, onProjectChanged,
         </div>
       )}
       {note && <NoteDialog project={project.id} path={note.path} onClose={() => { setNote(null); loadTree(); }} />}
-      {showSkills && <SkillsDialog project={project} onClose={() => setShowSkills(false)} tools={tools} onTerminal={(t) => { setShowSkills(false); addTerminal(t); }} />}
       {showSetup && <SetupDialog project={project} onClose={() => setShowSetup(false)}
         onSaved={(activity) => { setShowSetup(false); onProjectChanged(); if (activity) setLaunch({ activity }); }} />}
       {launch && <LaunchDialog project={project} tools={tools} preset={launch} onClose={() => setLaunch(null)} onTerminal={(t) => { setLaunch(null); addTerminal(t); }} />}

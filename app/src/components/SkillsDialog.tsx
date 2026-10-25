@@ -1,30 +1,36 @@
-// "Skills & agents": the Find skills tab searches the public SkillMD registry by
-// free text or a preset category and installs a chosen skill for this project
-// only or for all projects; the Create skill tab has the AI tool draft a skill
-// proposal from a prompt; the Create agent tab builds agents from those skills;
-// This repository removes what is installed only for this project; the Global
-// tab reviews what is installed for all projects.
+// Skills: "Already installed" lists what this project has and what is global,
+// each row saying where it lives. "Add a skill" searches the SkillMD registry
+// or asks the AI tool to draft a proposal. Agents are not created here.
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, type InstallResult, type ProjectSummary, type RegistrySkill, type SkillScope, type SkillSearchPage, type TerminalRef, type ToolInfo } from '../api';
 import { recall, remember } from '../prefs';
 import { t } from '../i18n';
-import { AgentForm } from './AgentForm';
-import { GlobalPanel } from './GlobalPanel';
 import { IconCheck, IconExternal, IconSearch, IconX } from './Icons';
-import { ProjectPanel } from './ProjectPanel';
+import { InstalledSkills } from './InstalledSkills';
+import { SkillLibrary } from './SkillLibrary';
 import { SkillForm } from './SkillForm';
 
-// tools and onTerminal enable the Create skill tab (it opens the AI tool in a terminal tab).
-interface Props { project: ProjectSummary; initialQuery?: string; onClose: () => void; tools?: ToolInfo[]; onTerminal?: (t: TerminalRef) => void }
+export type SkillDialogTab = 'installed' | 'library' | 'add';
+type Tab = SkillDialogTab;
+type AddMode = 'find' | 'create';
 
-type Tab = 'find' | 'create' | 'agent' | 'repo' | 'global';
-const tabList = (): { id: Tab; label: string; intro: string; scopeLabel: string }[] => [
-  { id: 'find', label: t('Find skills'), intro: t('Search the public SkillMD registry and install only what you need. Skills are third-party content.'), scopeLabel: t('Install for') },
-  { id: 'create', label: t('Create skill'), intro: t('Describe a skill in your own words; your AI tool drafts it as a proposal for you to review and install.'), scopeLabel: t('Install for') },
-  { id: 'agent', label: t('Create agent'), intro: t('Describe an agent in your own words and choose which installed skills it may use.'), scopeLabel: t('Create for') },
-  { id: 'repo', label: t('This repository'), intro: t('Skills and agents installed only for this project. Remove what it no longer needs.'), scopeLabel: '' },
-  { id: 'global', label: t('Global'), intro: t('Skills and agents installed for all projects, in your user folder. Every AI tool on this computer can use them.'), scopeLabel: '' },
+// tools and onTerminal enable the Create skill tab (it opens the AI tool in a terminal tab).
+interface Props {
+  project: ProjectSummary;
+  initialQuery?: string;
+  onClose: () => void;
+  tools?: ToolInfo[];
+  onTerminal?: (t: TerminalRef) => void;
+  /** Renders inside Settings, without the modal frame. */
+  embedded?: boolean;
+  initialTab?: Tab;
+}
+
+const tabList = (): { id: Tab; label: string; intro: string }[] => [
+  { id: 'installed', label: t('Already installed'), intro: t('Skills you already have, for this project and for all projects. Each one shows where it lives.') },
+  { id: 'library', label: t('Native and created'), intro: t('The skills that come with Moki and the ones you created, installed or not.') },
+  { id: 'add', label: t('Add a skill'), intro: t('Search the public SkillMD registry or describe a skill for your AI tool to draft.') },
 ];
 
 // Preset searches: a registry category, or a query where the registry has no category (QA).
@@ -44,10 +50,11 @@ const audit = (v: string | null): { label: string; cls: string } => ({
 // The skill's public page (description, files, audit); slugs are validated owner/name pairs.
 const skillPage = (slug: string) => `https://skillmd.com/skills/${slug}`;
 
-export function SkillsDialog({ project, initialQuery = '', onClose, tools, onTerminal }: Props) {
-  const allTabs = tabList();
-  const tabs = allTabs.filter((tb) => tb.id !== 'create' || (tools && onTerminal));
-  const [tab, setTab] = useState<Tab>('find');
+export function SkillsDialog({ project, initialQuery = '', onClose, tools, onTerminal, embedded = false, initialTab = 'installed' }: Props) {
+  const tabs = tabList();
+  const canCreate = Boolean(tools && onTerminal);
+  const [tab, setTab] = useState<Tab>(initialQuery ? 'add' : initialTab);
+  const [addMode, setAddMode] = useState<AddMode>('find');
   const [query, setQuery] = useState(initialQuery.slice(0, 200));
   const [preset, setPreset] = useState('');
   const [scope, setScope] = useState<SkillScope>(recall('qa-skill-scope') === 'global' ? 'global' : 'project');
@@ -64,10 +71,11 @@ export function SkillsDialog({ project, initialQuery = '', onClose, tools, onTer
   useEffect(loadInstalled, [loadInstalled]);
 
   useEffect(() => {
+    if (embedded) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, embedded]);
 
   // The current page stays visible while the next one loads; status and errors show above the list.
   const search = async (q: string, category: string, page = 1) => {
@@ -94,35 +102,43 @@ export function SkillsDialog({ project, initialQuery = '', onClose, tools, onTer
   };
 
   const isInstalled = (slug: string) => installed[scope].includes(slug.split('/')[1]);
-  const current = allTabs.find((tb) => tb.id === tab) ?? allTabs[0];
-  const openTab = (id: Tab) => { setTab(id); if (id === 'find') loadInstalled(); };
+  const current = tabs.find((tb) => tb.id === tab) ?? tabs[0];
+  const openTab = (id: Tab) => { setTab(id); if (id === 'add') loadInstalled(); };
 
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="skills-title">
+  const panel = (
+    <>
+        {!embedded && (
         <header className="modal-head">
           <div>
-            <h2 id="skills-title">{t('Skills & agents')}</h2>
+            <h2 id="skills-title">{t('Skills')}</h2>
             <p className="muted small">{current.intro}</p>
           </div>
           <button type="button" className="icon-btn" onClick={onClose} title={t('Close (Esc)')}><IconX size={18} /></button>
         </header>
+        )}
+        {embedded && <p className="muted small skills-intro">{current.intro}</p>}
 
-        <div className="dialog-tabs" role="tablist" aria-label={t('Skills and agents')}>
+        <div className="dialog-tabs" role="tablist" aria-label={t('Skills')}>
           {tabs.map((tb) => (
             <button key={tb.id} type="button" role="tab" aria-selected={tab === tb.id} className={`dialog-tab${tab === tb.id ? ' on' : ''}`} onClick={() => openTab(tb.id)}>
-              {tb.id === 'repo' && !project.repository ? t('This project') : tb.label}
+              {tb.label}
             </button>
           ))}
         </div>
+        {tab === 'add' && canCreate && (
+          <div className="dialog-tabs" role="tablist" aria-label={t('Add a skill')}>
+            <button type="button" role="tab" aria-selected={addMode === 'find'} className={`dialog-tab${addMode === 'find' ? ' on' : ''}`} onClick={() => setAddMode('find')}>{t('Find skills')}</button>
+            <button type="button" role="tab" aria-selected={addMode === 'create'} className={`dialog-tab${addMode === 'create' ? ' on' : ''}`} onClick={() => setAddMode('create')}>{t('Create skill')}</button>
+          </div>
+        )}
 
         <div className="modal-body" role="tabpanel">
-          {tab !== 'global' && tab !== 'repo' && <div className="field inline">
-            <span className="label">{current.scopeLabel}</span>
+          {tab === 'add' && <div className="field inline">
+            <span className="label">{t('Install for')}</span>
             <div className="choice-grid scope-grid">
               {([
-                ['project', project.repository ? t('This repository only') : t('This project only'), project.repository ? `${project.repository}/.claude/${tab === 'agent' ? 'agents' : 'skills'}` : project.name],
-                ['global', t('All projects'), tab === 'agent' ? t('your user folder (~/.claude/agents)') : t('your user folder, every AI tool')],
+                ['project', project.repository ? t('This repository only') : t('This project only'), project.repository ? `${project.repository}/.claude/skills` : project.name],
+                ['global', t('All projects'), t('your user folder, every AI tool')],
               ] as const).map(([id, title, hint]) => (
                 <label key={id} className={`choice${scope === id ? ' on' : ''}`}>
                   <input type="radio" name="scope" checked={scope === id} onChange={() => { setScope(id); remember('qa-skill-scope', id); }} />
@@ -133,10 +149,9 @@ export function SkillsDialog({ project, initialQuery = '', onClose, tools, onTer
             </div>
           </div>}
 
-          {tab === 'repo' ? <ProjectPanel project={project} />
-            : tab === 'global' ? <GlobalPanel onFindSkills={() => { setScope('global'); openTab('find'); }} onCreateAgent={() => { setScope('global'); openTab('agent'); }} />
-            : tab === 'create' && tools && onTerminal ? <SkillForm project={project} scope={scope} tools={tools} onTerminal={onTerminal} />
-            : tab === 'agent' ? <AgentForm project={project} scope={scope} onFindSkills={() => openTab('find')} /> : (<>
+          {tab === 'installed' ? <InstalledSkills project={project} />
+            : tab === 'library' ? <SkillLibrary project={project} scope={scope} />
+            : tab === 'add' && addMode === 'create' && canCreate && tools && onTerminal ? <SkillForm project={project} scope={scope} tools={tools} onTerminal={onTerminal} /> : (<>
           <form className="skill-search" onSubmit={submit}>
             <input type="search" value={query} maxLength={200} autoFocus onChange={(e) => setQuery(e.target.value)} placeholder={t('e.g. skills to help me write code')} />
             <button type="submit" className="btn" disabled={!query.trim() || Boolean(busy)}><IconSearch size={15} /> {t('Search')}</button>
@@ -206,9 +221,20 @@ export function SkillsDialog({ project, initialQuery = '', onClose, tools, onTer
           </>)}
         </div>
 
+        {!embedded && (
         <footer className="modal-foot">
           <button type="button" className="btn btn-ghost" onClick={onClose}>{t('Close')}</button>
         </footer>
+        )}
+    </>
+  );
+
+  if (embedded) return <div className="skills-embedded">{panel}</div>;
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="skills-title">
+        {panel}
       </div>
     </div>
   );

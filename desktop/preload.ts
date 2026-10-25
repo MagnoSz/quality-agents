@@ -12,6 +12,27 @@ contextBridge.exposeInMainWorld('qa', {
     return () => { ipcRenderer.removeListener('qa:changed', listener); };
   },
   openLink: (url: string) => ipcRenderer.invoke('qa:open-link', url),
+  openNoteWindow: (target: { project?: string | null; path?: string | null; loose?: string | null; theme?: string }) => ipcRenderer.invoke('qa:note-window', target),
+  notesChanged: () => ipcRenderer.send('qa:notes-changed'),
+  onNotesChanged: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('qa:notes-changed', listener);
+    return () => { ipcRenderer.removeListener('qa:notes-changed', listener); };
+  },
+  noteMax: () => ipcRenderer.send('qa:note-max'),
+  // From a note window: show a terminal it started, or open a mentioned file, in the main window.
+  showTerminal: (project: string, terminal: { id: string; title: string }) => ipcRenderer.send('qa:show-terminal', project, terminal?.id, terminal?.title),
+  openInMain: (project: string, path: string) => ipcRenderer.send('qa:open-in-main', project, path),
+  onShowTerminal: (callback: (project: string, terminal: { id: string; title: string }) => void) => {
+    const listener = (_e: IpcRendererEvent, project: string, terminal: { id: string; title: string }) => callback(project, terminal);
+    ipcRenderer.on('qa:show-terminal', listener);
+    return () => { ipcRenderer.removeListener('qa:show-terminal', listener); };
+  },
+  onOpenInMain: (callback: (project: string, path: string) => void) => {
+    const listener = (_e: IpcRendererEvent, project: string, path: string) => callback(project, path);
+    ipcRenderer.on('qa:open-in-main', listener);
+    return () => { ipcRenderer.removeListener('qa:open-in-main', listener); };
+  },
   term: {
     create: (tool: string) => ipcRenderer.invoke('qa:term-new', tool),
     start: (id: string, cols: number, rows: number) => ipcRenderer.invoke('qa:term-start', id, cols, rows),

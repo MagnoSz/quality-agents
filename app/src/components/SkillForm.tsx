@@ -7,6 +7,10 @@ import { api, type ProjectSummary, type SkillScope, type TerminalRef, type ToolI
 import { recall, remember } from '../prefs';
 import { conversationLanguage, t } from '../i18n';
 import { IconCheck, IconInfo } from './Icons';
+import { DEFAULT_SKILL_CAT, setSkillCat } from '../icons/cats';
+import { CatIcon } from './CatIcon';
+import { CatPicker } from './CatPicker';
+import { SkillCat } from './SkillCat';
 
 interface Props { project: ProjectSummary; scope: SkillScope; tools: ToolInfo[]; onTerminal: (t: TerminalRef) => void }
 
@@ -16,6 +20,8 @@ export function SkillForm({ project, scope, tools, onTerminal }: Props) {
   const usable = tools.filter((t) => t.available && (t.kind === 'terminal' || t.kind === 'editor'));
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [cat, setCat] = useState(DEFAULT_SKILL_CAT); // its icon in the cat library
+  const [picking, setPicking] = useState(false);
   const [tool, setTool] = useState(() => usable.find((t) => t.id === recall('qa-tool'))?.id ?? usable[0]?.id ?? '');
   const [proposals, setProposals] = useState<{ name: string; description: string }[]>([]);
   const [busy, setBusy] = useState('');
@@ -28,6 +34,7 @@ export function SkillForm({ project, scope, tools, onTerminal }: Props) {
   const create = async () => {
     setBusy('create'); setError(''); setInfo('');
     remember('qa-tool', tool);
+    setSkillCat(name, cat);
     try {
       const r = await api.proposeSkill(project.id, { name, prompt, tool, language: conversationLanguage() });
       if (r.terminal) { onTerminal(r.terminal); return; }
@@ -61,10 +68,19 @@ export function SkillForm({ project, scope, tools, onTerminal }: Props) {
         <span>{t('The AI tool writes a proposal to')} <code>skill-proposals/</code> {t('in this project and nothing is installed. Review it in the file tree, then install it below.')}</span>
       </div>
 
-      <label className="field">
-        <span className="label">{t('Name')}</span>
-        <input value={name} maxLength={64} onChange={(e) => setName(e.target.value)} placeholder={t('e.g. api-contract-check')} />
-      </label>
+      <div className="skill-name-row">
+        <div className="field">
+          <span className="label">{t('Icon')}</span>
+          <button type="button" className="skill-cat skill-cat-lg" onClick={() => setPicking(true)} title={t('Choose an icon')} aria-label={t('Choose an icon')}>
+            <CatIcon id={cat} size={52} />
+          </button>
+        </div>
+        <label className="field">
+          <span className="label">{t('Name')}</span>
+          <input value={name} maxLength={64} onChange={(e) => setName(e.target.value)} placeholder={t('e.g. api-contract-check')} />
+        </label>
+      </div>
+      {picking && <CatPicker selected={cat} onPick={setCat} onClose={() => setPicking(false)} />}
 
       <label className="field">
         <span className="label">{t('What should the skill do?')}</span>
@@ -102,6 +118,7 @@ export function SkillForm({ project, scope, tools, onTerminal }: Props) {
             {proposals.map((p) => (
               <li key={p.name} className="skill-card">
                 <div className="skill-card-head">
+                  <SkillCat name={p.name} />
                   <span className="choice-title">{p.name}</span>
                   <span className="statusbar-spacer" />
                   <button type="button" className="btn btn-sm" disabled={Boolean(busy)} onClick={() => { void install(p.name); }}>

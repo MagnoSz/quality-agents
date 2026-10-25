@@ -249,26 +249,28 @@ E três formas de trabalhar, seja qual for a ferramenta:
 
 ### 4.1 O app desktop (`qa`)
 
-Digite `qa` (ou use o atalho, quando o instalador existir). O Moki abre numa janela própria — sem navegador, sem servidor. A interface é em inglês.
+Digite `qa` (ou use o atalho, quando o instalador existir). O Moki abre numa janela própria — sem navegador, sem servidor.
 
-**Tela inicial** — seus projetos à esquerda; para criar um novo, basta digitar o nome. O último projeto usado reabre automaticamente.
+**Tela inicial** — seus projetos à esquerda; para criar um novo, basta digitar o nome. O último projeto usado reabre automaticamente. O canto escolhe **inglês ou português** e o tema **claro ou escuro**; a primeira abertura pergunta os dois.
 
 **Workspace** (como o Obsidian):
 
 | Área | O que faz |
 |---|---|
-| **Faixa de ícones à esquerda** | Todos os projetos · Abrir na sua ferramenta de IA · Abrir a pasta do projeto · Biblioteca de agentes · Atualizar · Mostrar/ocultar o painel lateral |
+| **Faixa de ícones à esquerda** | Todos os projetos · Abrir na sua ferramenta de IA · Novo terminal · Abrir a pasta do projeto · Vincular uma pasta · Configurações · Atualizar · Mostrar/ocultar o painel lateral |
 | **Árvore de arquivos** | *Context* (o que a IA sabe sobre o sistema), *Inbox* (arquivos que você entrega à IA), *Activities* (cada revisão, projeto de testes ou análise, com data e ponto de status), atualizações propostas e histórico |
 | **Documentos em abas** | Markdown aparece formatado; **Ctrl+E** alterna para edição, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word mostram o texto; JSON, texto e imagens têm pré-visualização; Excel e PDF abrem no programa deles |
 | **Painel lateral** | Numa atividade: status, etapa atual, pendências, aprovações e arquivos gerados, além de *Continuar na sua ferramenta de IA*. Fora dela: visão geral do projeto, **agentes habilitados no projeto** (caixas de seleção) e atividades em aberto |
 | **Abrir na sua ferramenta de IA** | Escolha a atividade, opcionalmente **quem deve fazer** (um agente), os arquivos do inbox, adicione uma observação e escolha a ferramenta: Claude Code, Codex, Gemini CLI, Antigravity CLI ou Cursor Agent abrem numa aba de terminal do app; Cursor ou VS Code abrem a pasta com o pedido copiado; ChatGPT / claude.ai / Gemini web recebem o pedido e a lista de arquivos para enviar |
-| **Biblioteca de agentes** | Na tela inicial ou na faixa de ícones: agentes por categoria, com papel, skills e acesso. **Duplicate** cria a sua cópia de um agente pronto, que você pode **Edit**ar e salvar (validado antes de salvar) ou excluir. Seus agentes ficam em `workspace/library/agents/` |
+| **Configurações** | A engrenagem na faixa de ícones. Três abas: **Agentes**, **Skills** e **Modelos**. |
+| **Agentes** | Agentes por categoria, com papel, skills e acesso. **Duplicar** cria a sua cópia de um agente pronto, que você pode editar e salvar (validado antes de salvar) ou excluir. Dá para criar um agente só deste projeto ou de todos. Seus agentes ficam em `workspace/library/agents/` |
+| **Skills** | **Já instaladas** (cada skill mostra onde mora), **Nativas e criadas** (as skills que vêm com o Moki e as que você criou — essa lista não cria skill) e **Adicionar skill**. Adicionar uma skill busca no registro público SkillMD, ou **Criar skill** descreve uma para a sua ferramenta de IA redigir. |
+| **Modelos** | Como ficam os arquivos PDF, Word e Excel que as atividades e os agentes geram: fonte, cores, cabeçalho, rodapé, logo e marca d'água em texto, com uma prévia da página. Um estilo para todos os projetos, ou o estilo próprio de um projeto. O logo (PNG, JPEG, WebP ou GIF) e a marca d'água vão para PDF e Word; o Excel guarda os textos do cabeçalho na impressão. **Salvar** vale para os arquivos novos. |
 
 - **Ao vivo**: os arquivos que a IA grava aparecem na árvore assim que são salvos.
 - **Histórias em Word**: arquivos `.docx` são convertidos em texto automaticamente para qualquer IA conseguir ler.
 - **Local e privado**: tudo vem dos arquivos em `workspace/`; sem conta, sem hospedagem, sem banco de dados.
 - Como foi construído (para quem contribui): [docs/desktop-app.md](docs/desktop-app.md).
-- A interface do app é em inglês.
 
 As seções a seguir descrevem primeiro o **modo agente**. As diferenças do modo chat aparecem onde for relevante.
 
