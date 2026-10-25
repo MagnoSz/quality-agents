@@ -4,6 +4,8 @@
 // Usage:
 //   node scripts/xlsx.mjs write --layout <layout.json> --data <data.json> --out <file.xlsx> [--lang en|pt-BR]  (default en)
 //   node scripts/xlsx.mjs read <file.xlsx> --layout <layout.json> [--out <data.json>]
+//   node scripts/xlsx.mjs fill --template <model.xlsx> --data <rows.json> --out <file.xlsx> [--sheet <name>]
+//   node scripts/xlsx.mjs inspect <file.xlsx>      (first rows of every sheet, to read a model's headers)
 //
 // data.json: { "<sheetKey>": [ { "<columnKey>": "value", ... }, ... ], ... }
 
@@ -12,6 +14,7 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { zip, unzip } from './lib/zip.mjs';
 import { parseArgs } from './lib/repo.mjs';
+import { BUILTIN_FORMATS, formatNumber } from './lib/numfmt.mjs';
 
 const esc = (s) => String(s)
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
@@ -105,43 +108,167 @@ export function buildXlsx(layout, data, lang = 'en') {
   ]);
 }
 
+// Element prefixes dropped (<x:row> becomes <row>): some .NET/Java tools write them.
+const plain = (xml) => xml.replace(/<(\/?)[A-Za-z][\w.-]*:(?=[A-Za-z])/g, '<$1');
+// Text of a string item: its <t> elements (not phonetic guides), with Excel's _xHHHH_ escapes decoded.
+const itemText = (xml) => [...xml.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '').matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)]
+  .map((t) => unesc(t[1])).join('').replace(/_x([0-9A-Fa-f]{4})_/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+
+// Sheet names, part paths and visibility, in workbook order.
+function sheetParts(files) {
+  const text = (name) => (files.has(name) ? plain(files.get(name).toString('utf8')) : '');
+  const rels = Object.fromEntries([...text('xl/_rels/workbook.xml.rels').matchAll(/<Relationship\b[^>]*>/g)]
+    .map((m) => [m[0].match(/Id="([^"]+)"/)[1], m[0].match(/Target="([^"]+)"/)[1].replace(/^\/?(xl\/)?/, 'xl/')]));
+  return [...text('xl/workbook.xml').matchAll(/<sheet\b[^>]*>/g)]
+    .map((m) => ({ name: unesc(m[0].match(/name="([^"]*)"/)[1]), path: rels[m[0].match(/r:id="([^"]+)"/)[1]], hidden: /state="(hidden|veryHidden)"/.test(m[0]) }));
+}
+
+// Every sheet of any .xlsx as a grid: rows[r][c], row 1 = rows[0]; number cells are numbers, the rest text.
+// With display, number cells become { n: text } formatted as Excel/LibreOffice show them (dates, %, currency...),
+// formulas without a saved result show the formula, and each sheet also has its merged areas, column widths,
+// hidden rows/columns, cell alignment and whether it has images or charts.
+// ponytail: cached values only (no recalculation, fonts or colors).
+export function xlsxSheets(buf, { display = false, locale } = {}) {
+  const files = unzip(buf);
+  const text = (name) => (files.has(name) ? plain(files.get(name).toString('utf8')) : '');
+  const shared = [...text('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => itemText(m[1]));
+  const styles = text('xl/styles.xml');
+  const custom = Object.fromEntries([...styles.matchAll(/<numFmt\b[^>]*>/g)].map((m) => [m[0].match(/numFmtId="(\d+)"/)?.[1], unesc(m[0].match(/formatCode="([^"]*)"/)?.[1] ?? '')]));
+  // Each cell style (s="<index>"): its number format and its alignment.
+  const H = { left: 'left', center: 'center', centerContinuous: 'center', right: 'right', justify: 'justify', distributed: 'justify', fill: 'left' };
+  const V = { top: 'top', center: 'middle', bottom: 'bottom', justify: 'middle', distributed: 'middle' };
+  const xfs = [...(styles.match(/<cellXfs\b[\s\S]*?<\/cellXfs>/)?.[0] ?? '').matchAll(/<xf\b([^>]*?)(?:\/>|>([\s\S]*?)<\/xf>)/g)].map((m) => {
+    const id = m[1].match(/numFmtId="(\d+)"/)?.[1] ?? '0';
+    const a = (m[2] ?? '').match(/<alignment\b[^>]*>/)?.[0] ?? '';
+    const align = Object.fromEntries(Object.entries({ h: H[a.match(/horizontal="(\w+)"/)?.[1]], v: V[a.match(/vertical="(\w+)"/)?.[1]], wrap: /wrapText="(1|true)"/.test(a) }).filter(([, v]) => v));
+    return { format: custom[id] ?? BUILTIN_FORMATS[id] ?? 'General', align: Object.keys(align).length ? align : undefined };
+  });
+  const date1904 = /<workbookPr\b[^>]*date1904="(1|true)"/.test(text('xl/workbook.xml'));
+  return sheetParts(files).map(({ name, path, hidden }) => {
+    const xml = text(path);
+    // Merged areas as [firstRow, firstCol, lastRow, lastCol], zero-based.
+    const merges = [...xml.matchAll(/<mergeCell\b[^>]*ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"/g)].map((m) => [Number(m[2]) - 1, colIndex(m[1]), Number(m[4]) - 1, colIndex(m[3])]);
+    const mergeStarts = new Set(merges.map(([r, c]) => `${r}:${c}`));
+    const rows = [];
+    const hiddenRows = [];
+    const align = {};
+    let next = 0;
+    for (const row of xml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+      const r = Number((row[1].match(/\br="(\d+)"/) || [])[1]);
+      const at = r ? r - 1 : next;
+      next = at + 1;
+      if (/\bhidden="(1|true)"/.test(row[1])) hiddenRows.push(at);
+      const cells = [];
+      for (const c of (row[2] ?? '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const attrs = c[1];
+        const ref = attrs.match(/r="([A-Z]+)\d+"/);
+        const idx = ref ? colIndex(ref[1]) : cells.length;
+        const type = (attrs.match(/\bt="([^"]+)"/) || [])[1];
+        const inner = c[2] || '';
+        const v = unesc((inner.match(/<v>([\s\S]*?)<\/v>/) || [])[1] ?? '');
+        let value = v;
+        if (type === 's') value = shared[Number(v)] ?? '';
+        else if (type === 'inlineStr') value = itemText(inner);
+        else if (type === 'b' && v) value = v === '1' || v === 'true' ? 'TRUE' : 'FALSE';
+        const formula = display && value === '' && (inner.match(/<f\b[^>]*>([\s\S]+?)<\/f>/) || [])[1];
+        if (formula) value = `=${unesc(formula)}`;
+        const style = xfs[Number((attrs.match(/\bs="(\d+)"/) || [])[1] ?? 0)];
+        // Style-only cells (no content) are skipped: whole formatted columns would make a million empty rows.
+        // An empty first cell of a merged area still gives the area its alignment.
+        if (display && style?.align && (value !== '' || mergeStarts.has(`${at}:${idx}`))) align[`${at}:${idx}`] = style.align;
+        if (value === '' && !inner.trim()) continue;
+        const format = style?.format ?? 'General';
+        if ((!type || type === 'n') && v !== '' && Number.isFinite(Number(v))) {
+          value = display ? { n: formatNumber(Number(v), format, { locale, date1904 }) } : Number(v);
+        } else if (type === 'd' && display && format !== 'General' && !Number.isNaN(Date.parse(v))) {
+          value = { n: formatNumber(Date.parse(v.endsWith('Z') || v.length <= 10 ? v : `${v}Z`) / 86400000 + 25569 - (date1904 ? 1462 : 0), format, { locale, date1904 }) };
+        }
+        cells[idx] = value;
+      }
+      if (cells.length) rows[at] = Array.from(cells, (v) => v ?? '');
+    }
+    const grid = Array.from(rows, (cells) => cells ?? []);
+    if (!display) return { name, hidden, rows: grid };
+    // Column widths in pixels (Excel stores characters of about 7px) and hidden columns, for the used columns.
+    // ponytail: the 7px character and 64px default are Calibri 11 values; other default fonts differ a little.
+    const used = Math.max(grid.reduce((n, cells) => Math.max(n, cells.length), 0), ...merges.map((m) => m[3] + 1));
+    const defaultWidth = Number(xml.match(/<sheetFormatPr\b[^>]*defaultColWidth="([\d.]+)"/)?.[1]);
+    const cols = [...xml.matchAll(/<col\b[^>]*>/g)].map((m) => ({ min: Number(m[0].match(/min="(\d+)"/)?.[1]) - 1, max: Number(m[0].match(/max="(\d+)"/)?.[1]) - 1, width: Number(m[0].match(/width="([\d.]+)"/)?.[1]), hidden: /hidden="(1|true)"/.test(m[0]) }));
+    const colOf = (c) => cols.find((col) => c >= col.min && c <= col.max);
+    const widths = Array.from({ length: used }, (_, c) => (colOf(c)?.width > 0 ? Math.round(colOf(c).width * 7) : defaultWidth ? Math.round(defaultWidth * 7 + 5) : 64));
+    const hiddenCols = Array.from({ length: used }, (_, c) => c).filter((c) => colOf(c)?.hidden);
+    return { name, hidden, rows: grid, drawing: /<drawing\b/.test(xml), merges, widths, hiddenRows, hiddenCols, align };
+  });
+}
+
+// Fills a user's own .xlsx model instead of building a new file, so its logo,
+// colors, merges and other sheets stay as they are. rows: [{ "<header text>": "value" }].
+// The header row is the one (in the first 50) that matches most keys; rows are
+// written right below it with the styles of the model's first row under the header.
+// ponytail: Excel tables (ListObjects), autofilter ranges and overwritten formulas are not adjusted; add when a model needs it.
+export function fillXlsx(buf, rows, sheetName) {
+  const files = unzip(buf);
+  const parts = sheetParts(files);
+  const index = sheetName ? parts.findIndex((p) => p.name === sheetName) : 0;
+  if (index < 0) throw new Error(`sheet "${sheetName}" not found (sheets: ${parts.map((p) => p.name).join(', ')})`);
+  const grid = xlsxSheets(buf)[index].rows;
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const norm = (s) => String(s ?? '').trim().toLowerCase();
+  let headerRow = -1;
+  let best = 0;
+  grid.slice(0, 50).forEach((cells, r) => {
+    const hits = keys.filter((k) => cells.some((c) => norm(c) === norm(k))).length;
+    if (hits > best) { best = hits; headerRow = r + 1; }
+  });
+  if (headerRow < 0) throw new Error('no row of the model matches the column names in the data');
+  const colOf = Object.fromEntries(keys.map((k) => [k, grid[headerRow - 1].findIndex((c) => norm(c) === norm(k))]));
+  const warnings = keys.filter((k) => colOf[k] < 0).map((k) => `column "${k}" not found in the model's header row ${headerRow}`);
+
+  const path = parts[index].path;
+  let xml = files.get(path).toString('utf8');
+  const sheetRows = new Map();
+  for (const m of xml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+    const cells = new Map();
+    for (const c of (m[2] || '').matchAll(/<c\b([^>]*?)(?:\/>|>[\s\S]*?<\/c>)/g)) cells.set(colIndex(c[1].match(/r="([A-Z]+)\d+"/)[1]), c[0]);
+    sheetRows.set(Number(m[1].match(/\br="(\d+)"/)[1]), { attrs: m[1].replace(/\s*spans="[^"]*"/, ''), cells });
+  }
+  const sample = sheetRows.get(headerRow + 1);
+  rows.forEach((data, i) => {
+    const r = headerRow + 1 + i;
+    if (!sheetRows.has(r)) sheetRows.set(r, { attrs: (sample?.attrs ?? ` r="${r}"`).replace(/\br="\d+"/, `r="${r}"`), cells: new Map() });
+    const row = sheetRows.get(r);
+    // Every header column is written, so sample text left in the model is cleared.
+    const values = new Map(grid[headerRow - 1].flatMap((h, c) => (h ? [[c, '']] : [])));
+    for (const [key, value] of Object.entries(data)) if (colOf[key] >= 0) values.set(colOf[key], value);
+    for (const [c, value] of values) {
+      const old = row.cells.get(c);
+      if (old?.includes('<f>') || old?.includes('<f ')) warnings.push(`cell ${colName(c)}${r} had a formula; replaced by the value`);
+      const style = (old ?? sample?.cells.get(c))?.match(/\bs="(\d+)"/)?.[1];
+      row.cells.set(c, `<c r="${colName(c)}${r}"${style ? ` s="${style}"` : ''} t="inlineStr"><is><t xml:space="preserve">${esc(value ?? '')}</t></is></c>`);
+    }
+  });
+  const leftover = grid.slice(headerRow + rows.length).findIndex((cells) => cells.some(Boolean));
+  if (leftover >= 0) warnings.push(`row ${headerRow + rows.length + leftover + 1} below the data still has content from the model (example rows or a footer?)`);
+  const sheetData = [...sheetRows.entries()].sort((a, b) => a[0] - b[0]).map(([, row]) => {
+    const cells = [...row.cells.entries()].sort((a, b) => a[0] - b[0]).map(([, c]) => c).join('');
+    return cells ? `<row${row.attrs}>${cells}</row>` : `<row${row.attrs}/>`;
+  }).join('');
+  xml = xml.replace(/<dimension\b[^>]*\/>/, '').replace(/<sheetData\b[^>]*?(?:\/>|>[\s\S]*<\/sheetData>)/, `<sheetData>${sheetData}</sheetData>`);
+  files.set(path, Buffer.from(xml));
+  return { buffer: zip([...files.entries()]), headerRow, warnings };
+}
+
 // Reads any .xlsx (including files re-saved by Excel/LibreOffice/Google Sheets)
 // and maps sheets/columns back to layout keys using labels in any language.
 export function readXlsx(buf, layout) {
-  const files = unzip(buf);
-  const text = (name) => (files.has(name) ? files.get(name).toString('utf8') : '');
-  const shared = [...text('xl/sharedStrings.xml').matchAll(/<si>([\s\S]*?)<\/si>/g)]
-    .map((m) => [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => unesc(t[1])).join(''));
-  const rels = Object.fromEntries([...text('xl/_rels/workbook.xml.rels').matchAll(/<Relationship\b[^>]*>/g)]
-    .map((m) => [m[0].match(/Id="([^"]+)"/)[1], m[0].match(/Target="([^"]+)"/)[1].replace(/^\/?(xl\/)?/, 'xl/')]));
-  const sheets = [...text('xl/workbook.xml').matchAll(/<sheet\b[^>]*>/g)].map((m) => ({
-    name: unesc(m[0].match(/name="([^"]*)"/)[1]),
-    file: rels[m[0].match(/r:id="([^"]+)"/)[1]],
-  }));
-
+  const sheets = xlsxSheets(buf);
   const result = {};
   const warnings = [];
   for (const def of layout.sheets) {
     const titles = Object.values(def.title).map((t) => t.slice(0, 31));
     const sheet = sheets.find((s) => titles.includes(s.name));
     if (!sheet) { warnings.push(`missing sheet "${titles.join('" / "')}"`); continue; }
-    const grid = [];
-    for (const row of text(sheet.file).matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
-      const cells = [];
-      for (const c of row[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
-        const attrs = c[1];
-        const ref = attrs.match(/r="([A-Z]+)\d+"/);
-        const idx = ref ? colIndex(ref[1]) : cells.length;
-        const type = (attrs.match(/t="([^"]+)"/) || [])[1];
-        const inner = c[2] || '';
-        let value = '';
-        if (type === 's') value = shared[Number((inner.match(/<v>([\s\S]*?)<\/v>/) || [])[1])] ?? '';
-        else if (type === 'inlineStr') value = [...inner.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => unesc(t[1])).join('');
-        else value = unesc((inner.match(/<v>([\s\S]*?)<\/v>/) || [])[1] ?? '');
-        cells[idx] = value;
-      }
-      grid.push(cells);
-    }
+    const grid = sheet.rows.filter((cells) => cells.length).map((cells) => cells.map(String));
     const header = grid[0] || [];
     const keyByIndex = header.map((h) => def.columns.find((col) => Object.values(col.label).includes((h || '').trim()))?.key);
     for (const col of def.columns) {
@@ -179,10 +306,27 @@ export function checkValues(layout, data) {
   return problems;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) { // also imported by the desktop app
   const args = parseArgs(process.argv.slice(2));
   const [command, input] = args._;
   const fail = (msg) => { console.error(msg); process.exit(1); };
+  if (command === 'inspect') {
+    if (!input) fail('Usage: inspect <file.xlsx>');
+    for (const sheet of xlsxSheets(readFileSync(input))) {
+      console.log(`# ${sheet.name}`);
+      sheet.rows.slice(0, 15).forEach((cells, r) => { if (cells.some(Boolean)) console.log(`${r + 1}: ${JSON.stringify(cells)}`); });
+    }
+    process.exit(0);
+  }
+  if (command === 'fill') {
+    if (!args.template || !args.data || !args.out) fail('Usage: fill --template <model.xlsx> --data <rows.json> --out <file.xlsx> [--sheet <name>]');
+    const { buffer, headerRow, warnings } = fillXlsx(readFileSync(args.template), JSON.parse(readFileSync(args.data, 'utf8')), args.sheet);
+    warnings.forEach((w) => console.warn(`warning: ${w}`));
+    mkdirSync(dirname(args.out), { recursive: true });
+    writeFileSync(args.out, buffer);
+    console.log(`Wrote ${args.out} (header row ${headerRow})`);
+    process.exit(0);
+  }
   if (!args.layout) fail('Missing --layout <layout.json>');
   const layout = JSON.parse(readFileSync(args.layout, 'utf8'));
 
@@ -200,5 +344,5 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     warnings.concat(checkValues(layout, data)).forEach((w) => console.warn(`warning: ${w}`));
     const json = `${JSON.stringify(data, null, 2)}\n`;
     if (args.out) { mkdirSync(dirname(args.out), { recursive: true }); writeFileSync(args.out, json); console.log(`Wrote ${args.out}`); } else process.stdout.write(json);
-  } else fail('Command must be "write" or "read".');
+  } else fail('Command must be "write", "read", "fill" or "inspect".');
 }

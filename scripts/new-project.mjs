@@ -1,28 +1,21 @@
 // Creates workspace/projects/<project-id>/ from templates/project-context/.
-// Usage: npm run new-project -- <project-id> ["Display name"]
+// Usage: npm run new-project -- <project-id> ["Display name"] [--blank]
+// --blank leaves the QA context files out; the project-context skill plans them with the user.
 
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
-import { join } from 'node:path';
-import { ROOT, SLUG } from './lib/repo.mjs';
+import { SLUG } from './lib/repo.mjs';
+import { createProject } from './lib/core.ts';
 
-const [id, displayName] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const blank = args.includes('--blank');
+const [id, displayName] = args.filter((a) => a !== '--blank');
 if (!id || !SLUG.test(id)) {
-  console.error('Usage: npm run new-project -- <project-id> ["Display name"]  (id: lowercase letters, digits, hyphens)');
+  console.error('Usage: npm run new-project -- <project-id> ["Display name"] [--blank]  (id: lowercase letters, digits, hyphens)');
   process.exit(1);
 }
-const target = join(ROOT, 'workspace', 'projects', id);
-if (existsSync(target)) {
-  console.error(`workspace/projects/${id} already exists; nothing changed.`);
+try {
+  createProject(id, displayName || id, undefined, blank ? 'blank' : 'qa');
+} catch (e) {
+  console.error(`${e.message} Nothing changed.`);
   process.exit(1);
 }
-cpSync(join(ROOT, 'templates', 'project-context'), target, { recursive: true });
-// Stored as gitignore.txt in the template so it does not affect this repository.
-renameSync(join(target, 'gitignore.txt'), join(target, '.gitignore'));
-for (const dir of ['inbox', 'runs', 'temporary']) mkdirSync(join(target, dir), { recursive: true });
-
-const projectFile = join(target, 'project.json');
-const project = JSON.parse(readFileSync(projectFile, 'utf8'));
-project.project = id;
-project.name = displayName || id;
-writeFileSync(projectFile, `${JSON.stringify(project, null, 2)}\n`);
-console.log(`Created workspace/projects/${id}/. The project-context skill will complete it through onboarding.`);
+console.log(`Created workspace/projects/${id}/. The project-context skill will complete it through ${blank ? 'a planning interview' : 'onboarding'}.`);

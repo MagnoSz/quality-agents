@@ -27,6 +27,7 @@
     "runs": "node scripts/runs.mjs",
     "xlsx": "node scripts/xlsx.mjs",
     "pdf": "node scripts/pdf.mjs",
+    "docx": "node scripts/docx.mjs",
     "check-output": "node scripts/check-output.mjs",
     "dist:win": "node scripts/build-desktop.mjs && electron-builder --win nsis",
     "dist:mac": "node scripts/build-desktop.mjs && electron-builder --mac dmg",
@@ -49,10 +50,10 @@
   },
   "main": "app/dist-electron/boot.mjs",
   "desktopName": "quality-agents.desktop",
-  "author": "Quality Agents contributors",
+  "author": "Moki contributors",
   "build": {
     "appId": "io.github.orsi88.qualityagents",
-    "productName": "Quality Agents",
+    "productName": "Moki",
     "copyright": "MIT License",
     "directories": {
       "app": "build/app",
@@ -156,7 +157,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Quality Agents"
+      "shortcutName": "Moki"
     },
     "mac": {
       "target": [
@@ -173,7 +174,7 @@
       ],
       "icon": "app/public/icon-512.png",
       "category": "Development",
-      "maintainer": "Quality Agents contributors",
+      "maintainer": "Moki contributors",
       "syncDesktopName": true
     },
     "electronVersion": "43.7.8"

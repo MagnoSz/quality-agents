@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 // The framework folder. Normally this repository; the installed desktop app sets
-// QA_ROOT to its own copy (Documents/Quality Agents) before loading anything.
+// QA_ROOT to its own copy (Documents/Moki) before loading anything.
 export const ROOT = process.env.QA_ROOT ? resolve(process.env.QA_ROOT) : join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 // Generated mirrors read natively by AI tools (see docs/compatibility.md).

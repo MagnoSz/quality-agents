@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------
-# Quality Agents — artifact isolation policy
+# Moki — artifact isolation policy
 # Everything received or produced while running skills lives in
 # workspace/ and is NEVER versioned. See docs/privacy-and-isolation.md.
 # .gitignore is a convenience, not a security control: the pre-commit

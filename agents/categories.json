@@ -2,5 +2,9 @@
   "quality": {
     "label": "Quality Engineering",
     "description": "Requirements review, test design, failure analysis and test automation."
+  },
+  "framework": {
+    "label": "Framework",
+    "description": "Maintaining Moki itself: skills, scripts, desktop app and checks."
   }
 }

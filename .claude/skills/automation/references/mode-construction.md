@@ -14,7 +14,7 @@ Create an automation project from scratch. **Do not create unnecessary complexit
 8. **Plan execution, diagnostics and reports** (projects/browsers, parallelism, retries policy, traces/screenshots/videos on failure, report format, CI pipeline).
 9. **Present the architectural project for approval** — structure tree, responsibilities, decisions with reasons, what was deliberately left out, and the documentation/AI-guidance files that will be created.
 10. **Create the approved structure** in the target repository.
-11. **Write the project documentation and AI guidance** ([target project docs](target-project-docs.md)): `README.md`, `docs/architecture.md`, `docs/decisions.md` (how it was built and why), `docs/how-to.md`, `docs/traceability.md`, `AGENTS.md`, `CLAUDE.md`. The repository must be usable with any AI tool on its own, without Quality Agents.
+11. **Write the project documentation and AI guidance** ([target project docs](target-project-docs.md)): `README.md`, `docs/architecture.md`, `docs/decisions.md` (how it was built and why), `docs/how-to.md`, `docs/traceability.md`, `AGENTS.md`, `CLAUDE.md`. The repository must be usable with any AI tool on its own, without Moki.
 12. **Implement minimal examples and checks**: one representative spec using the layers end to end, plus lint/type check if adopted.
 13. **Validate that the structure works**: install, run the example locally (and in CI if configured), confirm reports and diagnostics are produced, and execute every command documented in `README.md`/`AGENTS.md`. Report real results.
 

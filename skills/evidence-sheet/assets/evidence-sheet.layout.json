@@ -1,0 +1,163 @@
+{
+  "id": "evidence-sheet",
+  "fileName": {
+    "pt-BR": "Evidências de Teste.xlsx",
+    "en": "Test Evidence.xlsx"
+  },
+  "enums": {
+    "status": {
+      "pt-BR": [
+        "Aprovado",
+        "Reprovado",
+        "Bloqueado",
+        "Não executado"
+      ],
+      "en": [
+        "Passed",
+        "Failed",
+        "Blocked",
+        "Not run"
+      ]
+    }
+  },
+  "sheets": [
+    {
+      "key": "evidence",
+      "title": {
+        "pt-BR": "Evidências",
+        "en": "Evidence"
+      },
+      "columns": [
+        {
+          "key": "testCaseId",
+          "label": {
+            "pt-BR": "ID",
+            "en": "ID"
+          },
+          "width": 14
+        },
+        {
+          "key": "title",
+          "label": {
+            "pt-BR": "Título",
+            "en": "Title"
+          },
+          "width": 35
+        },
+        {
+          "key": "source",
+          "label": {
+            "pt-BR": "Origem",
+            "en": "Source"
+          },
+          "width": 22
+        },
+        {
+          "key": "preconditions",
+          "label": {
+            "pt-BR": "Pré-condições",
+            "en": "Preconditions"
+          },
+          "width": 30
+        },
+        {
+          "key": "steps",
+          "label": {
+            "pt-BR": "Passo a passo",
+            "en": "Steps"
+          },
+          "width": 50
+        },
+        {
+          "key": "expected",
+          "label": {
+            "pt-BR": "Resultado esperado",
+            "en": "Expected result"
+          },
+          "width": 40
+        },
+        {
+          "key": "actual",
+          "label": {
+            "pt-BR": "Resultado obtido",
+            "en": "Actual result"
+          },
+          "width": 40
+        },
+        {
+          "key": "status",
+          "label": {
+            "pt-BR": "Status",
+            "en": "Status"
+          },
+          "width": 14,
+          "values": "status"
+        },
+        {
+          "key": "environment",
+          "label": {
+            "pt-BR": "Ambiente",
+            "en": "Environment"
+          },
+          "width": 14
+        },
+        {
+          "key": "version",
+          "label": {
+            "pt-BR": "Versão/build",
+            "en": "Version/build"
+          },
+          "width": 14
+        },
+        {
+          "key": "executedBy",
+          "label": {
+            "pt-BR": "Executado por",
+            "en": "Executed by"
+          },
+          "width": 18
+        },
+        {
+          "key": "executedAt",
+          "label": {
+            "pt-BR": "Data de execução",
+            "en": "Execution date"
+          },
+          "width": 18
+        },
+        {
+          "key": "recording",
+          "label": {
+            "pt-BR": "Gravação Jam",
+            "en": "Jam recording"
+          },
+          "width": 40
+        },
+        {
+          "key": "evidenceFiles",
+          "label": {
+            "pt-BR": "Arquivos de evidência",
+            "en": "Evidence files"
+          },
+          "width": 30
+        },
+        {
+          "key": "defects",
+          "label": {
+            "pt-BR": "Defeitos",
+            "en": "Defects"
+          },
+          "width": 16
+        },
+        {
+          "key": "notes",
+          "label": {
+            "pt-BR": "Observações",
+            "en": "Notes"
+          },
+          "width": 35
+        }
+      ]
+    }
+  ]
+}

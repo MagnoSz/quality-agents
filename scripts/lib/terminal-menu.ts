@@ -72,7 +72,7 @@ export async function deliver(request: Request & { tool: ToolKey; files: string[
 
 async function interactive(args: MenuArgs, ui: UI): Promise<number> {
   const prefs = loadPrefs();
-  ui.intro('Quality Agents', 'Prepares your request and opens the AI tool you use. Your data stays in workspace/.');
+  ui.intro('Moki', 'Prepares your request and opens the AI tool you use. Your data stays in workspace/.');
 
   let project = args.project;
   if (!project) {

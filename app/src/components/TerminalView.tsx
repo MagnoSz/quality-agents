@@ -6,6 +6,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api } from '../api';
+import { t } from '../i18n';
 
 interface Props { id: string; active: boolean; onExit: (code: number) => void }
 
@@ -36,7 +37,7 @@ export function TerminalView({ id, active, onExit }: Props) {
     const offData = bridge.on('data', (tid, data) => { if (tid === id) term.write(String(data)); });
     const offExit = bridge.on('exit', (tid, code) => {
       if (tid !== id) return;
-      term.write(`\r\n\x1b[2m[process exited with code ${code}]\x1b[0m\r\n`);
+      term.write(`\r\n\x1b[2m[${t('process exited with code {code}', { code: String(code) })}]\x1b[0m\r\n`);
       exitRef.current(Number(code));
     });
     const input = term.onData((data) => bridge.input(id, data));

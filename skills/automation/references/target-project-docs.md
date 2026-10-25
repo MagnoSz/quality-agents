@@ -1,6 +1,6 @@
 # Documentation and AI guidance inside the automation project
 
-Every automation project built by this skill must be **self-explanatory and AI-ready on its own**: a QA who clones only that repository must understand its architecture and be able to work on it with any AI tool, without the Quality Agents framework.
+Every automation project built by this skill must be **self-explanatory and AI-ready on its own**: a QA who clones only that repository must understand its architecture and be able to work on it with any AI tool, without the Moki framework.
 
 These files are created in **Construction**, kept current in **Implementation**, and checked (and added if missing) in **Evolution**. They live in the target repository and follow its version-control policy.
 

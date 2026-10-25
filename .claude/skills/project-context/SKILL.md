@@ -45,7 +45,7 @@ Optional:
 ## Tools
 
 - File read/write in `workspace/projects/<project-id>/`.
-- Shell (optional): `npm run new-project -- <project-id> "<name>"` creates the structure from `templates/project-context/`. Fallback: create the same files manually (list in [context files](references/context-files.md)).
+- Shell (optional): `npm run new-project -- <project-id> "<name>"` creates the structure from `templates/project-context/` (`--blank` leaves `context/` out). Fallback: create the same files manually (list in [context files](references/context-files.md)).
 - Chat-only tools: the user uploads `project.json`, `context/index.md` and the relevant context files; the skill outputs updated file contents for the user to save.
 
 ## Procedure
@@ -68,6 +68,10 @@ Optional:
 3. Run the [progressive interview](references/onboarding-interview.md): one question at a time, highest-value topics first, prioritized by the upcoming activity. Stop when the activity has the minimum context it needs; the rest can be gathered later.
 4. Record each answer the user confirms in the right `context/` file with source and confirmation date; update `context/index.md`.
 5. Set `onboardingStatus` to `complete` only when every topic in the interview guide is recorded or explicitly marked unknown/not applicable by the user.
+
+### 2c. Blank project — plan
+
+A project with `"starter": "blank"` in `project.json` (created with `npm run new-project -- <id> "<name>" --blank` or "A blank project" in the desktop app) has no `context/` yet. Follow [planning a blank project](references/project-plan-interview.md): interview one question at a time about what the project needs, write the plan to `proposed-updates.md` and `plan.json`, and stop until the user approves it. After approval, create only the approved context files.
 
 ### 3. Hand over context
 
@@ -107,6 +111,7 @@ Follow [context update rules](references/context-updates.md):
 ## Human approval points
 
 - Creating a new project folder (confirm the `project-id` and display name).
+- A blank project's plan (`plan.json`) before any context file is created.
 - Every promotion from `proposed-updates.md` to `context/`.
 - Any change or removal of an existing confirmed entry.
 - Setting `externalDataSharingAllowed` to `true`.

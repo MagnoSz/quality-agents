@@ -4,12 +4,36 @@
 
 export const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+// A backslash keeps a punctuation character literal (\* is "*", not emphasis).
+const hide = (text) => text.replace(/\\([!-/:-@[-`{-~])/g, (_, c) => String.fromCharCode(0xe000 + c.charCodeAt(0)));
+const unhide = (html) => html.replace(/[\ue000-\ue07f]/g, (c) => escHtml(String.fromCharCode(c.charCodeAt(0) - 0xe000)));
+
 function inline(text) {
-  return escHtml(text)
+  return unhide(escHtml(hide(text))
+    // Only embedded raster images (Word previews); no remote or file images.
+    .replace(/!\[([^\]]*)\]\((data:image\/(?:png|jpeg|gif|webp|bmp);base64,[A-Za-z0-9+/=]+)\)/g, '<img alt="$1" src="$2">')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
+    .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>'));
+}
+
+// A cell that is just << joins the cell on its left and ^^ the cell above (merged cells in Word previews),
+// so the merged area is drawn as one cell. "\<<" is a literal "<<".
+function table(head, rows) {
+  const grid = [head, ...rows].map((cells, r) => cells.map((text, c) => ({ text, r, c, colspan: 1, rowspan: 1, owner: null })));
+  for (const row of grid) {
+    for (const cell of row) {
+      const near = cell.text === '<<' ? row[cell.c - 1] : cell.text === '^^' && cell.r > 1 ? grid[cell.r - 1][cell.c] : null; // no rowspan out of the header
+      if (!near) continue;
+      cell.owner = near.owner ?? near;
+      if (cell.text === '<<' && cell.owner.r === cell.r) cell.owner.colspan++;
+      if (cell.text === '^^' && cell.owner.c === cell.c) cell.owner.rowspan++;
+    }
+  }
+  const tr = (row, tag) => `<tr>${row.filter((cell) => !cell.owner).map((cell) => `<${tag}${cell.colspan > 1 ? ` colspan="${cell.colspan}"` : ''}${cell.rowspan > 1 ? ` rowspan="${cell.rowspan}"` : ''}>${/^(<<|\^\^)$/.test(cell.text) ? '' : inline(cell.text)}</${tag}>`).join('')}</tr>`;
+  return `<table><thead>${tr(grid[0], 'th')}</thead><tbody>${grid.slice(1).map((row) => tr(row, 'td')).join('')}</tbody></table>`;
 }
 
 // Small Markdown subset: headings, paragraphs, lists (2 levels), tables,
@@ -19,7 +43,7 @@ export function markdownToHtml(md) {
   const out = [];
   let i = 0;
   const isTableSep = (l) => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(l);
-  const cells = (l) => l.trim().replace(/^\||\|$/g, '').split('|').map((c) => inline(c.trim()));
+  const cells = (l) => l.trim().replace(/^\||(?<!\\)\|$/g, '').split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
   while (i < lines.length) {
     const line = lines[i];
     if (/^```/.test(line)) {
@@ -40,7 +64,7 @@ export function markdownToHtml(md) {
       i += 2;
       const rows = [];
       while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(cells(lines[i++]));
-      out.push(`<table><thead><tr>${head.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`);
+      out.push(table(head, rows));
     } else if (/^>\s?/.test(line)) {
       const buf = [];
       while (i < lines.length && /^>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/, ''));
@@ -52,7 +76,7 @@ export function markdownToHtml(md) {
         const m = lines[i].match(/^(\s*)([-*]|\d+\.)\s+(.*)$/);
         const depth = m[1].length >= 2 ? 1 : 0;
         const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
-        while (stack.length > depth + 1) html.push(`</li></${stack.pop()}>`);
+        while (stack.length > depth + 1 || (depth === 0 && stack.length && stack[0] !== tag)) html.push(`</li></${stack.pop()}>`);
         if (stack.length === depth) { html.push(`<${tag}><li>`); stack.push(tag); } else html.push('</li><li>');
         html.push(inline(m[3]));
         i++;
@@ -64,7 +88,8 @@ export function markdownToHtml(md) {
     } else {
       const buf = [];
       while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|```|>|\s*([-*]|\d+\.)\s+)/.test(lines[i])) buf.push(lines[i++]);
-      out.push(`<p>${inline(buf.join(' '))}</p>`);
+      // A line ending in two spaces is a line break inside the paragraph.
+      out.push(`<p>${inline(buf.join('\n')).replace(/ {2,}\n/g, '<br>').replace(/\n/g, ' ')}</p>`);
     }
   }
   return out.join('\n');

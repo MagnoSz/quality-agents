@@ -1,6 +1,6 @@
 # Project context folder
 
-This folder holds everything Quality Agents knows about **one** system under test. It lives under `workspace/projects/<project-id>/`, which the framework repository never versions.
+This folder holds everything Moki knows about **one** system under test. It lives under `workspace/projects/<project-id>/`, which the framework repository never versions.
 
 | Path | Contents | Who writes it |
 |---|---|---|
@@ -22,4 +22,4 @@ git init
 git remote add origin <your-private-repository-url>
 ```
 
-The `.gitignore` in this folder keeps `runs/`, `inbox/` and `temporary/` out of that repository. Never add project context to the public Quality Agents repository, and never store credentials here.
+The `.gitignore` in this folder keeps `runs/`, `inbox/` and `temporary/` out of that repository. Never add project context to the public Moki repository, and never store credentials here.

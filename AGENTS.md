@@ -1,4 +1,4 @@
-# Quality Agents — instructions for AI agents
+# Moki — instructions for AI agents
 
 This repository is a portable library of **QA skills** (Agent Skills format). You, the AI tool, execute them; the skills define responsibilities, procedures, rules, inputs, outputs and approval points. Nothing here depends on a specific AI vendor.
 
@@ -25,6 +25,9 @@ Canonical definitions are in `skills/<name>/SKILL.md` (tools load the generated 
 | `requirements-review` | draft | Review/refine/validate user stories before development (never writes test cases) | One or more user stories | `project-context` |
 | `test-design` | draft | Map scenarios, then (after OK) write manual test cases | Stories/rules/criteria | `project-context`; optionally `requirements-review` output |
 | `failure-analysis` | draft | Pre-analysis of an error from description + log | Item description, failure moment, date/time, log | `project-context` (optional) |
+| `evidence-collection` | draft | Assemble the evidence of an executed test: work item (MCP or pasted), Jam recordings, prints → approved `evidence.json` | Source item, execution data, result per test case, Jam link or print | `project-context` |
+| `evidence-sheet` | draft | Evidence spreadsheet, one row per test case, in the user's xlsx model, project standard or default | Approved `evidence.json` | `evidence-collection` |
+| `evidence-document` | draft | Evidence Word document with images per step, in the user's docx model, project standard or default | Approved `evidence.json` | `evidence-collection` |
 | `documentation` | planned | Propose updates to the official scenario base | — | not available |
 | `automation` | pending-migration | Automation engineering: build, implement (FLX scenarios) and evolve automation projects in a target repository | — | not available until its reference materials are migrated |
 | `smoke-test` | planned | Targeted pre-validation of an improvement | — | not available |
@@ -41,7 +44,9 @@ An **agent** is a role with instructions that uses one or more skills and asks f
 | `requirements-analyst` | quality | draft | requirements-review, project-context | project-write |
 | `test-designer` | quality | draft | test-design, project-context | project-write |
 | `failure-analyst` | quality | draft | failure-analysis, project-context | project-write |
+| `evidence-builder` | quality | draft | evidence-collection, evidence-sheet, evidence-document, project-context | project-write |
 | `automation-engineer` | quality | pending-migration | automation, project-context | repository-write |
+| `quality-agents-expert` | framework | draft | project-context (reference only) | repository-write |
 
 Access levels: **read-only** (reads the project, writes nothing), **project-write** (writes only inside `workspace/projects/<project-id>/`), **repository-write** (may also change a linked code repository, after an approved plan).
 
@@ -55,7 +60,7 @@ Access levels: **read-only** (reads the project, writes nothing), **project-writ
 
 Example: *"Review this story and, once approved, map the test scenarios"* → workflow `requirements-to-tests`: `project-context` → `requirements-review` (all its gates) → **approval** → `test-design` (mapping → **OK** → detailing).
 
-Workflows: `skills/qa-orchestrator/references/workflows/` — `requirements-to-tests`, `failure-investigation`, `quality-lifecycle`.
+Workflows: `skills/qa-orchestrator/references/workflows/` — `requirements-to-tests`, `failure-investigation`, `test-evidence`, `quality-lifecycle`.
 
 ## Interrupting and resuming
 
@@ -84,11 +89,12 @@ Exception: an authorized change to a **target repository** (e.g. automation code
 
 | Command | Purpose |
 |---|---|
-| `npm run new-project -- <id> "<name>"` | Create a project folder from the template |
+| `npm run new-project -- <id> "<name>" [--blank]` | Create a project folder from the template (`--blank`: without the QA context files, planned with the user) |
 | `npm run new-run -- --project <id> --skill <name> --slug <slug>` | Create a run with `state.json` |
 | `npm run runs [-- <id>]` | List runs and validate their state |
-| `npm run xlsx -- write/read ...` | Build or read xlsx deliverables from a skill's layout |
+| `npm run xlsx -- write/read/fill/inspect ...` | Build or read xlsx deliverables from a skill's layout, or fill the user's own xlsx model |
 | `npm run pdf -- <report.md> <report.pdf>` | Render a Markdown report to PDF (Edge/Chrome) |
+| `npm run docx -- write/inspect ...` | Build a Word deliverable (optionally inside the user's model) or read a model's structure |
 
 ## For contributors (editing this framework)
 
