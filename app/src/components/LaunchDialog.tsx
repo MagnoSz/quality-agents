@@ -1,9 +1,10 @@
 // "Open in your AI tool": a short wizard — one question per screen — that
 // prepares the request (activity, inbox files, agent, notes) and opens the AI
-// tool the QA already uses. Quality Agents has no chat of its own.
+// tool the QA already uses. Moki has no chat of its own.
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, describeRun, type ActivityInfo, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type TerminalRef, type ToolInfo, type ToolKind } from '../api';
+import { conversationLanguage, t } from '../i18n';
 import { IconCheck, IconCode, IconCopy, IconFile, IconFolder, IconGlobe, IconPlay, IconRefresh, IconTerminal, IconX } from './Icons';
 
 interface Props {
@@ -22,10 +23,10 @@ const recall = (key: string) => { try { return window.localStorage.getItem(key);
 const KIND_ICON: Record<ToolKind, ReactNode> = {
   terminal: <IconTerminal size={16} />, editor: <IconCode size={16} />, chat: <IconGlobe size={16} />, print: <IconFile size={16} />,
 };
-const KIND_HINT: Record<ToolKind, string> = {
-  terminal: 'Opens in a terminal tab', editor: 'Opens the folder in your editor, request copied',
-  chat: 'Web chat — you upload the files', print: 'Only prepares the request for you to copy',
-};
+const kindHint = (kind: ToolKind): string => ({
+  terminal: t('Opens in a terminal tab'), editor: t('Opens the folder in your editor, request copied'),
+  chat: t('Web chat — you upload the files'), print: t('Only prepares the request for you to copy'),
+})[kind];
 
 const formatSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
@@ -40,7 +41,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agent, setAgent] = useState('');
   const [note, setNote] = useState('');
-  const [language, setLanguage] = useState(recall('qa-language') || 'English');
+  const [language, setLanguage] = useState(conversationLanguage);
   const [tool, setTool] = useState(() => {
     const saved = recall('qa-tool');
     return tools.some((t) => t.id === saved && t.available) ? saved as string : '';
@@ -97,33 +98,33 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
 
   const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); } };
 
-  const buttonLabel = !selectedTool ? 'Open' : selectedTool.kind === 'print' ? 'Prepare the request'
-    : selectedTool.kind === 'chat' ? 'Prepare for the web chat' : `Open in ${selectedTool.label.replace(/ \(.*\)$/, '')}`;
+  const buttonLabel = !selectedTool ? t('Open') : selectedTool.kind === 'print' ? t('Prepare the request')
+    : selectedTool.kind === 'chat' ? t('Prepare for the web chat') : t('Open in {tool}', { tool: t(selectedTool.label).replace(/ \(.*\)$/, '') });
 
   const questions: Record<StepKey, { title: string; hint: string }> = {
-    activity: { title: 'What do you want to do?', hint: 'Choose one.' },
-    run: { title: 'Which activity do you want to continue?', hint: 'These are the activities that are not finished yet.' },
+    activity: { title: t('What do you want to do?'), hint: t('Choose one.') },
+    run: { title: t('Which activity do you want to continue?'), hint: t('These are the activities that are not finished yet.') },
     files: {
-      title: current?.needsFiles ? 'Which files should the AI use?' : 'Should the AI use any file?',
-      hint: current?.needsFiles ? 'Choose at least one file from the project inbox.' : 'Optional — you can continue without files.',
+      title: current?.needsFiles ? t('Which files should the AI use?') : t('Should the AI use any file?'),
+      hint: current?.needsFiles ? t('Choose at least one file from the project inbox.') : t('Optional — you can continue without files.'),
     },
-    agent: { title: 'Who should do it?', hint: 'An agent is a specialist with its own instructions. If you are not sure, let the skill decide.' },
-    details: { title: 'Anything else the AI should know?', hint: 'Optional. Write it as you would tell a colleague.' },
-    tool: { title: 'Which AI tool do you want to use?', hint: 'Only the tools found on this computer can be chosen.' },
-    review: { title: 'Everything ready', hint: 'Check your answers. Click an answer to change it.' },
+    agent: { title: t('Who should do it?'), hint: t('An agent is a specialist with its own instructions. If you are not sure, let the skill decide.') },
+    details: { title: t('Anything else the AI should know?'), hint: t('Optional. Write it as you would tell a colleague.') },
+    tool: { title: t('Which AI tool do you want to use?'), hint: t('Only the tools found on this computer can be chosen.') },
+    review: { title: t('Everything ready'), hint: t('Check your answers. Click an answer to change it.') },
   };
   const q = questions[step];
 
-  const agentLabel = agent || 'Let the skill decide';
+  const agentLabel = agent || t('Let the skill decide');
   const summary: { step: StepKey; label: string; value: string }[] = [
-    { step: 'activity', label: 'Activity', value: current?.label ?? '—' },
-    ...(resume ? [{ step: 'run' as StepKey, label: 'Continue', value: run ? describeRun(run).title : '—' }] : [
-      { step: 'files' as StepKey, label: 'Files', value: files.length ? files.join(', ') : 'None' },
-      ...(agents.length ? [{ step: 'agent' as StepKey, label: 'Who does it', value: agentLabel }] : []),
+    { step: 'activity', label: t('Activity'), value: current ? t(current.label) : '—' },
+    ...(resume ? [{ step: 'run' as StepKey, label: t('Continue'), value: run ? describeRun(run).title : '—' }] : [
+      { step: 'files' as StepKey, label: t('Files'), value: files.length ? files.join(', ') : t('None') },
+      ...(agents.length ? [{ step: 'agent' as StepKey, label: t('Who does it'), value: agentLabel }] : []),
     ]),
-    { step: 'details', label: 'Notes', value: note.trim() || 'None' },
-    { step: 'details', label: 'Conversation language', value: language },
-    { step: 'tool', label: 'AI tool', value: selectedTool?.label ?? '—' },
+    { step: 'details', label: t('Notes'), value: note.trim() || t('None') },
+    { step: 'details', label: t('Conversation language'), value: t(language) },
+    { step: 'tool', label: t('AI tool'), value: selectedTool ? t(selectedTool.label) : '—' },
   ];
 
   return (
@@ -131,11 +132,11 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
       <div className="modal wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
         <header className="modal-head">
           <div>
-            <p className="wizard-progress">Open {project.name} in your AI tool · step {index + 1} of {steps.length}</p>
+            <p className="wizard-progress">{t('Open {project} in your AI tool · step {n} of {total}', { project: project.name, n: index + 1, total: steps.length })}</p>
             <h2 id="wizard-title">{q.title}</h2>
             <p className="muted small">{q.hint}</p>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} title="Close (Esc)"><IconX size={18} /></button>
+          <button type="button" className="icon-btn" onClick={onClose} title={t('Close (Esc)')}><IconX size={18} /></button>
         </header>
         <div className="wizard-bar"><span style={{ width: `${((index + 1) / steps.length) * 100}%` }} /></div>
 
@@ -145,7 +146,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
               {/* Only what can be done now: unavailable skills and an empty "resume" are hidden. */}
               {activities.filter((a) => a.available && (a.id !== 'resume' || runs.length > 0)).map((a) => {
                 return (
-                  <Answer key={a.id} title={a.label} hint={a.hint} on={activity === a.id}
+                  <Answer key={a.id} title={t(a.label)} hint={t(a.hint)} on={activity === a.id}
                     onPick={() => {
                       setActivity(a.id);
                       if (a.id === 'resume') setRun((r) => (runs.some((x) => x.id === r) ? r : runs[0]?.id ?? ''));
@@ -159,7 +160,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
           {step === 'run' && (
             <div className="answer-list">
               {runs.map((r) => (
-                <Answer key={r.id} title={describeRun(r.id).title} hint={`${describeRun(r.id).date}${r.currentStep ? ` · stopped at: ${r.currentStep}` : ''}`}
+                <Answer key={r.id} title={describeRun(r.id).title} hint={`${describeRun(r.id).date}${r.currentStep ? ` · ${t('stopped at:')} ${r.currentStep}` : ''}`}
                   on={run === r.id} onPick={() => { setRun(r.id); next(); }} />
               ))}
             </div>
@@ -169,8 +170,8 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
             <>
               {!inbox.length ? (
                 <div className="wizard-empty">
-                  <p>The project inbox is empty.</p>
-                  <p className="muted small">Click <strong>Open inbox folder</strong>, put the stories, logs or documents there, then click <strong>Refresh</strong>. Word files are converted to text automatically.</p>
+                  <p>{t('The project inbox is empty.')}</p>
+                  <p className="muted small">{t('Click')} <strong>{t('Open inbox folder')}</strong>{t(', put the stories, logs or documents there, then click')} <strong>{t('Refresh')}</strong>. {t('Word files are converted to text automatically.')}</p>
                 </div>
               ) : (
                 <ul className="file-pick">
@@ -187,39 +188,39 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
                 </ul>
               )}
               <div className="row-actions">
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void api.openFolder(project.id, 'inbox'); }}><IconFolder size={15} /> Open inbox folder</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={load}><IconRefresh size={15} /> Refresh</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void api.openFolder(project.id, 'inbox'); }}><IconFolder size={15} /> {t('Open inbox folder')}</button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={load}><IconRefresh size={15} /> {t('Refresh')}</button>
               </div>
             </>
           )}
 
           {step === 'agent' && (
             <div className="answer-list">
-              <Answer title="Let the skill decide" hint="Recommended if you are not sure." on={!agent} onPick={() => { setAgent(''); next(); }} />
-              {suited.length > 0 && <p className="answer-group">Suited to this activity</p>}
+              <Answer title={t('Let the skill decide')} hint={t('Recommended if you are not sure.')} on={!agent} onPick={() => { setAgent(''); next(); }} />
+              {suited.length > 0 && <p className="answer-group">{t('Suited to this activity')}</p>}
               {suited.map((a) => <Answer key={a.name} title={a.name} hint={a.description} on={agent === a.name} onPick={() => { setAgent(a.name); next(); }} />)}
-              {others.length > 0 && <p className="answer-group">Other agents in this project</p>}
+              {others.length > 0 && <p className="answer-group">{t('Other agents in this project')}</p>}
               {others.map((a) => <Answer key={a.name} title={a.name} hint={a.description} on={agent === a.name} onPick={() => { setAgent(a.name); next(); }} />)}
             </div>
           )}
 
           {step === 'details' && (
             <>
-              <textarea rows={4} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. focus on permissions" autoFocus />
+              <textarea rows={4} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('e.g. focus on permissions')} autoFocus />
               <label className="field inline">
-                <span className="label">The AI should talk to me in</span>
-                <select value={language} onChange={(e) => setLanguage(e.target.value)}>{languages.map((l) => <option key={l}>{l}</option>)}</select>
+                <span className="label">{t('The AI should talk to me in')}</span>
+                <select value={language} onChange={(e) => setLanguage(e.target.value)}>{languages.map((l) => <option key={l} value={l}>{t(l)}</option>)}</select>
               </label>
             </>
           )}
 
           {step === 'tool' && (
             <div className="answer-list">
-              {installed.map((t) => (
-                <Answer key={t.id} icon={KIND_ICON[t.kind]} title={t.label} hint={KIND_HINT[t.kind]} on={tool === t.id}
-                  onPick={() => { setTool(t.id); next(); }} />
+              {installed.map((ai) => (
+                <Answer key={ai.id} icon={KIND_ICON[ai.kind]} title={t(ai.label)} hint={kindHint(ai.kind)} on={tool === ai.id}
+                  onPick={() => { setTool(ai.id); next(); }} />
               ))}
-              {notInstalled.length > 0 && <p className="muted small">Not found on this computer: {notInstalled.map((t) => t.label.replace(/ \(.*\)$/, '')).join(' · ')}</p>}
+              {notInstalled.length > 0 && <p className="muted small">{t('Not found on this computer:')} {notInstalled.map((ai) => t(ai.label).replace(/ \(.*\)$/, '')).join(' · ')}</p>}
             </div>
           )}
 
@@ -227,7 +228,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
             <>
               <dl className="wizard-summary">
                 {summary.map((s) => (
-                  <button type="button" key={s.label} className="wizard-summary-row" onClick={() => { setResult(null); setError(''); setStep(s.step); }} title="Change">
+                  <button type="button" key={s.label} className="wizard-summary-row" onClick={() => { setResult(null); setError(''); setStep(s.step); }} title={t('Change')}>
                     <dt>{s.label}</dt><dd>{s.value}</dd>
                   </button>
                 ))}
@@ -239,16 +240,16 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
                   {error && <p className="result-title">{error}</p>}
                   {result && !result.opened && !error && selectedTool?.kind === 'chat' && (
                     <>
-                      <p className="result-title">Ready for the web chat</p>
-                      <p className="small">Copy the request and upload these files to the chat{result.bundleReady ? '' : ' (run npm run bundle first to create the framework bundle)'}:</p>
+                      <p className="result-title">{t('Ready for the web chat')}</p>
+                      <p className="small">{t('Copy the request and upload these files to the chat')}{result.bundleReady ? '' : ` ${t('(run npm run bundle first to create the framework bundle)')}`}:</p>
                       <ul className="small upload-list">{result.upload?.map((u) => <li key={u}><code>{u}</code></li>)}</ul>
                     </>
                   )}
                   {result?.prompt && (
                     <div className="prompt-box">
                       <div className="prompt-head">
-                        <span className="label">Request</span>
-                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void copy(result.prompt); }}><IconCopy size={15} /> {copied ? 'Copied' : 'Copy'}</button>
+                        <span className="label">{t('Request')}</span>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void copy(result.prompt); }}><IconCopy size={15} /> {copied ? t('Copied') : t('Copy')}</button>
                       </div>
                       <p className="prompt-text">{result.prompt}</p>
                     </div>
@@ -260,17 +261,17 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
         </div>
 
         <footer className="modal-foot">
-          {index > 0 && <button type="button" className="btn btn-ghost" onClick={back}>Back</button>}
+          {index > 0 && <button type="button" className="btn btn-ghost" onClick={back}>{t('Back')}</button>}
           <span className="wizard-spacer" />
           {step === 'files' && (
             <button type="button" className="btn" disabled={Boolean(current?.needsFiles) && !files.length} onClick={next}>
-              {files.length ? 'Continue' : current?.needsFiles ? 'Choose a file to continue' : 'Continue without files'}
+              {files.length ? t('Continue') : current?.needsFiles ? t('Choose a file to continue') : t('Continue without files')}
             </button>
           )}
-          {step === 'details' && <button type="button" className="btn" onClick={next}>{note.trim() ? 'Continue' : 'Nothing else — continue'}</button>}
+          {step === 'details' && <button type="button" className="btn" onClick={next}>{note.trim() ? t('Continue') : t('Nothing else — continue')}</button>}
           {step === 'review' && (result?.opened
-            ? <button type="button" className="btn" onClick={onClose}>Done</button>
-            : <button type="button" className="btn" disabled={busy || !selectedTool} onClick={() => { void submit(); }}><IconPlay size={15} /> {busy ? 'Opening…' : buttonLabel}</button>)}
+            ? <button type="button" className="btn" onClick={onClose}>{t('Done')}</button>
+            : <button type="button" className="btn" disabled={busy || !selectedTool} onClick={() => { void submit(); }}><IconPlay size={15} /> {busy ? t('Opening…') : buttonLabel}</button>)}
         </footer>
       </div>
     </div>

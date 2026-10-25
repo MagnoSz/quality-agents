@@ -2,7 +2,7 @@ import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, cpSync, symlinkSync, existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createService, ServiceError, type FileContent, type TreeNode } from '../desktop/service.ts';
 import { PathError, resolveInside, isEditable, isOpenable } from '../desktop/fs-guard.ts';
@@ -11,6 +11,7 @@ import type { TermSpec } from '../desktop/terminals.ts';
 import { docxToMarkdown, readableInputs } from '../scripts/lib/docx.ts';
 import { syncFramework } from '../desktop/framework.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
+import { formatNumber } from '../scripts/lib/numfmt.mjs';
 import { zip } from '../scripts/lib/zip.mjs';
 import { ROOT } from '../scripts/lib/repo.mjs';
 import { createProject, slugify, windowsSafePrompt, type ToolKey } from '../scripts/lib/core.ts';
@@ -27,7 +28,9 @@ function makeDocx(): Buffer {
   const p = (text: string, style = '') => `<w:p>${style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : ''}<w:r><w:t>${text}</w:t></w:r></w:p>`;
   const cell = (text: string) => `<w:tc>${p(text)}</w:tc>`;
   const xml = `<?xml version="1.0"?><w:document xmlns:w="x"><w:body>${p('US-1 Renovação', 'Heading1')}${p('Item A', 'ListBullet')}`
-    + `<w:tbl><w:tr>${cell('AC')}${cell('Rule')}</w:tr><w:tr>${cell('AC1')}${cell('a | b &amp; c')}</w:tr></w:tbl>${p('Fim')}</w:body></w:document>`;
+    + `<w:tbl><w:tr>${cell('AC')}${cell('Rule')}</w:tr><w:tr>${cell('AC1')}${cell('a | b &amp; c')}</w:tr></w:tbl>${p('Fim')}`
+    + '<w:p><w:r><w:t>A</w:t><w:tab/><w:t>B</w:t></w:r><w:r><w:drawing><w:txbxContent><w:p><w:r><w:t>na caixa</w:t></w:r></w:p></w:txbxContent></w:drawing></w:r>'
+    + '<mc:Fallback><w:pict><w:txbxContent><w:p><w:r><w:t>na caixa</w:t></w:r></w:p></w:txbxContent></w:pict></mc:Fallback><w:r><w:t>depois</w:t></w:r></w:p></w:body></w:document>';
   return zip([['word/document.xml', xml]]);
 }
 
@@ -45,6 +48,19 @@ before(() => {
   writeFileSync(join(project, 'runs', RUN, 'outputs', 'report.md'), '# Report\n\nSee [the story](../../../inbox/us-1.md).');
   writeFileSync(join(project, 'inbox', 'us-1.md'), '# US-1');
   writeFileSync(join(project, 'inbox', 'us-2.docx'), makeDocx());
+  writeFileSync(join(project, 'inbox', 'cases.xlsx'), zip([
+    ['xl/workbook.xml', '<workbook><sheets><sheet name="Cases" r:id="rId1"/><sheet name="Empty" state="hidden" r:id="rId2"/></sheets></workbook>'],
+    ['xl/_rels/workbook.xml.rels', '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Target="/xl/worksheets/sheet2.xml"/></Relationships>'],
+    // Prefixed elements (as some .NET tools write), a phonetic guide and an escaped line break.
+    ['xl/sharedStrings.xml', '<x:sst><x:si><x:t>Id</x:t><x:rPh><x:t>ID</x:t></x:rPh></x:si><x:si><x:r><x:t>Renova</x:t></x:r><x:r><x:t>&amp;ção_x000D_</x:t></x:r></x:si></x:sst>'],
+    ['xl/styles.xml', '<styleSheet><numFmts><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts><cellXfs><xf numFmtId="0"/><xf numFmtId="164"/><xf numFmtId="10"/><xf numFmtId="0"><alignment horizontal="centerContinuous" vertical="center" wrapText="1"/></xf></cellXfs></styleSheet>'],
+    // An empty hidden row written as <row/> must not take the next row's cells.
+    ['xl/worksheets/sheet1.xml', '<cols><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="9" hidden="1"/></cols>'
+      + '<sheetData><row r="1"><c r="A1" s="3" t="s"><v>0</v></c><c r="F1" s="1"/></row><row r="2" hidden="1"/><row r="3"><c r="B3" t="s"><v>1</v></c><c r="C3"><v>42</v></c>'
+      + '<c r="E3" t="inlineStr"><is><t>00123</t></is></c><c r="D3" t="b"><v>1</v></c><c r="F3" s="1"><v>46319</v></c><c r="G3" s="2"><v>0.875</v></c><c r="H3"><f>SUM(C3:C3)</f></c></row>'
+      + '<row r="1048576"><c r="A1048576" s="1"/></row></sheetData><mergeCells><mergeCell ref="A1:B2"/><mergeCell ref="A5000:C5001"/></mergeCells><drawing r:id="rId9"/>'],
+    ['xl/worksheets/sheet2.xml', '<sheetData/>'],
+  ]));
   writeFileSync(join(project, 'inbox', 'tool.exe'), 'MZ');
   writeFileSync(join(root, 'secret.txt'), 'outside');
   service = createService(root, {
@@ -86,6 +102,12 @@ test('readFile renders each kind of file', () => {
   assert.equal(service.readFile('acme', 'project.json').kind, 'json');
   const docx = service.readFile('acme', 'inbox/us-2.docx') as Extract<FileContent, { kind: 'docx' }>;
   assert.match(docx.html, /US-1 Renovação/);
+  const xlsx = service.readFile('acme', 'inbox/cases.xlsx') as Extract<FileContent, { kind: 'xlsx' }>;
+  assert.deepEqual(xlsx.sheets, [
+    { name: 'Cases', hidden: false, drawing: true, merges: [[0, 0, 1, 1]], truncated: false,
+      widths: [64, 140, 63, 64, 64, 64, 64, 64], hiddenRows: [1], hiddenCols: [2], align: { '0:0': { h: 'center', v: 'middle', wrap: true } }, rows: [['Id'], [], ['', 'Renova&ção\r', { n: '42' }, 'TRUE', '00123', { n: '24/10/2026' }, { n: formatNumber(0.875, '0.00%') }, '=SUM(C3:C3)']] }, // the app uses the system locale
+    { name: 'Empty', hidden: true, drawing: false, merges: [], truncated: false, widths: [], hiddenRows: [], hiddenCols: [], align: {}, rows: [] },
+  ]);
   const exe = service.readFile('acme', 'inbox/tool.exe') as Extract<FileContent, { kind: 'binary' }>;
   assert.equal(exe.kind, 'binary');
   assert.equal(exe.openable, false);
@@ -104,6 +126,26 @@ test('editing is limited to existing Markdown/text files', () => {
   assert.throws(() => service.writeFile('acme', 'project.json', '{}'), /Only Markdown and text/);
   assert.throws(() => service.writeFile('acme', 'context/new.md', 'x'), /not found/);
   assert.throws(() => service.writeFile('acme', '../../../secret.txt', 'x'), ServiceError);
+});
+
+test('notes: the section is always listed and new notes get unique names', () => {
+  assert.ok(service.tree('acme').some((n) => n.path === 'notes' && n.type === 'dir'));
+  assert.equal(service.createNote('acme', 'Ideias de teste', 'a'), 'notes/ideias-de-teste.md');
+  assert.equal(service.createNote('acme', 'Ideias de teste', 'b'), 'notes/ideias-de-teste-2.md');
+  assert.equal((service.readFile('acme', 'notes/ideias-de-teste-2.md') as Extract<FileContent, { kind: 'markdown' }>).text, 'b');
+  assert.throws(() => service.createNote('acme', '../..', 'x'), /title/);
+});
+
+test('MCPs: the last section lists the servers configured where the AI tools start', () => {
+  writeFileSync(join(root, '.mcp.json'), JSON.stringify({ mcpServers: { jira: {}, playwright: {} } }));
+  mkdirSync(join(root, '.codex'), { recursive: true });
+  writeFileSync(join(root, '.codex', 'config.toml'), '[mcp_servers.github]\ncommand = "x"\n');
+  const mcps = service.tree('acme').at(-1);
+  assert.equal(mcps?.name, 'MCPs');
+  assert.deepEqual(mcps?.children?.filter((c) => c.mcp === '.mcp.json').map((c) => c.name), ['jira', 'playwright']);
+  assert.deepEqual(mcps?.children?.filter((c) => c.mcp === '.codex/config.toml').map((c) => c.name), ['github']);
+  rmSync(join(root, '.mcp.json'));
+  rmSync(join(root, '.codex'), { recursive: true });
 });
 
 test('open folder / open with default program are confined and filtered', () => {
@@ -193,7 +235,7 @@ test('agents per project: enabled list in project.json gates the launch', () => 
   service.setProjectAgents('acme', all);
 });
 
-test('linked folder: linking records it and backs up its AI settings without touching it', async () => {
+test('linked folder: linking records it and backs up its AI settings inside it', async () => {
   createProject('linked', 'Linked', root);
   const project = join(root, 'workspace', 'projects', 'linked');
   const repo = realpathSync(mkdtempSync(join(tmpdir(), 'qa-repo-')));
@@ -215,7 +257,7 @@ test('linked folder: linking records it and backs up its AI settings without tou
     assert.equal(svc.projects().find((p) => p.id === 'linked')?.repository, '');
     assert.throws(() => svc.openLinkedFolder('linked'), /No folder is linked/);
     assert.equal(await svc.linkRepository('linked'), null, 'cancelled dialog');
-    for (const [bad, msg] of [[join(repo, 'nope'), /not found/], [root, /outside Quality Agents/], [join(root, 'skills'), /outside Quality Agents/], [homedir(), /user folder/]] as const) {
+    for (const [bad, msg] of [[join(repo, 'nope'), /not found/], [root, /outside Moki/], [join(root, 'skills'), /outside Moki/], [homedir(), /user folder/]] as const) {
       pick = bad;
       await assert.rejects(svc.linkRepository('linked'), msg);
     }
@@ -226,11 +268,13 @@ test('linked folder: linking records it and backs up its AI settings without tou
     const r = await svc.linkRepository('linked');
     assert.equal(r?.repository, repo);
     assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).repositories, [{ name: 'app', localPath: repo, writeAllowed: true, linkedFolder: true }]);
-    assert.match(String(r?.backup), /[\\/]backups[\\/]link-\d{8}-\d{6}$/);
+    assert.equal(dirname(String(r?.backup)), join(repo, '.moki-backup'));
+    assert.match(String(r?.backup), /[\\/]link-\d{8}-\d{6}$/);
     assert.equal(readFileSync(join(String(r?.backup), '.claude', 'settings.json'), 'utf8'), '{"a":1}');
     assert.ok(existsSync(join(String(r?.backup), '.agents', 'x.md')) && existsSync(join(String(r?.backup), 'AGENTS.md')));
     assert.ok(!existsSync(join(String(r?.backup), '.claude', 'worktrees')), 'worktrees are not copied');
-    assert.deepEqual(readdirSync(repo).sort(), ['.agents', '.claude', 'AGENTS.md'], 'the folder is not changed');
+    assert.deepEqual(readdirSync(repo).sort(), ['.agents', '.claude', '.moki-backup', 'AGENTS.md'], 'only the backup is added');
+    assert.equal(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'), '{"a":1}', 'the originals stay');
     assert.ok(svc.openLinkedFolder('linked') && opened[0] === repo);
     svc.launch({ project: 'linked', activity: 'open', tool: 'claude', files: [], language: 'English', note: '' });
     assert.match(prompts[0], new RegExp(`Linked folder \\(the system's repository\\): ${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`));
@@ -241,6 +285,36 @@ test('linked folder: linking records it and backs up its AI settings without tou
     const repos = JSON.parse(readFileSync(file, 'utf8')).repositories;
     assert.deepEqual(repos.map((x: { linkedFolder?: boolean }) => x.linkedFolder), [true, undefined], 'only the new folder is linked');
     rmSync(empty, { recursive: true });
+  } finally { rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('linked folder: a project can be created from an existing folder chosen in the dialog', async () => {
+  const repo = realpathSync(mkdtempSync(join(tmpdir(), 'qa-repo-')));
+  writeFileSync(join(repo, 'CLAUDE.md'), '# repo');
+  mkdirSync(join(repo, '.git', 'info'), { recursive: true });
+  writeFileSync(join(repo, '.git', 'info', 'exclude'), '# git ls-files --others --exclude-from=.git/info/exclude');
+  let pick: string | null = null;
+  const svc = createService(root, { launch: () => ({ opened: true, message: '' }), openFolder: () => {}, openPath: () => {}, pickFolder: async () => pick });
+  try {
+    assert.equal(await svc.pickFolder(), null, 'cancelled dialog');
+    assert.throws(() => svc.createProject('From folder', 'qa', repo), /Choose the folder again/, 'only a picked folder');
+    pick = root;
+    await assert.rejects(svc.pickFolder(), /outside Moki/);
+    pick = repo;
+    assert.deepEqual(await svc.pickFolder(), { folder: repo, name: basename(repo) });
+    assert.throws(() => svc.createProject('From folder', 'qa', join(repo, 'x')), /Choose the folder again/);
+    const created = svc.createProject('From folder', 'blank', repo);
+    assert.equal(created.id, 'from-folder');
+    assert.equal(created.repository, repo);
+    assert.equal(readFileSync(join(String(created.backup), 'CLAUDE.md'), 'utf8'), '# repo');
+    assert.equal(dirname(String(created.backup)), join(repo, '.moki-backup'));
+    const exclude = () => readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8');
+    assert.equal(exclude(), '# git ls-files --others --exclude-from=.git/info/exclude\n.moki-backup/\n');
+    pick = repo;
+    await svc.pickFolder();
+    svc.createProject('Twice', 'qa', repo);
+    assert.equal(exclude().match(/\.moki-backup\//g)?.length, 1, 'added once');
+    assert.throws(() => svc.createProject('Again', 'qa', repo), /Choose the folder again/, 'a pick is used once');
   } finally { rmSync(repo, { recursive: true, force: true }); }
 });
 
@@ -322,7 +396,7 @@ test('agents created from Skills & agents only use skills installed in their own
   assert.match(text, /^---\nname: api-tester\ndescription: "Act as a senior API tester: use @lint\."\n---\n\nAct as a senior API tester/);
   assert.match(text, /Use only these skills \(read the SKILL\.md when one fits the task\)\. Do not use or install any other skill/);
   assert.match(text, /- `lint`: `workspace\/projects\/acme\/skills\/lint\/SKILL\.md`/);
-  assert.doesNotMatch(text, /Quality Agents skills follow/, 'no framework note without framework skills');
+  assert.doesNotMatch(text, /Moki skills follow/, 'no framework note without framework skills');
   assert.throws(() => svc.createScopeAgent('acme', req), /already exists/);
   assert.match(svc.launch(openAcme).prompt, /Agents defined for this project \(.*agents\/<name>\.md and use only the skills it lists\): api-tester\./);
 
@@ -333,6 +407,37 @@ test('agents created from Skills & agents only use skills installed in their own
   rmSync(join(project, 'skills'), { recursive: true, force: true });
   rmSync(join(project, 'agents'), { recursive: true, force: true });
   assert.doesNotMatch(svc.launch(openAcme).prompt, /Skills installed|Agents defined/, 'requests are unchanged without project skills or agents');
+  rmSync(home, { recursive: true, force: true });
+});
+
+test('create skill: the AI tool drafts a proposal in the project; installing copies the reviewed proposal', () => {
+  const home = join(root, 'home-proposals');
+  const sent: string[] = [];
+  const svc = createService(root, { ...noLaunch, home, launch: (_t, prompt) => { sent.push(prompt); return { opened: true, message: '' }; } });
+  const req = { name: 'API Contract', prompt: 'Compare two OpenAPI files.\nList breaking changes.', tool: 'claude', language: 'Spanish' };
+  assert.throws(() => svc.proposeSkill('acme', { ...req, name: '!!' }), /name/);
+  assert.throws(() => svc.proposeSkill('acme', { ...req, prompt: ' ' }), /Describe/);
+  assert.throws(() => svc.proposeSkill('acme', { ...req, tool: 'print' }), /AI tool/);
+  svc.proposeSkill('acme', req);
+  assert.match(sent[0], /named "api-contract" from my description: "Compare two OpenAPI files\. List breaking changes\."\./);
+  assert.match(sent[0], /Write only inside workspace\/projects\/acme\/skill-proposals\/api-contract; do not install/);
+  assert.match(sent[0], /Talk to me in Spanish\.$/);
+
+  const project = join(root, 'workspace', 'projects', 'acme');
+  const draft = join(project, 'skill-proposals', 'api-contract');
+  mkdirSync(join(draft, 'references'), { recursive: true }); // what the AI tool writes
+  writeFileSync(join(draft, 'SKILL.md'), '---\nname: api-contract\ndescription: Finds breaking changes.\n---\n');
+  writeFileSync(join(draft, 'references', 'a.md'), 'A');
+  assert.throws(() => svc.proposeSkill('acme', req), /already exists/);
+  assert.deepEqual(svc.skillProposals('acme'), [{ name: 'api-contract', description: 'Finds breaking changes.' }]);
+
+  assert.throws(() => svc.installProposal('acme', '../context', 'project'), /Unknown skill proposal/);
+  svc.installProposal('acme', 'api-contract', 'project');
+  assert.equal(readFileSync(join(project, 'skills', 'api-contract', 'references', 'a.md'), 'utf8'), 'A');
+  assert.throws(() => svc.installProposal('acme', 'api-contract', 'project'), /already installed/);
+  assert.deepEqual(svc.installProposal('acme', 'api-contract', 'global').folders, [join(home, '.claude', 'skills', 'api-contract'), join(home, '.agents', 'skills', 'api-contract')]);
+  rmSync(join(project, 'skills'), { recursive: true, force: true });
+  rmSync(join(project, 'skill-proposals'), { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -356,6 +461,17 @@ test('global tab and start screen: lists, opens and removes (to the trash) only 
   const items = svc.globalItems();
   assert.deepEqual(items.skills, [{ name: 'shared', description: 'Shared helper', folders: [join(home, '.claude', 'skills', 'shared'), join(home, '.agents', 'skills', 'shared')], linkedBy: ['Acme'] }]);
   assert.deepEqual(items.agents, [{ name: 'helper', description: 'Helps', file: join(home, '.claude', 'agents', 'helper.md') }]);
+
+  const agentFile = join(home, '.claude', 'agents', 'helper.md');
+  assert.equal(svc.globalAgent('helper').text, readFileSync(agentFile, 'utf8'));
+  assert.throws(() => svc.saveGlobalAgent('helper', 'no frontmatter'), /frontmatter/);
+  assert.throws(() => svc.saveGlobalAgent('../x', '---\nname: x\ndescription: y\n---\n'), /not installed/);
+  svc.saveGlobalAgent('helper', '---\nname: helper\ndescription: "Helps more"\n---\r\nBody\r\n');
+  assert.equal(readFileSync(agentFile, 'utf8'), '---\nname: helper\ndescription: "Helps more"\n---\nBody\n');
+  const edit = svc.editGlobalAgent('helper', { prompt: 'Answer in Portuguese', tool: 'claude', language: 'English' });
+  assert.match(edit.prompt, /helper\.md.*Answer in Portuguese.*wait for my OK/);
+  assert.throws(() => svc.editGlobalAgent('helper', { prompt: '', tool: 'claude' }), /Describe/);
+  writeFileSync(agentFile, '---\nname: helper\ndescription: "Helps"\n---\n');
 
   svc.openGlobal('skill', 'shared');
   svc.openGlobal('agent', 'helper');
@@ -394,6 +510,44 @@ test('set up: description and global skills linked by reference; requests name t
   rmSync(skill, { recursive: true, force: true });
   assert.doesNotMatch(svc.launch(setup).prompt, /Global skills linked/, 'skills no longer installed are left out');
   svc.setupProject('acme', { description: '', linkedSkills: [] });
+  rmSync(home, { recursive: true, force: true });
+});
+
+test('blank project: no QA context files; the AI plan is filtered and approved from Set up', () => {
+  const home = join(root, 'home-plan');
+  const svc = createService(root, { launch: () => ({ opened: true, message: '' }), openFolder: () => {}, openPath: () => {}, home });
+  mkdirSync(join(home, '.claude', 'skills', 'react-dev'), { recursive: true });
+  writeFileSync(join(home, '.claude', 'skills', 'react-dev', 'SKILL.md'), '---\nname: react-dev\n---');
+  assert.throws(() => svc.createProject('Other', 'empty'), /Unknown way to start/);
+  const created = svc.createProject('Blank One', 'blank');
+  const dir = join(root, 'workspace', 'projects', 'blank-one');
+  assert.equal(created.starter, 'blank');
+  assert.ok(!existsSync(join(dir, 'context')) && existsSync(join(dir, 'inbox')) && existsSync(join(dir, 'proposed-updates.md')));
+  assert.equal(svc.readPlan('blank-one'), null);
+
+  const plan = { project: 'blank-one', activity: 'plan', tool: 'print', files: [], language: 'English', note: '' };
+  const prompt = svc.launch(plan).prompt;
+  assert.match(prompt, /one question at a time/);
+  assert.match(prompt, /skills: react-dev; agents: [^;]*failure-analyst/);
+  assert.match(prompt, /Do not create context files, install or link anything before I approve/);
+  assert.deepEqual(svc.launch({ ...plan, tool: 'chat' }).upload?.filter((f) => f.includes('context')), [], 'no missing context/index.md upload');
+
+  writeFileSync(join(dir, 'plan.json'), JSON.stringify({
+    skills: ['react-dev', 'ghost'], agents: ['failure-analyst', 'nobody'], searchSkills: ['playwright', 7],
+    contextFiles: [{ path: 'context/stack.md', contains: 'Tech stack' }, { path: 'context/team.md' }, { path: '../escape.md' }],
+  }));
+  assert.deepEqual(svc.readPlan('blank-one'), {
+    approved: false, skills: ['react-dev'], agents: ['failure-analyst'], searchSkills: ['playwright'],
+    contextFiles: [{ path: 'context/stack.md', contains: 'Tech stack' }, { path: 'context/team.md', contains: '' }],
+  });
+  assert.throws(() => svc.setupProject('blank-one', { description: 'x', linkedSkills: [], agents: ['nobody'] }), /Unknown or unavailable agents: nobody/);
+  const summary = svc.setupProject('blank-one', { description: 'React app', linkedSkills: ['react-dev'], agents: ['failure-analyst'], contextFiles: ['context/stack.md'] });
+  assert.deepEqual(summary.linkedSkills, ['react-dev']);
+  assert.deepEqual(svc.projectAgents('blank-one'), ['failure-analyst']);
+  assert.deepEqual(svc.readPlan('blank-one'), {
+    approved: true, skills: ['react-dev'], agents: ['failure-analyst'], searchSkills: ['playwright'], contextFiles: [{ path: 'context/stack.md', contains: 'Tech stack' }],
+  });
+  assert.deepEqual(svc.projectAgents('acme').length > 1, true, 'Set up without agents keeps every agent');
   rmSync(home, { recursive: true, force: true });
 });
 
@@ -491,8 +645,8 @@ test('launcher keeps user text out of any shell command line', () => {
   const sh = scriptFor('gemini', ['-i', "it's $(rm -rf ~) `x` ação"], '/home/u/qa', 'QA');
   assert.ok(sh.split('\n').includes("cd '/home/u/qa' || exit 1"));
   assert.ok(sh.split('\n').includes("gemini '-i' 'it'\\''s $(rm -rf ~) `x` ação'"));
-  const win = windowsStartArgs('C:\\Program Files\\nodejs\\node.exe', 'C:\\Users\\Júlia\\qa\\run-tool.mjs', 'C:\\t\\open.json', 'Quality Agents - "X"');
-  assert.equal(win, '/d /s /c "start "Quality Agents - X" "C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\Júlia\\qa\\run-tool.mjs" "C:\\t\\open.json""');
+  const win = windowsStartArgs('C:\\Program Files\\nodejs\\node.exe', 'C:\\Users\\Júlia\\qa\\run-tool.mjs', 'C:\\t\\open.json', 'Moki - "X"');
+  assert.equal(win, '/d /s /c "start "Moki - X" "C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\Júlia\\qa\\run-tool.mjs" "C:\\t\\open.json""');
 });
 
 test('terminal tabs start only the chosen tool, in the framework root, with the prompt as one argument', { skip: process.platform === 'win32' }, () => {
@@ -515,9 +669,17 @@ test('terminal tabs start only the chosen tool, in the framework root, with the 
   }
 });
 
+test('markdown tables draw merged cells (<< and ^^) as one cell', () => {
+  const html = markdownToHtml('| Wide | << | << |\n| --- | --- | --- |\n| Tall | b | c |\n| ^^ | e | f |\n| 2x2 | << | g |\n| ^^ | << | h |\n| \\<< | \\^^ | x |');
+  assert.equal(html, '<table><thead><tr><th colspan="3">Wide</th></tr></thead><tbody><tr><td rowspan="2">Tall</td><td>b</td><td>c</td></tr><tr><td>e</td><td>f</td></tr>'
+    + '<tr><td colspan="2" rowspan="2">2x2</td><td>g</td></tr><tr><td>h</td></tr><tr><td>&lt;&lt;</td><td>^^</td><td>x</td></tr></tbody></table>');
+});
+
 test('markdown rendering escapes HTML and attribute injection', () => {
   const html = markdownToHtml('[x](a"onmouseover="alert(1)) <img src=x onerror=alert(1)> **ok**');
   assert.doesNotMatch(html, /<img|"onmouseover|" onmouseover/);
+  // Only embedded raster images become <img>: no remote images, no attribute injection.
+  assert.doesNotMatch(markdownToHtml('![a](https://x/y.png) ![b](data:image/png;base64,AA" onerror="x) ![c](data:image/svg+xml;base64,AA)'), /<img/);
   assert.match(html, /<strong>ok<\/strong>/);
 });
 
@@ -526,8 +688,66 @@ test('docx extraction keeps headings, lists and tables', () => {
   assert.match(md, /^## US-1 Renovação$/m);
   assert.match(md, /^- Item A$/m);
   assert.match(md, /^\| AC1 \| a \\\| b & c \|$/m);
+  assert.match(md, /^A B na caixa depois$/m); // tab, text box kept once, text after the box
+  assert.match(markdownToHtml(md), /<td>a \| b &amp; c<\/td>/);
   assert.deepEqual(readableInputs(['workspace/x/inbox/a.md'], root), ['workspace/x/inbox/a.md']);
   assert.throws(() => docxToMarkdown(zip([['other.xml', '<x/>']])), /Not a Word document/);
+});
+
+test('docx extraction keeps formatting, numbered lists, links, notes, comments and images', () => {
+  const W = (body: string) => `<w:document><w:body>${body}</w:body></w:document>`;
+  const rels = (items: string) => `<Relationships>${items}</Relationships>`;
+  const docx = zip([
+    ['word/document.xml', W('<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>bold</w:t></w:r><w:r><w:t xml:space="preserve"> and </w:t></w:r><w:r><w:rPr><w:i/><w:strike/></w:rPr><w:t>gone</w:t></w:r>'
+      + '<w:r><w:t xml:space="preserve"> *literal* </w:t></w:r><w:hyperlink r:id="rIdL"><w:r><w:t>site</w:t></w:r></w:hyperlink><w:r><w:footnoteReference w:id="2"/></w:r><w:r><w:commentReference w:id="0"/></w:r></w:p>'
+      + '<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr></w:pPr><w:r><w:t>first</w:t></w:r></w:p>'
+      + '<w:p><w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="3"/></w:numPr></w:pPr><w:r><w:t>nested</w:t></w:r></w:p>'
+      + '<w:p><w:r><w:t>1. not a list</w:t></w:r><w:r><w:br/><w:t>second line</w:t></w:r><w:r><w:rPr><w:vanish/></w:rPr><w:t>hidden</w:t></w:r></w:p>'
+      + '<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>wide</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>c</w:t></w:r></w:p></w:tc></w:tr><w:tr><w:tc><w:p/></w:tc><w:tc><w:p/></w:tc><w:tc><w:p><w:r><w:t>z</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+      + '<w:p><w:r><w:drawing><wp:docPr id="1" name="Shot" descr="Login screen"/><a:blip r:embed="rIdI"/></w:drawing></w:r></w:p>')],
+    ['word/_rels/document.xml.rels', rels('<Relationship Id="rIdL" Type="x/hyperlink" Target="https://example.com/a b" TargetMode="External"/><Relationship Id="rIdI" Type="x/image" Target="media/i.png"/>'
+      + '<Relationship Id="rN" Type="x/numbering" Target="numbering.xml"/><Relationship Id="rF" Type="x/footnotes" Target="footnotes.xml"/><Relationship Id="rC" Type="x/comments" Target="comments.xml"/>')],
+    ['word/numbering.xml', '<w:numbering><w:abstractNum w:abstractNumId="7"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl><w:lvl w:ilvl="1"><w:numFmt w:val="bullet"/></w:lvl></w:abstractNum><w:num w:numId="3"><w:abstractNumId w:val="7"/></w:num></w:numbering>'],
+    ['word/footnotes.xml', '<w:footnotes><w:footnote w:id="2"><w:p><w:r><w:t>The note.</w:t></w:r></w:p></w:footnote></w:footnotes>'],
+    ['word/comments.xml', '<w:comments><w:comment w:id="0" w:author="Ana"><w:p><w:r><w:t>Check this.</w:t></w:r></w:p></w:comment></w:comments>'],
+    ['word/media/i.png', Buffer.from('iVBORw0KGgo=', 'base64')],
+  ]);
+  const md = docxToMarkdown(docx);
+  assert.match(md, /^\*\*bold\*\* and \*~~gone~~\* \\\*literal\\\* \[site\]\(https:\/\/example\.com\/a%20b\)¹\[comment 1\]$/m);
+  assert.match(md, /^1\. first\n  - nested$/m);
+  assert.match(md, /^1\\\. not a list {2}\nsecond line$/m);
+  assert.match(md, /^\| wide \|  \| c \|$/m);
+  assert.match(md, /\[image: Login screen\]/);
+  assert.match(md, /^¹ The note\.$/m);
+  assert.match(md, /^\*\*Comment 1\*\* — Ana: Check this\.$/m);
+  const html = markdownToHtml(docxToMarkdown(docx, { preview: true }));
+  assert.match(html, /<img alt="Login screen" src="data:image\/png;base64,iVBORw0KGgo=">/);
+  assert.match(html, /<strong>bold<\/strong> and <em><del>gone<\/del><\/em> \*literal\*/);
+  assert.match(html, /<p>1\. not a list<br>second line<\/p>/);
+  assert.match(html, /<thead><tr><th colspan="2">wide<\/th><th>c<\/th><\/tr><\/thead>/, 'the preview draws a merged cell once');
+  assert.match(md, /^\| wide \|  \| c \|$/m, 'the AI text keeps the columns with empty cells');
+});
+
+test('spreadsheet number formats show values as the spreadsheet programs do', () => {
+  const f = (v: number, code: string) => formatNumber(v, code, { locale: 'en-US' });
+  assert.equal(f(0.1 + 0.2, 'General'), '0.3');
+  assert.equal(f(1234567.891, '#,##0.00'), '1,234,567.89');
+  assert.equal(f(1999.9, '[$R$-416] #,##0.00'), 'R$ 1,999.90');
+  assert.equal(f(-1234.5, '#,##0.00;(#,##0.00)'), '(1,234.50)');
+  assert.equal(f(0, '_-* #,##0.00_-;-* #,##0.00_-;_-* "-"??_-;_-@_-'), ' - ');
+  assert.equal(f(0.875, '0.0%'), '87.5%');
+  assert.equal(f(1.75, '# ?/?'), '1 3/4');
+  assert.equal(f(0.000123, '0.00E+00'), '1.23E-04');
+  assert.equal(f(1234, '00000'), '01234');
+  assert.equal(f(1310100, '00000-000'), '01310-100');
+  assert.equal(f(12345678909, '000\\.000\\.000-00'), '123.456.789-09');
+  assert.equal(f(1500000, '#,##0.0,," M"'), '1.5 M');
+  assert.equal(f(46319.6041666667, 'dd/mm/yyyy hh:mm'), '24/10/2026 14:30');
+  assert.equal(f(46319, 'd-mmm-yy'), '24-Oct-26');
+  assert.equal(f(0.604166666666666, 'h:mm AM/PM'), '2:30 PM');
+  assert.equal(f(1.5, '[h]:mm:ss'), '36:00:00');
+  assert.equal(formatNumber(44857, 'dd/mm/yyyy', { locale: 'en-US', date1904: true }), '24/10/2026');
+  assert.equal(formatNumber(1234.5, '#,##0.00', { locale: 'pt-BR' }), '1.234,50');
 });
 
 test('installer framework sync refreshes framework files and never touches workspace/', () => {

@@ -1,17 +1,19 @@
 // Entry point of the desktop app. When installed (packaged), it prepares the
-// framework folder in Documents/Quality Agents and points QA_ROOT to it before
+// framework folder in Documents/Moki and points QA_ROOT to it before
 // the rest of the app loads. From a cloned repository it uses the repository.
 
 import { app } from 'electron';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { syncFramework } from './framework.ts';
 
 if (app.isPackaged) {
   const here = dirname(fileURLToPath(import.meta.url));
-  const target = process.env.QA_ROOT || join(app.getPath('documents'), 'Quality Agents');
+  const docs = app.getPath('documents');
+  const legacy = join(docs, 'Quality Agents'); // installs made before the rename keep their workspace
+  const target = process.env.QA_ROOT || (existsSync(legacy) ? legacy : join(docs, 'Moki'));
   let buildId = app.getVersion();
   try { buildId = (JSON.parse(readFileSync(join(here, 'build-info.json'), 'utf8')) as { buildId: string }).buildId; } catch { /* use the version */ }
   syncFramework(join(process.resourcesPath, 'framework'), target, buildId);

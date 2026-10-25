@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "quality-agents/execution-state",
-  "title": "Quality Agents run state",
+  "title": "Moki run state",
   "type": "object",
   "required": ["schemaVersion", "id", "project", "createdAt", "updatedAt", "status", "currentStep", "completedSteps", "pending", "approvals", "inputs", "results", "artifacts"],
   "properties": {

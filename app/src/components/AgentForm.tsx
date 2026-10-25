@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react';
 import { api, type ProjectSummary, type ScopeAgents, type SkillScope } from '../api';
+import { t } from '../i18n';
 import { IconCheck, IconInfo } from './Icons';
 
 interface Props { project: ProjectSummary; scope: SkillScope; onFindSkills: () => void }
@@ -31,7 +32,7 @@ export function AgentForm({ project, scope, onFindSkills }: Props) {
   useEffect(() => { setPicked([]); load(); }, [load]);
 
   const installed = data?.skills ?? [];
-  const builtin = data?.builtin ?? []; // Quality Agents' own skills (project and repository agents only)
+  const builtin = data?.builtin ?? []; // Moki's own skills (project and repository agents only)
   const usable = [...installed, ...builtin.map((b) => b.name)];
   const mentioned = useMemo(() => mentionsIn(description), [description]);
   const notInstalled = mentioned.filter((m) => !usable.includes(m));
@@ -70,15 +71,15 @@ export function AgentForm({ project, scope, onFindSkills }: Props) {
   const toggle = (skill: string) => setPicked((p) => (p.includes(skill) ? p.filter((x) => x !== skill) : [...p, skill]));
 
   const missing = [
-    !name.trim() && 'give the agent a name',
-    !description.trim() && 'describe what it does',
-    !chosen.length && 'choose at least one skill',
-    notInstalled.length > 0 && `remove ${notInstalled.map((m) => `@${m}`).join(', ')}`,
+    !name.trim() && t('give the agent a name'),
+    !description.trim() && t('describe what it does'),
+    !chosen.length && t('choose at least one skill'),
+    notInstalled.length > 0 && t('remove {mentions}', { mentions: notInstalled.map((m) => `@${m}`).join(', ') }),
   ].filter(Boolean) as string[];
 
   const create = async () => {
     const toClaude = scope === 'project' && Boolean(project.repository);
-    if (toClaude && !window.confirm(`Create the agent in ${project.repository}?\n\nThis CHANGES ${project.repository}/.claude: the agent is written to its agents folder (the current .claude is backed up to the project's backups/ first).`)) return;
+    if (toClaude && !window.confirm(t("Create the agent in {folder}?\n\nThis CHANGES {folder}/.claude: the agent is written to its agents folder (the current .claude is backed up to the project's backups/ first).", { folder: project.repository ?? '' }))) return;
     setBusy(true); setError(''); setCreated(null);
     try {
       setCreated(await api.createScopeAgent(project.id, { name, description, skills: chosen, scope }, toClaude));
@@ -92,37 +93,37 @@ export function AgentForm({ project, scope, onFindSkills }: Props) {
     const on = isMentioned || picked.includes(s);
     return (
       <button key={s} type="button" className={`chip-btn${on ? ' on' : ''}`} aria-pressed={on} disabled={isMentioned}
-        title={isMentioned ? 'Mentioned in the description — remove the @mention to leave it out' : about || undefined} onClick={() => toggle(s)}>
+        title={isMentioned ? t('Mentioned in the description — remove the @mention to leave it out') : about || undefined} onClick={() => toggle(s)}>
         {on && <IconCheck size={12} />} {s}
       </button>
     );
   };
 
-  const findSkills = <button type="button" className="link" onClick={onFindSkills}>Find skills</button>;
+  const findSkills = <button type="button" className="link" onClick={onFindSkills}>{t('Find skills')}</button>;
 
   return (
     <>
       <div className="info-note" role="note">
         <IconInfo size={16} />
-        <span>An agent only uses the skills already installed in {data ? <code>{data.folder}</code> : 'this folder'}{builtin.length > 0 && ' and the Quality Agents skills'}. To give it another skill, install it first in {findSkills}.{data && <> It is saved in <code>{data.agentsFolder}</code>.</>}</span>
+        <span>{t('An agent only uses the skills already installed in')} {data ? <code>{data.folder}</code> : t('this folder')}{builtin.length > 0 && ` ${t('and the Moki skills')}`}. {t('To give it another skill, install it first in')} {findSkills}.{data && <> {t('It is saved in')} <code>{data.agentsFolder}</code>.</>}</span>
       </div>
 
       <label className="field">
-        <span className="label">Name</span>
-        <input value={name} maxLength={64} onChange={(e) => setName(e.target.value)} placeholder="e.g. api-tester" />
+        <span className="label">{t('Name')}</span>
+        <input value={name} maxLength={64} onChange={(e) => setName(e.target.value)} placeholder={t('e.g. api-tester')} />
       </label>
 
       <div className="field">
-        <label className="label" htmlFor="agent-description">Describe the agent</label>
+        <label className="label" htmlFor="agent-description">{t('Describe the agent')}</label>
         <div className="mention-box">
           <textarea
             id="agent-description" ref={box} rows={6} maxLength={8000} value={description}
             onChange={(e) => setDescription(e.target.value)} onSelect={followCaret} onKeyDown={onKey} onBlur={() => setMenu(null)}
-            placeholder="e.g. Act as a senior API tester. Check the contracts with @openapi-lint and list every breaking change."
+            placeholder={t('e.g. Act as a senior API tester. Check the contracts with @openapi-lint and list every breaking change.')}
             role="combobox" aria-autocomplete="list" aria-expanded={menuOpen} aria-controls="mention-list"
           />
           {menu && menuOpen && (
-            <ul id="mention-list" className="mention-menu" role="listbox" aria-label="Installed skills">
+            <ul id="mention-list" className="mention-menu" role="listbox" aria-label={t('Installed skills')}>
               {options.map((s, i) => (
                 <li key={s} role="option" aria-selected={i === menu.index} className={i === menu.index ? 'on' : ''}
                   onMouseDown={(e) => { e.preventDefault(); insert(s); }}>@{s}</li>
@@ -130,26 +131,26 @@ export function AgentForm({ project, scope, onFindSkills }: Props) {
             </ul>
           )}
         </div>
-        <span className="muted small">Type <kbd>@</kbd> to mention an installed skill, or pick them below.</span>
+        <span className="muted small">{t('Type')} <kbd>@</kbd> {t('to mention an installed skill, or pick them below.')}</span>
       </div>
 
       <div className="field">
-        <span className="label">Skills it may use ({chosen.length} of {usable.length})</span>
+        <span className="label">{t('Skills it may use ({n} of {total})', { n: chosen.length, total: usable.length })}</span>
         {data && !usable.length ? (
-          <p className="muted small">No skills installed in this folder yet. Install them in {findSkills}, then come back.</p>
+          <p className="muted small">{t('No skills installed in this folder yet. Install them in')} {findSkills}{t(', then come back.')}</p>
         ) : (
           <>
-            {installed.length > 0 && <div className="chips" role="group" aria-label="Installed skills">{installed.map((s) => chip(s))}</div>}
+            {installed.length > 0 && <div className="chips" role="group" aria-label={t('Installed skills')}>{installed.map((s) => chip(s))}</div>}
             {builtin.length > 0 && (
               <>
-                <span className="muted small">Quality Agents skills (hover to read what each one does):</span>
-                <div className="chips" role="group" aria-label="Quality Agents skills">{builtin.map((b) => chip(b.name, b.description))}</div>
+                <span className="muted small">{t('Moki skills (hover to read what each one does):')}</span>
+                <div className="chips" role="group" aria-label={t('Moki skills')}>{builtin.map((b) => chip(b.name, b.description))}</div>
               </>
             )}
           </>
         )}
         {notInstalled.length > 0 && (
-          <p className="small warn-text">Not installed in this folder: {notInstalled.map((m) => `@${m}`).join(', ')}. Install it in Find skills or remove the mention.</p>
+          <p className="small warn-text">{t('Not installed in this folder:')} {notInstalled.map((m) => `@${m}`).join(', ')}. {t('Install it in Find skills or remove the mention.')}</p>
         )}
       </div>
 
@@ -158,23 +159,23 @@ export function AgentForm({ project, scope, onFindSkills }: Props) {
           {error && <p className="result-title">{error}</p>}
           {created && (
             <>
-              <p className="result-title"><IconCheck size={17} /> Created agent {created.name}</p>
+              <p className="result-title"><IconCheck size={17} /> {t('Created agent {name}', { name: created.name })}</p>
               <p className="small"><code>{created.file}</code></p>
-              {scope === 'project' && <p className="small">The next request opened from this project tells the AI about it.</p>}
-              {created.backup && <p className="small">Backup of the previous .claude: <code>{created.backup}</code></p>}
+              {scope === 'project' && <p className="small">{t('The next request opened from this project tells the AI about it.')}</p>}
+              {created.backup && <p className="small">{t('Backup of the previous .claude:')} <code>{created.backup}</code></p>}
             </>
           )}
         </div>
       )}
 
       {data && data.agents.length > 0 && (
-        <p className="muted small">Agents already here: {data.agents.join(', ')}</p>
+        <p className="muted small">{t('Agents already here:')} {data.agents.join(', ')}</p>
       )}
 
       <div className="form-actions">
-        {missing.length > 0 && <span className="muted small">To continue: {missing.join(' · ')}.</span>}
+        {missing.length > 0 && <span className="muted small">{t('To continue:')} {missing.join(' · ')}.</span>}
         <button type="button" className="btn" disabled={busy || missing.length > 0} onClick={() => { void create(); }}>
-          {busy ? 'Creating…' : 'Create agent'}
+          {busy ? t('Creating…') : t('Create agent')}
         </button>
       </div>
     </>

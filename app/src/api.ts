@@ -1,10 +1,20 @@
 // Client for the desktop app's main process (see desktop/preload.ts and
 // desktop/service.ts). Every call goes through one validated IPC channel.
 
+import { t } from './i18n';
+
 export interface ProjectSummary {
   id: string; name: string; description: string; onboardingStatus: string; deliverableLanguage: string; runs: number; openRuns: number;
   repository: string; // folder linked to the project ('' when none)
   linkedSkills: string[]; // global skills this project uses, by name
+  starter: Starter;
+}
+// How a new project starts: with the QA context files, or blank (the AI interviews and proposes a plan).
+export type Starter = 'qa' | 'blank';
+// The AI's recommendation for a blank project (plan.json), reviewed in "Set up project".
+export interface Plan {
+  approved: boolean; skills: string[]; agents: string[]; searchSkills: string[];
+  contextFiles: { path: string; contains: string }[];
 }
 export interface SkillInfo { name: string; status: string; description: string }
 export type ToolKind = 'terminal' | 'editor' | 'chat' | 'print';
@@ -16,6 +26,7 @@ export interface OpenRun { id: string; status: string; currentStep: string }
 export interface TreeNode {
   name: string; path: string; type: 'dir' | 'file'; size?: number; children?: TreeNode[];
   run?: { status: string; skill: string; currentStep: string };
+  mcp?: string; // MCP server row: where it is configured
 }
 
 export type FileContent =
@@ -23,6 +34,10 @@ export type FileContent =
   | { kind: 'text'; path: string; text: string; editable: boolean }
   | { kind: 'json'; path: string; text: string }
   | { kind: 'docx'; path: string; html: string }
+  | { kind: 'xlsx'; path: string; sheets: {
+    name: string; hidden: boolean; drawing: boolean; rows: (string | { n: string })[][]; truncated: boolean;
+    merges: number[][]; widths: number[]; hiddenRows: number[]; hiddenCols: number[]; align: Record<string, { h?: string; v?: string; wrap?: boolean }>;
+  }[] }
   | { kind: 'image'; path: string; dataUrl: string }
   | { kind: 'binary'; path: string; size: number; openable: boolean; reason?: string };
 
@@ -64,6 +79,7 @@ export interface GlobalItems {
   skills: { name: string; description: string; folders: string[]; linkedBy: string[] }[];
   agents: { name: string; description: string; file: string }[];
 }
+export interface GlobalAgentDetail { name: string; description: string; file: string; text: string; html: string }
 
 interface Bridge {
   call(method: string, ...args: unknown[]): Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
@@ -85,7 +101,7 @@ declare global { interface Window { qa?: Bridge } }
 export const hasBridge = (): boolean => Boolean(window.qa);
 
 async function call<T>(method: string, ...args: unknown[]): Promise<T> {
-  if (!window.qa) throw new Error('Quality Agents must be opened with the qa command.');
+  if (!window.qa) throw new Error(t('Moki must be opened with the qa command.'));
   const res = await window.qa.call(method, ...args);
   if (!res.ok) throw new Error(res.error);
   return res.value as T;
@@ -94,13 +110,16 @@ async function call<T>(method: string, ...args: unknown[]): Promise<T> {
 export const api = {
   session: () => call<{ version: string; platform: string }>('session'),
   projects: () => call<ProjectSummary[]>('projects'),
-  createProject: (name: string) => call<ProjectSummary>('createProject', name),
+  createProject: (name: string, starter: Starter, folder?: string) => call<ProjectSummary & { backup?: string }>('createProject', name, starter, folder ?? null),
+  pickFolder: () => call<{ folder: string; name: string } | null>('pickFolder'),
   skills: () => call<SkillInfo[]>('skills'),
   activities: () => call<{ activities: ActivityInfo[]; languages: string[] }>('activities'),
   integrations: () => call<ToolInfo[]>('integrations'),
   tree: (project: string) => call<TreeNode[]>('tree', project),
   readFile: (project: string, path: string) => call<FileContent>('readFile', project, path),
   writeFile: (project: string, path: string, text: string) => call<FileContent>('writeFile', project, path, text),
+  renderMarkdown: (text: string) => call<string>('renderMarkdown', text),
+  createNote: (project: string, title: string, text: string) => call<string>('createNote', project, title, text),
   run: (project: string, runId: string) => call<RunState>('run', project, runId),
   inbox: (project: string) => call<InboxFile[]>('inbox', project),
   openRuns: (project: string) => call<OpenRun[]>('openRuns', project),
@@ -120,12 +139,19 @@ export const api = {
   searchSkills: (query: string, category = '', page = 1) => call<SkillSearchPage>('searchSkills', query, category, page),
   installedSkills: (project: string) => call<{ project: string[]; global: string[] }>('installedSkills', project),
   installSkill: (project: string, slug: string, scope: SkillScope, allowClaudeWrite = false) => call<InstallResult>('installSkill', project, slug, scope, allowClaudeWrite),
+  proposeSkill: (project: string, req: { name: string; prompt: string; tool: string; language: string }) => call<LaunchResult>('proposeSkill', project, req),
+  skillProposals: (project: string) => call<{ name: string; description: string }[]>('skillProposals', project),
+  installProposal: (project: string, name: string, scope: SkillScope, allowClaudeWrite = false) => call<{ name: string; folders: string[]; backup?: string }>('installProposal', project, name, scope, allowClaudeWrite),
   scopeAgents: (project: string, scope: SkillScope) => call<ScopeAgents>('scopeAgents', project, scope),
   createScopeAgent: (project: string, req: ScopeAgentRequest, allowClaudeWrite = false) => call<{ name: string; file: string; backup?: string }>('createScopeAgent', project, req, allowClaudeWrite),
   projectItems: (project: string) => call<ProjectItems>('projectItems', project),
   removeProjectItem: (project: string, kind: 'skill' | 'agent', name: string, allowClaudeWrite = false) => call<{ backup?: string }>('removeProjectItem', project, kind, name, allowClaudeWrite),
   globalItems: () => call<GlobalItems>('globalItems'),
-  setupProject: (project: string, req: { description: string; linkedSkills: string[] }) => call<ProjectSummary>('setupProject', project, req),
+  setupProject: (project: string, req: { description: string; linkedSkills: string[]; agents?: string[]; contextFiles?: string[] }) => call<ProjectSummary>('setupProject', project, req),
+  readPlan: (project: string) => call<Plan | null>('readPlan', project),
+  globalAgent: (name: string) => call<GlobalAgentDetail>('globalAgent', name),
+  saveGlobalAgent: (name: string, text: string) => call<boolean>('saveGlobalAgent', name, text),
+  editGlobalAgent: (name: string, req: { prompt: string; tool: string; language: string }) => call<LaunchResult>('editGlobalAgent', name, req),
   openGlobal: (kind: 'skill' | 'agent', name: string) => call<boolean>('openGlobal', kind, name),
   removeGlobal: (kind: 'skill' | 'agent', name: string) => call<boolean>('removeGlobal', kind, name),
   watch: (project: string | null) => window.qa?.watch(project ?? '') ?? Promise.resolve(false),
@@ -143,7 +169,7 @@ export function describeRun(id: string): { date: string; title: string } {
   return { date: date.toLocaleString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }), title: m[6] };
 }
 
-export const statusLabel: Record<string, string> = {
-  'in-progress': 'In progress', 'awaiting-approval': 'Waiting for your approval', 'awaiting-input': 'Waiting for input',
-  blocked: 'Blocked', completed: 'Completed', cancelled: 'Cancelled',
-};
+export const statusLabel = (status: string): string => ({
+  'in-progress': t('In progress'), 'awaiting-approval': t('Waiting for your approval'), 'awaiting-input': t('Waiting for input'),
+  blocked: t('Blocked'), completed: t('Completed'), cancelled: t('Cancelled'),
+} as Record<string, string>)[status] ?? status;

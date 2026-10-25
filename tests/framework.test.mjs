@@ -10,7 +10,9 @@ import { validate } from '../scripts/validate.mjs';
 import { build, findDrift } from '../scripts/build.mjs';
 import { findViolations } from '../scripts/check-artifacts.mjs';
 import { scanText } from '../scripts/check-secrets.mjs';
-import { buildXlsx, readXlsx } from '../scripts/xlsx.mjs';
+import { buildXlsx, readXlsx, fillXlsx, xlsxSheets } from '../scripts/xlsx.mjs';
+import { buildDocx, inspectDocx } from '../scripts/docx.mjs';
+import { unzip } from '../scripts/lib/zip.mjs';
 import { checkPreAnalysis, checkMissingInfo, checkTestCases, checkReviewMatrix } from '../scripts/check-output.mjs';
 import { markdownToHtml } from '../scripts/pdf.mjs';
 import { ACTIVITIES, buildPrompt, cleanPath, copyToInbox, isUsable } from '../scripts/lib/core.ts';
@@ -159,6 +161,44 @@ test('xlsx round trip and missing sheet warning', () => {
   }
   const other = { ...layout, sheets: [{ ...layout.sheets[0], key: 'x', title: { en: 'Other' } }] };
   assert.ok(readXlsx(buildXlsx(layout, data), other).warnings[0].includes('missing sheet'));
+});
+
+test('xlsx fill keeps the model, clears example rows and maps headers', () => {
+  const layout = JSON.parse(readFileSync(join(ROOT, 'skills', 'test-design', 'assets', 'test-cases.layout.json'), 'utf8'));
+  const model = buildXlsx(layout, { testCases: [{ source: 'example', steps: 'example' }] });
+  const { buffer, headerRow, warnings } = fillXlsx(model, [{ Source: 'US:1', scenario: 'a & <b>' }, { Source: 'US:2' }, { Nope: 'x' }]);
+  assert.equal(headerRow, 1);
+  assert.ok(warnings.some((w) => w.includes('"Nope"')));
+  const rows = xlsxSheets(buffer)[0].rows;
+  assert.deepEqual(rows[1], ['US:1', '', 'a & <b>', '', '']);
+  assert.equal(rows[2][0], 'US:2');
+  const sheet = unzip(buffer).get('xl/worksheets/sheet1.xml').toString();
+  assert.match(sheet, /state="frozen"/);
+  assert.match(sheet, /<c r="A3" s="2"/, 'new rows take the style of the first row under the header');
+});
+
+test('docx: images, links, placeholders and example models', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'qa-docx-'));
+  try {
+    writeFileSync(join(dir, 'a.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'));
+    const doc = { fields: { item: 'LIB-142' }, blocks: [{ type: 'heading', level: 1, text: 'TC-1' }, { type: 'image', path: 'a.png', caption: 'Figure 1' }, { type: 'paragraph', text: 'Jam: https://jam.dev/c/1' }] };
+    const plain = buildDocx(doc, { baseDir: dir });
+    assert.deepEqual(plain.warnings, []);
+    const files = unzip(plain.buffer);
+    assert.ok(files.has('word/media/evidence-1.png'));
+    assert.match(files.get('word/_rels/document.xml.rels').toString(), /TargetMode="External"/);
+
+    const template = buildDocx({ blocks: [{ type: 'paragraph', text: 'Evidence of {{item}} {{missing}}' }, { type: 'paragraph', text: '{{content}}' }, { type: 'paragraph', text: 'Signature' }] }).buffer;
+    const filled = buildDocx(doc, { template, baseDir: dir });
+    assert.ok(filled.warnings.some((w) => w.includes('{{missing}}')));
+    const outline = inspectDocx(filled.buffer).split('--- body ---')[1].trim().split('\n');
+    assert.equal(outline[0], 'Evidence of LIB-142 {{missing}}');
+    assert.equal(outline.at(-1), 'Signature', 'blocks go where {{content}} was');
+    assert.ok(outline.includes('[heading 1] TC-1'));
+
+    const example = buildDocx(doc, { template: plain.buffer, baseDir: dir });
+    assert.equal((inspectDocx(example.buffer).match(/\[image x1\]/g) ?? []).length, 1, 'an example model has its body replaced');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('output checks', () => {

@@ -1,4 +1,4 @@
-// Electron main process of the Quality Agents desktop app. Opens one window,
+// Electron main process of the Moki desktop app. Opens one window,
 // exposes the service to the UI through a single validated IPC channel, runs
 // the embedded terminals, and watches the open project folder so files written
 // by the AI tools appear live.
@@ -30,7 +30,7 @@ const service = createService(ROOT, {
   trash: (path) => shell.trashItem(path),
   pickFolder: async () => {
     if (!win) return null;
-    const r = await dialog.showOpenDialog(win, { title: 'Link a folder to this project', properties: ['openDirectory'] });
+    const r = await dialog.showOpenDialog(win, { title: 'Choose a folder to link', properties: ['openDirectory'] });
     return r.canceled ? null : r.filePaths[0] ?? null;
   },
 });
@@ -50,7 +50,7 @@ function createWindow(): void {
     height: 860,
     minWidth: 900,
     minHeight: 600,
-    title: 'Quality Agents',
+    title: 'Moki',
     icon: existsSync(ICON) ? ICON : undefined,
     backgroundColor: "#1c1b19",
     autoHideMenuBar: true,
@@ -96,7 +96,7 @@ function createWindow(): void {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.setName('Quality Agents');
+  app.setName('Moki');
   app.on('second-instance', () => {
     if (!win) return;
     if (win.isMinimized()) win.restore();

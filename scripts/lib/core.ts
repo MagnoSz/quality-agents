@@ -2,13 +2,16 @@
 // server: projects, runs, skills, AI tool detection and request building.
 // It never executes skills itself — the AI tools do, following AGENTS.md.
 
-import { existsSync, readdirSync, statSync, copyFileSync, cpSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, statSync, copyFileSync, cpSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, basename, extname, resolve, sep } from 'node:path';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { ROOT, SLUG, readJson } from './repo.mjs';
 import { parseFrontmatter } from './frontmatter.mjs';
 
-export type ActivityKey = 'open' | 'review' | 'tests' | 'review-then-tests' | 'failure' | 'context' | 'setup' | 'automation' | 'resume';
+export type ActivityKey = 'open' | 'review' | 'tests' | 'review-then-tests' | 'failure' | 'evidence' | 'context' | 'setup' | 'plan' | 'automation' | 'resume';
+// How a new project starts: 'qa' copies the QA context files; 'blank' leaves context/ out and plans it with the AI.
+export type Starter = 'qa' | 'blank';
+export const STARTERS: Starter[] = ['qa', 'blank'];
 export type ToolKey = 'claude' | 'codex' | 'cursor-agent' | 'gemini' | 'antigravity' | 'cursor' | 'vscode' | 'chat' | 'print';
 
 export interface Activity { label: string; hint?: string; skill: string; needsFiles: boolean }
@@ -28,8 +31,10 @@ export const ACTIVITIES: Record<ActivityKey, Activity> = {
   tests: { label: 'Design tests', hint: 'scenario mapping, then test cases', skill: 'test-design', needsFiles: true },
   'review-then-tests': { label: 'Review, then design tests', hint: 'workflow with approval in between', skill: 'qa-orchestrator', needsFiles: true },
   failure: { label: 'Failure pre-analysis', hint: 'from your description and the log', skill: 'failure-analysis', needsFiles: false },
+  evidence: { label: 'Build test evidence', hint: 'work item + Jam recordings, then spreadsheet and Word document', skill: 'qa-orchestrator', needsFiles: false },
   context: { label: 'Project context', hint: 'onboarding, questions, updates', skill: 'project-context', needsFiles: false },
   setup: { label: 'Prepare the project', hint: 'adapts the context to the project description', skill: 'project-context', needsFiles: false },
+  plan: { label: 'Plan the project with the AI', hint: 'interview, then a plan you review in the app', skill: 'project-context', needsFiles: false },
   automation: { label: 'Automation', skill: 'automation', needsFiles: false },
   resume: { label: 'Resume a run', skill: 'qa-orchestrator', needsFiles: false },
 };
@@ -100,6 +105,7 @@ export interface ProjectSummary {
   openRuns: number;
   repository: string; // folder on this machine linked to the project ('' when none)
   linkedSkills: string[]; // global skills this project uses, by name (project.json linkedSkills)
+  starter: Starter;
 }
 
 export const projectsDir = (root = ROOT): string => join(root, 'workspace', 'projects');
@@ -138,6 +144,7 @@ export function projectSummary(id: string, root = ROOT): ProjectSummary {
     openRuns: runs.filter((r) => !['completed', 'cancelled'].includes(r.status)).length,
     repository: linkedOf(data)?.path ?? '',
     linkedSkills: Array.isArray(data.linkedSkills) ? data.linkedSkills.filter((s): s is string => typeof s === 'string') : [],
+    starter: data.starter === 'blank' ? 'blank' : 'qa',
   };
 }
 
@@ -184,7 +191,7 @@ export const installedAgents = (project: string, root = ROOT): string[] => agent
 
 export interface AgentSpec {
   name: string; description: string; skills: { name: string; path: string }[];
-  framework?: { root: string; project: string }; // set when the agent uses Quality Agents' own skills
+  framework?: { root: string; project: string }; // set when the agent uses Moki's own skills
 }
 
 // An agent in the Claude Code subagent format (plain Markdown any AI tool can follow).
@@ -197,21 +204,24 @@ export function agentMarkdown({ name, description, skills, framework }: AgentSpe
     '## Skills', '',
     'Use only these skills (read the SKILL.md when one fits the task). Do not use or install any other skill; if the task needs one that is not listed, say so and stop.', '',
     ...skills.map((s) => `- \`${s.name}\`: \`${s.path}\``), '',
-    ...(framework ? [`The Quality Agents skills follow \`${framework.root}/AGENTS.md\` for the project \`${framework.project}\`: its context, runs and approvals are in \`${framework.root}/workspace/projects/${framework.project}/\`.`, ''] : []),
+    ...(framework ? [`The Moki skills follow \`${framework.root}/AGENTS.md\` for the project \`${framework.project}\`: its context, runs and approvals are in \`${framework.root}/workspace/projects/${framework.project}/\`.`, ''] : []),
   ].join('\n');
 }
 
-// Creates workspace/projects/<id>/ from templates/project-context/ (same result as npm run new-project).
-export function createProject(id: string, name: string, root = ROOT): ProjectSummary {
+// Creates workspace/projects/<id>/ from templates/project-context/ (also used by npm run new-project).
+// A blank project leaves the QA context files out; the "plan" activity proposes its own.
+export function createProject(id: string, name: string, root = ROOT, starter: Starter = 'qa'): ProjectSummary {
   if (!SLUG.test(id)) throw new Error('Project id: use lowercase letters, digits and single hyphens.');
   const target = join(projectsDir(root), id);
   if (existsSync(target)) throw new Error(`Project "${id}" already exists.`);
   cpSync(join(root, 'templates', 'project-context'), target, { recursive: true });
   renameSync(join(target, 'gitignore.txt'), join(target, '.gitignore'));
+  if (starter === 'blank') rmSync(join(target, 'context'), { recursive: true, force: true });
   for (const dir of ['inbox', 'runs', 'temporary']) mkdirSync(join(target, dir), { recursive: true });
   const file = join(target, 'project.json');
   const data = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
-  writeFileSync(file, `${JSON.stringify({ ...data, project: id, name: name.trim() || id }, null, 2)}\n`);
+  const blank = starter === 'blank' ? { starter, contextFiles: [] } : {};
+  writeFileSync(file, `${JSON.stringify({ ...data, project: id, name: name.trim() || id, ...blank }, null, 2)}\n`);
   return projectSummary(id, root);
 }
 
@@ -262,9 +272,10 @@ export interface Request {
   agents?: string[]; // installed for this project (installedAgents)
   description?: string; // the project's goal, for the setup activity
   globalSkills?: { name: string; path: string }[]; // global skills linked to the project, with their SKILL.md
+  available?: { skills: string[]; agents: string[] }; // what the plan activity may recommend (global skills, usable agents)
 }
 
-export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English', agent, repository = '', skills = [], agents = [], description = '', globalSkills = [] }: Request): string {
+export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English', agent, repository = '', skills = [], agents = [], description = '', globalSkills = [], available }: Request): string {
   const list = files.length ? files.join(', ') : '';
   const parts = [`Follow AGENTS.md. Project: ${project}.`];
   if (repository) parts.push(`Linked folder (the system's repository): ${repository}.`);
@@ -288,6 +299,9 @@ export function buildPrompt({ project, activity, files = [], note = '', run = ''
         ? `Use the failure-analysis skill with the input in: ${list}.`
         : 'Use the failure-analysis skill. I will paste the filled input template next.');
       break;
+    case 'evidence':
+      parts.push(`Use the qa-orchestrator with the test-evidence workflow: collect the work item and the Jam recordings, then build the evidence spreadsheet and the Word document.${list ? ` Inputs and models: ${list}.` : ' I will give you the work item and the Jam links next.'}`);
+      break;
     case 'context':
       parts.push('Use the project-context skill: load the project context, show what is known and what is missing, and continue the onboarding if needed.');
       if (list) parts.push(`Documents to use: ${list}.`);
@@ -298,6 +312,18 @@ export function buildPrompt({ project, activity, files = [], note = '', run = ''
         + ` write the proposals to workspace/projects/${project}/proposed-updates.md and wait for my approval before changing context/. Do not install skills: I install them from the app.`);
       if (list) parts.push(`Documents to use: ${list}.`);
       break;
+    case 'plan': {
+      const dir = `workspace/projects/${project}`;
+      const names = (l: string[] = []) => (l.length ? l.join(', ') : 'none');
+      parts.push(`Use the project-context skill to plan this blank project ("Plan a blank project" procedure). Read ${dir}/plan.json first.`
+        + ` If it has "approved": true, create only the contextFiles it lists (confirmed answers only), list them in context/index.md and project.json contextFiles, and stop.`
+        + ` Otherwise: the goal is ${description.trim() ? JSON.stringify(description.trim()) : 'the description in project.json (ask me for it if it is empty)'}.${repository ? ' Look at the linked folder first.' : ''}`
+        + ' Interview me one question at a time about what the project needs: goal, technologies, team, and what to link (repository, skills, agents, knowledge sources, inbox documents).'
+        + ` Then write the plan to ${dir}/proposed-updates.md and the recommendation to ${dir}/plan.json, recommending only these names - skills: ${names(available?.skills)}; agents: ${names(available?.agents)}; skills I still need go in searchSkills as search terms.`
+        + ' Stop and tell me to review the plan in the app. Do not create context files, install or link anything before I approve it there.');
+      if (list) parts.push(`Documents to use: ${list}.`);
+      break;
+    }
     case 'automation':
       parts.push(`Use the automation skill.${list ? ` Inputs: ${list}.` : ''}`);
       break;

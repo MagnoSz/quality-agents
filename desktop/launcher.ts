@@ -77,14 +77,14 @@ export const launchTool: Launcher = (tool, prompt, root) => {
     return {
       opened: true,
       copied,
-      message: `${t.label} is opening the Quality Agents folder. ${copied ? 'The request is in your clipboard — paste it in the AI chat.' : 'Copy the request below into the AI chat.'}`,
+      message: `${t.label} is opening the Moki folder. ${copied ? 'The request is in your clipboard — paste it in the AI chat.' : 'Copy the request below into the AI chat.'}`,
     };
   }
 
   const dir = join(root, 'workspace', 'temporary');
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const title = `Quality Agents - ${t.label}`;
+  const title = `Moki - ${t.label}`;
   const args = [...pluginArgs(tool, root), ...t.args(cleanPrompt(prompt))];
 
   if (process.platform === 'win32') {
@@ -107,7 +107,7 @@ export const launchTool: Launcher = (tool, prompt, root) => {
     if (!terminal) return { opened: false, message: `No terminal program found. Open a terminal and run: bash "${file}"` };
     detached(terminal[0], [...terminal[1], 'bash', file]);
   }
-  return { opened: true, message: `${t.label} is opening in a new terminal window, already in the Quality Agents folder with your request.` };
+  return { opened: true, message: `${t.label} is opening in a new terminal window, already in the Moki folder with your request.` };
 };
 
 // Windows: the UTF-8 JSON request read by run-tool (see the header).

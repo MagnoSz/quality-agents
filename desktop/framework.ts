@@ -1,6 +1,6 @@
 // The installed app carries a copy of the framework (skills, AGENTS.md,
 // templates...) and keeps it in a normal folder the AI tools can open
-// (Documents/Quality Agents). On each new build it refreshes those framework
+// (Documents/Moki). On each new build it refreshes those framework
 // files. It NEVER touches workspace/ (projects, context and results).
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

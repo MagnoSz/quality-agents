@@ -39,4 +39,4 @@ if (existsSync(join(ROOT, '.git'))) {
 } else {
   console.log('Not a Git clone; skipped hook setup.');
 }
-console.log('\nDone. Start Quality Agents with:  npm run qa   (or just  qa  after npm link)');
+console.log('\nDone. Start Moki with:  npm run qa   (or just  qa  after npm link)');

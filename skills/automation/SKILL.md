@@ -33,7 +33,7 @@ Across modes:
 - Reuse existing components; avoid duplication and unnecessary complexity.
 - Present a plan and obtain approval before changing code.
 - Execute and validate tests; diagnose failures; report with traceability.
-- Leave every automation project **documented and AI-ready on its own**: architecture documentation, how and why it was built, how-to guides, and AI guidance files (`AGENTS.md`, `CLAUDE.md`) so any QA can keep working on it with any AI tool, without Quality Agents ([target project docs](references/target-project-docs.md)).
+- Leave every automation project **documented and AI-ready on its own**: architecture documentation, how and why it was built, how-to guides, and AI guidance files (`AGENTS.md`, `CLAUDE.md`) so any QA can keep working on it with any AI tool, without Moki ([target project docs](references/target-project-docs.md)).
 
 Deliverables: structured automation projects with their documentation and AI guidance files; technical implementation plans; specs and reusable components; fixtures and data-preparation mechanisms; automated tests; execution configuration; reports and evidence; failure diagnoses; FLX scenario ↔ automated test mapping.
 
@@ -94,7 +94,7 @@ Governance:
 
 Repositories:
 - The framework repository holds skills; the **target automation repository** holds test code; the **project workspace** holds context and run results ([isolation](references/core/isolation-policy.md)).
-- Never create specs, flows or utils inside the Quality Agents repository, except when explicitly developing a generic template of the framework itself (under `templates/`).
+- Never create specs, flows or utils inside the Moki repository, except when explicitly developing a generic template of the framework itself (under `templates/`).
 - Never copy rules specific to one system (including the reference project's system) into another project. Reuse architecture principles, not business rules.
 
 Knowledge sources:

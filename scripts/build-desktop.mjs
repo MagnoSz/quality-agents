@@ -34,7 +34,7 @@ cpSync(out, join(stage, 'app', 'dist-electron'), { recursive: true });
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const hasPty = existsSync(join(ROOT, 'node_modules', 'node-pty', 'package.json'));
 writeFileSync(join(stage, 'package.json'), JSON.stringify({
-  name: pkg.name, productName: 'Quality Agents', version: pkg.version, description: pkg.description,
+  name: pkg.name, productName: 'Moki', version: pkg.version, description: pkg.description,
   author: pkg.author, license: pkg.license, type: 'module', main: 'app/dist-electron/boot.mjs',
   optionalDependencies: hasPty ? pkg.optionalDependencies : undefined,
 }, null, 2));

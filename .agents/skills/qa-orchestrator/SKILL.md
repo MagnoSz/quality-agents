@@ -77,6 +77,7 @@ Optional:
 |---|---|
 | [requirements-to-tests](references/workflows/requirements-to-tests.md) | Review a story and, after approval, design its tests |
 | [failure-investigation](references/workflows/failure-investigation.md) | A failure was observed and needs pre-analysis for developers |
+| [test-evidence](references/workflows/test-evidence.md) | A test was executed and its evidence (spreadsheet, Word document) must be assembled |
 | [quality-lifecycle](references/workflows/quality-lifecycle.md) | End-to-end quality cycle for a change (several steps still planned) |
 
 ## Rules and constraints

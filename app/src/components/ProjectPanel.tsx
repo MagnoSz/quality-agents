@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { api, type ProjectItems, type ProjectSummary } from '../api';
+import { t } from '../i18n';
 
 interface Props { project: ProjectSummary }
 
@@ -19,8 +20,10 @@ export function ProjectPanel({ project }: Props) {
   useEffect(load, [load]);
 
   const remove = async (kind: 'skill' | 'agent', name: string) => {
-    const where = project.repository ? `the repository ${project.repository}?\n\nThis CHANGES its .claude (the current .claude is backed up to the project's backups/ first).` : `the project ${project.name}?`;
-    if (!window.confirm(`Remove the ${kind} "${name}" from ${where} It goes to the trash.`)) return;
+    const what = kind === 'skill' ? t('Remove the skill "{name}" from', { name }) : t('Remove the agent "{name}" from', { name });
+    const where = project.repository ? t("the repository {folder}?\n\nThis CHANGES its .claude (the current .claude is backed up to the project's backups/ first).", { folder: project.repository })
+      : t('the project {name}?', { name: project.name });
+    if (!window.confirm(`${what} ${where} ${t('It goes to the trash.')}`)) return;
     setBusy(`${kind}:${name}`); setError(''); setBackup('');
     try { setBackup((await api.removeProjectItem(project.id, kind, name, Boolean(project.repository))).backup ?? ''); load(); } catch (e) { setError(message(e)); } finally { setBusy(''); }
   };
@@ -32,7 +35,7 @@ export function ProjectPanel({ project }: Props) {
         <span className="statusbar-spacer" />
         {folder && <code className="small">{folder}</code>}
       </div>
-      {list && !list.length && <p className="muted small">No {kind}s installed only for this project.</p>}
+      {list && !list.length && <p className="muted small">{kind === 'skill' ? t('No skills installed only for this project.') : t('No agents installed only for this project.')}</p>}
       <ul className="skill-list">
         {list?.map((s) => (
           <li key={s.name} className="skill-card">
@@ -40,7 +43,7 @@ export function ProjectPanel({ project }: Props) {
               <span className="choice-title">{s.name}</span>
               <span className="statusbar-spacer" />
               <button type="button" className="btn btn-ghost btn-sm" disabled={Boolean(busy)} onClick={() => { void remove(kind, s.name); }}>
-                {busy === `${kind}:${s.name}` ? 'Removing…' : 'Remove'}
+                {busy === `${kind}:${s.name}` ? t('Removing…') : t('Remove')}
               </button>
             </div>
             {s.description && <p className="skill-desc small">{s.description}</p>}
@@ -53,9 +56,9 @@ export function ProjectPanel({ project }: Props) {
   return (
     <>
       {error && <div className="result warn" role="status"><p className="result-title">{error}</p></div>}
-      {backup && <p className="small">Backup of the previous .claude: <code>{backup}</code></p>}
-      {section('skill', 'Skills', items?.skills, items?.skillsFolder)}
-      {section('agent', 'Agents', items?.agents, items?.agentsFolder)}
+      {backup && <p className="small">{t('Backup of the previous .claude:')} <code>{backup}</code></p>}
+      {section('skill', t('Skills'), items?.skills, items?.skillsFolder)}
+      {section('agent', t('Agents'), items?.agents, items?.agentsFolder)}
     </>
   );
 }

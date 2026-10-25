@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// qa — Quality Agents command.
+// qa — Moki command.
 //
-//   qa                         open the Quality Agents desktop app
+//   qa                         open the Moki desktop app
 //   qa --terminal [--plain]    guided menu in the terminal instead of the app
 //   qa --project <id> --activity <key> --tool <key> [--file <path>]... [--note "<text>"]
 //      [--run <run-id>] [--lang <language>]   prepare a request and open an AI tool directly
@@ -45,14 +45,14 @@ export function openDesktopApp(root = ROOT): number {
   let electron = '';
   try { electron = createRequire(import.meta.url)('electron') as string; } catch { /* not installed */ }
   if (!built || !electron) {
-    console.error('The Quality Agents app is not installed yet.\nRun this once in the quality-agents folder:  npm run setup');
+    console.error('The Moki app is not installed yet.\nRun this once in the quality-agents folder:  npm run setup');
     return 1;
   }
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(electron, [root], { cwd: root, env, detached: true, stdio: 'ignore' });
   child.unref();
-  console.log('Opening Quality Agents…');
+  console.log('Opening Moki…');
   return 0;
 }
 

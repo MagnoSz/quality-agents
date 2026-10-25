@@ -1,5 +1,6 @@
-import type { MouseEvent } from 'react';
+import { useState, type CSSProperties, type MouseEvent } from 'react';
 import type { FileContent } from '../api';
+import { t } from '../i18n';
 import { IconEdit, IconExternal, IconEye, IconFile } from './Icons';
 
 interface Props {
@@ -13,6 +14,85 @@ interface Props {
   onSave: () => void;
   onOpenExternal: () => void;
   onLink: (href: string) => void;
+}
+
+const colName = (i: number): string => (i >= 26 ? colName(Math.floor(i / 26) - 1) : '') + String.fromCharCode(65 + (i % 26));
+
+type Sheet = Extract<FileContent, { kind: 'xlsx' }>['sheets'][number];
+
+// Read-only grid of a spreadsheet, sheets as tabs at the bottom like Excel/LibreOffice.
+function SheetView({ sheets }: { sheets: Sheet[] }) {
+  const [current, setCurrent] = useState(Math.max(0, sheets.findIndex((s) => !s.hidden)));
+  const sheet = sheets[current];
+  const rows = sheet?.rows ?? [];
+  // A merged area is drawn as its first cell spanning the area; the cells it covers are not drawn.
+  const spans = new Map<string, { rowSpan: number; colSpan: number }>();
+  const covered = new Set<string>();
+  for (const [r1, c1, r2, c2] of sheet?.merges ?? []) {
+    spans.set(`${r1}:${c1}`, { rowSpan: r2 - r1 + 1, colSpan: c2 - c1 + 1 });
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) if (r !== r1 || c !== c1) covered.add(`${r}:${c}`);
+  }
+  const used = Math.max(rows.reduce((n, r) => Math.max(n, r.length), 0), ...(sheet?.merges ?? []).map((m) => m[3] + 1));
+  // Hidden rows and columns are shown dimmed, so their content can be checked without mistaking it for what users see.
+  const hiddenRows = new Set(sheet?.hiddenRows);
+  const hiddenCols = new Set(sheet?.hiddenCols);
+  const widths = Array.from({ length: used }, (_, c) => sheet?.widths[c] ?? 64);
+  // Like a spreadsheet, empty columns go on to the right (text can spill into them).
+  while (used && widths.reduce((a, b) => a + b, 0) < 1200) widths.push(64);
+  const cols = widths.length;
+  const notes = [
+    sheet?.truncated && t('only the first {n} rows and 200 columns are shown', { n: rows.length }),
+    sheet?.hidden && t('this sheet is hidden in the spreadsheet program'),
+    sheet?.drawing && t('it has images or charts, not shown here'),
+  ].filter(Boolean);
+  return (
+    <div className="sheet">
+      <p className="notice-bar">{t('Spreadsheet — values preview')}{notes.length ? `; ${notes.join('; ')}` : ''}. {t('Open it in your spreadsheet program to edit or see formatting.')}</p>
+      <div className="sheet-grid">
+        {cols === 0 ? <p className="muted sheet-empty">{t('This sheet is empty.')}</p> : (
+          <table style={{ width: 44 + widths.reduce((a, b) => a + b, 0) }}>
+            <colgroup><col style={{ width: 44 }} />{widths.map((w, c) => <col key={c} style={{ width: w }} />)}</colgroup>
+            <thead><tr><th />{Array.from({ length: cols }, (_, c) => (
+              <th key={c} className={hiddenCols.has(c) ? 'hidden-rc' : undefined} title={hiddenCols.has(c) ? t('Hidden column') : undefined}>{colName(c)}</th>
+            ))}</tr></thead>
+            <tbody>
+              {rows.map((r, n) => (
+                <tr key={n}>
+                  <th className={hiddenRows.has(n) ? 'hidden-rc' : undefined} title={hiddenRows.has(n) ? t('Hidden row') : undefined}>{n + 1}</th>
+                  {Array.from({ length: cols }, (_, c) => {
+                    if (covered.has(`${n}:${c}`)) return null;
+                    const v = r[c] ?? '';
+                    const a = sheet?.align[`${n}:${c}`];
+                    const span = spans.get(`${n}:${c}`);
+                    // Like Excel, left-aligned text spills over the empty cells on its right instead of being cut.
+                    // ponytail: text width estimated at 7px per character; measure with canvas if it misjudges.
+                    let spill = 1;
+                    if (typeof v === 'string' && v && !span && !a?.wrap && (a?.h ?? 'left') === 'left' && !v.includes('\n')) {
+                      for (let w = widths[c]; w < v.length * 7 + 8 && c + spill < cols && !r[c + spill]
+                        && !covered.has(`${n}:${c + spill}`) && !spans.has(`${n}:${c + spill}`); spill++) w += widths[c + spill];
+                      for (let k = 1; k < spill; k++) covered.add(`${n}:${c + k}`);
+                    }
+                    const props = {
+                      ...span, ...(spill > 1 ? { colSpan: spill } : {}),
+                      className: [typeof v === 'object' && 'num', (hiddenRows.has(n) || hiddenCols.has(c)) && 'hidden-rc'].filter(Boolean).join(' ') || undefined,
+                      style: a && { textAlign: a.h as CSSProperties['textAlign'], verticalAlign: a.v, whiteSpace: a.wrap ? 'pre-wrap' as const : undefined },
+                    };
+                    return typeof v === 'object' ? <td key={c} {...props}>{v.n}</td> : <td key={c} title={v || undefined} {...props}>{v}</td>;
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <div className="sheet-tabs" role="tablist">
+        {sheets.map((s, i) => (
+          <button type="button" key={s.name} role="tab" aria-selected={i === current} className={`${i === current ? 'active' : ''}${s.hidden ? ' hidden-sheet' : ''}`}
+            title={s.hidden ? t('Hidden sheet') : undefined} onClick={() => setCurrent(i)}>{s.name}</button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 const formatSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
@@ -38,15 +118,15 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
         </div>
         <div className="doc-actions">
           {editable && mode === 'preview' && content.kind === 'markdown' && (
-            <button type="button" className="icon-btn" onClick={() => onMode('edit')} title="Edit (Ctrl+E)"><IconEdit size={17} /></button>
+            <button type="button" className="icon-btn" onClick={() => onMode('edit')} title={t('Edit (Ctrl+E)')}><IconEdit size={17} /></button>
           )}
           {editable && mode === 'edit' && content.kind === 'markdown' && (
-            <button type="button" className="icon-btn" onClick={() => onMode('preview')} title="Reading view (Ctrl+E)"><IconEye size={17} /></button>
+            <button type="button" className="icon-btn" onClick={() => onMode('preview')} title={t('Reading view (Ctrl+E)')}><IconEye size={17} /></button>
           )}
           {editable && (dirty || saving) && (
-            <button type="button" className="btn btn-sm" onClick={onSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+            <button type="button" className="btn btn-sm" onClick={onSave} disabled={saving}>{saving ? t('Saving…') : t('Save')}</button>
           )}
-          <button type="button" className="icon-btn" onClick={onOpenExternal} title="Open with the default program"><IconExternal size={17} /></button>
+          <button type="button" className="icon-btn" onClick={onOpenExternal} title={t('Open with the default program')}><IconExternal size={17} /></button>
         </div>
       </div>
 
@@ -63,10 +143,11 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
         {content.kind === 'json' && <pre className="plain code-view">{content.text}</pre>}
         {content.kind === 'docx' && (
           <>
-            <p className="notice-bar">Word document — text preview. Open it with Word to see images and formatting.</p>
+            <p className="notice-bar">{t('Word document — text preview. Open it in your word processor to see images and formatting.')}</p>
             <div className="markdown" onClick={onClick} dangerouslySetInnerHTML={{ __html: content.html }} />
           </>
         )}
+        {content.kind === 'xlsx' && <SheetView key={content.path} sheets={content.sheets} />}
         {content.kind === 'image' && <div className="image-view"><img src={content.dataUrl} alt={content.path} /></div>}
         {content.kind === 'binary' && (
           <div className="binary-view">
@@ -74,8 +155,8 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
             <strong>{crumbs[crumbs.length - 1]}</strong>
             <span className="muted small">{formatSize(content.size)}{content.reason ? ` · ${content.reason}` : ''}</span>
             {content.openable
-              ? <button type="button" className="btn" onClick={onOpenExternal}><IconExternal size={16} /> Open with the default program</button>
-              : <span className="muted small">This type of file is not opened from Quality Agents.</span>}
+              ? <button type="button" className="btn" onClick={onOpenExternal}><IconExternal size={16} /> {t('Open with the default program')}</button>
+              : <span className="muted small">{t('This type of file is not opened from Moki.')}</span>}
           </div>
         )}
       </div>

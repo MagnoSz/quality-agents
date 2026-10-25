@@ -1,4 +1,4 @@
-/* Quality Agents desktop. Palette: near-black warm gray, off-white and
+/* Moki desktop. Palette: near-black warm gray, off-white and
    butter yellow (from the app's cat). Dark by default, light when the system
    is in light mode. */
 :root {
@@ -121,6 +121,7 @@ textarea { width: 100%; resize: vertical; }
 .home-tools { margin-top: 26px; max-width: 520px; }
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field.inline { flex-direction: row; align-items: center; gap: 10px; margin-top: 10px; }
+fieldset.field { border: 0; padding: 0; margin: 0; min-width: 0; }
 
 /* ---------- Workspace ---------- */
 .workspace {
@@ -152,6 +153,13 @@ textarea { width: 100%; resize: vertical; }
 .tree-icon { display: grid; place-items: center; width: 14px; color: var(--faint); }
 .tree-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-meta { font-size: 0.75rem; color: var(--faint); white-space: nowrap; }
+.tree-new { color: var(--faint); }
+.note-dialog .modal-head { cursor: move; user-select: none; align-items: center; }
+.note-tools { display: flex; align-items: center; gap: 2px; padding: 6px 20px; border-bottom: 1px solid var(--border); }
+.note-tools .icon-btn { width: auto; min-width: 30px; padding: 0 6px; font-size: 0.85rem; }
+.note-tools .sep { width: 1px; height: 18px; margin: 0 6px; background: var(--border); }
+.note-preview { min-height: 50vh; }
+.note-editor { min-height: 50vh; padding: 12px; font-size: 14px; line-height: 1.6; resize: vertical; }
 .tree-empty { font-size: 0.8rem; color: var(--faint); height: 24px; display: flex; align-items: center; }
 
 .main { grid-area: main; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -217,6 +225,24 @@ textarea { width: 100%; resize: vertical; }
   background: transparent; font-size: 14px; line-height: 1.7; resize: none; outline: none;
 }
 .plain { margin: 0; padding: 20px 24px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.sheet { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sheet-grid { flex: 1; min-height: 0; overflow: auto; margin-top: 12px; border-top: 1px solid var(--border); }
+.sheet-grid table { table-layout: fixed; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.sheet-grid th, .sheet-grid td { padding: 3px 4px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); white-space: pre; vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.sheet-grid th { position: sticky; background: var(--bg-2); color: var(--muted); font-weight: 500; text-align: center; }
+.sheet-grid thead th { top: 0; z-index: 1; }
+.sheet-grid tbody th { left: 0; min-width: 40px; }
+.sheet-grid thead th:first-child { left: 0; z-index: 2; }
+.sheet-grid td.num { text-align: right; }
+.sheet-grid td.hidden-rc { opacity: 0.45; }
+.sheet-grid th.hidden-rc { color: var(--faint); text-decoration: line-through; }
+.sheet-empty { padding: 24px; }
+.sheet-tabs { display: flex; gap: 2px; padding: 0 8px; border-top: 1px solid var(--border); background: var(--bg-2); overflow-x: auto; flex-shrink: 0; }
+.sheet-tabs button { padding: 5px 14px; border: 0; border-top: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
+.sheet-tabs button:hover { color: var(--text); }
+.sheet-tabs button.active { background: var(--bg); color: var(--text); border-top-color: var(--accent); }
+.sheet-tabs button.hidden-sheet { font-style: italic; opacity: 0.7; }
+.markdown img { max-width: 100%; height: auto; border-radius: 4px; }
 .image-view { display: grid; place-items: center; padding: 24px; }
 .image-view img { max-width: 100%; max-height: 80vh; border-radius: 6px; }
 .binary-view { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; flex: 1; color: var(--muted); padding: 32px; text-align: center; }

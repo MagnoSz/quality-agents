@@ -1,11 +1,11 @@
-# Quality Agents
+# Moki
 
 🇺🇸 [Read in English](README.md)
 
-<p align="center"><img src="app/public/hero.png" alt="Quality Agents" width="280" /></p>
+<p align="center"><img src="app/public/hero.png" alt="Moki" width="280" /></p>
 
 <p align="center">
-  <a href="https://github.com/Orsi88/quality-agents/releases/latest"><b>⬇️ Baixar o Quality Agents para Windows</b></a>
+  <a href="https://github.com/Orsi88/quality-agents/releases/latest"><b>⬇️ Baixar o Moki para Windows</b></a>
   &nbsp;·&nbsp; <a href="https://github.com/Orsi88/quality-agents/releases/download/v0.1.0/Quality.Agents.Setup.0.1.0.exe">link direto (v0.1.0, .exe)</a>
   &nbsp;·&nbsp; <a href="#30-o-jeito-mais-rápido-o-instalador-para-windows">como instalar</a>
 </p>
@@ -61,6 +61,7 @@ Este guia foi escrito para profissionais de QA. Não é preciso saber programar:
 | `requirements-review` | Revisa user stories antes do desenvolvimento: ambiguidades, contradições, lacunas, interação entre regras, riscos. Entrevista interativa (uma pergunta por vez), Matriz de Revisão QA (Excel), Relatório Final de Definições (PDF). Nunca gera casos de teste. | draft |
 | `test-design` | Mapeia cenários de teste, espera o seu OK e depois escreve casos de teste manuais detalhados, exportados para Excel. | draft |
 | `failure-analysis` | Pré-análise curta de um erro a partir da sua descrição e do log, para direcionar o time de desenvolvimento à causa provável. | draft |
+| `evidence-collection`, `evidence-sheet`, `evidence-document` | Evidências de teste de ponta a ponta (agente `evidence-builder`): lê o item de trabalho (Azure DevOps/Jira via MCP, ou colado) e as gravações do Jam, pede sua aprovação e gera a planilha de evidências (uma linha por caso de teste) e o documento Word com os prints, nos seus próprios modelos. | draft |
 | `project-context` | Cria e mantém o conhecimento sobre cada sistema que você testa. | draft |
 | `qa-orchestrator` | Encadeia atividades ("revise e depois projete os testes"), garante as aprovações e retoma trabalhos interrompidos. | draft |
 | `automation` | Engenharia de automação: constrói projetos de automação novos (Playwright + TypeScript primeiro) já documentados e prontos para IA, automatiza cenários FLX documentados em projetos existentes e evolui projetos existentes. | pending migration |
@@ -106,11 +107,11 @@ flowchart TD
 
 ### 3.0 O jeito mais rápido: o instalador para Windows
 
-1. Baixe o **Quality Agents Setup <versão>.exe** na [página de Releases](https://github.com/Orsi88/quality-agents/releases).
+1. Baixe o **Moki Setup <versão>.exe** na [página de Releases](https://github.com/Orsi88/quality-agents/releases).
 2. Execute. O Windows pode mostrar *"O Windows protegeu o computador"*, porque o instalador ainda não tem assinatura digital: clique em **Mais informações → Executar assim mesmo**.
-3. Escolha a pasta de instalação e conclua. Um atalho **Quality Agents** é criado na área de trabalho e no menu Iniciar.
+3. Escolha a pasta de instalação e conclua. Um atalho **Moki** é criado na área de trabalho e no menu Iniciar.
 
-Na primeira abertura o app cria **Documentos\Quality Agents** — o framework (skills, `AGENTS.md`, templates) e a sua `workspace/`, onde ficam os projetos e resultados. A sua ferramenta de IA é aberta nessa pasta. Instalar uma versão nova atualiza os arquivos do framework ali e **nunca mexe na `workspace/`**; desinstalar o app também mantém essa pasta.
+Na primeira abertura o app cria **Documentos\Moki** — o framework (skills, `AGENTS.md`, templates) e a sua `workspace/`, onde ficam os projetos e resultados. A sua ferramenta de IA é aberta nessa pasta. Instalar uma versão nova atualiza os arquivos do framework ali e **nunca mexe na `workspace/`**; desinstalar o app também mantém essa pasta.
 
 Você continua precisando de uma ferramenta de IA (Claude Code, Codex, Cursor…). O Node.js é opcional: só é usado pelos comandos auxiliares das skills (geração de Excel/PDF).
 
@@ -174,7 +175,7 @@ Leva cerca de um minuto. Ele:
 3. cria a sua pasta local `workspace/`,
 4. liga a proteção que bloqueia commits acidentais de dados de projeto ou senhas.
 
-Termina com `Done. Start Quality Agents with: npm run qa`. Rode `npm run setup` de novo depois de cada atualização (`git pull`).
+Termina com `Done. Start Moki with: npm run qa`. Rode `npm run setup` de novo depois de cada atualização (`git pull`).
 
 ### 3.5 Conferir se está tudo certo
 
@@ -192,7 +193,7 @@ Ainda dentro da pasta `quality-agents`:
 npm link
 ```
 
-A partir daí você pode digitar `qa` em **qualquer** pasta do terminal para abrir o app desktop do Quality Agents ([seção 4.1](#41-o-app-desktop-qa)). Se o `npm link` der erro de permissão no macOS/Linux, use `sudo npm link`, ou pule esta etapa e rode `npm run qa` de dentro da pasta `quality-agents`.
+A partir daí você pode digitar `qa` em **qualquer** pasta do terminal para abrir o app desktop do Moki ([seção 4.1](#41-o-app-desktop-qa)). Se o `npm link` der erro de permissão no macOS/Linux, use `sudo npm link`, ou pule esta etapa e rode `npm run qa` de dentro da pasta `quality-agents`.
 
 > **Dica para Windows:** se o PowerShell disser *"a execução de scripts foi desabilitada neste sistema"* quando você digitar `npm`, use o **Git Bash**, ou digite `npm.cmd` em vez de `npm`, ou veja a [Solução de problemas](#14-solução-de-problemas).
 
@@ -202,11 +203,11 @@ Opcional: para quem publica os instaladores, ou para ter o app no macOS/Linux co
 
 | Sistema | Comando | Resultado em `release/` |
 |---|---|---|
-| Windows 10/11 (x64) | `npm run dist:win` | `Quality Agents Setup <versão>.exe` |
-| macOS (Intel ou Apple Silicon) | `npm run dist:mac` | `Quality Agents-<versão>.dmg` (com `-arm64` no nome em Apple Silicon) |
-| Linux (x64) | `npm run dist:linux` | `Quality Agents-<versão>.AppImage` |
+| Windows 10/11 (x64) | `npm run dist:win` | `Moki Setup <versão>.exe` |
+| macOS (Intel ou Apple Silicon) | `npm run dist:mac` | `Moki-<versão>.dmg` (com `-arm64` no nome em Apple Silicon) |
+| Linux (x64) | `npm run dist:linux` | `Moki-<versão>.AppImage` |
 
-Os instaladores ainda não têm assinatura digital: o Windows mostra o aviso do SmartScreen descrito na [3.0](#30-o-jeito-mais-rápido-o-instalador-para-windows); o macOS bloqueia a primeira abertura — clique com o botão direito no app → **Abrir**, ou **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**. Em todos os sistemas, a primeira abertura cria **Documentos/Quality Agents**, como na 3.0.
+Os instaladores ainda não têm assinatura digital: o Windows mostra o aviso do SmartScreen descrito na [3.0](#30-o-jeito-mais-rápido-o-instalador-para-windows); o macOS bloqueia a primeira abertura — clique com o botão direito no app → **Abrir**, ou **Ajustes do Sistema → Privacidade e Segurança → Abrir Mesmo Assim**. Em todos os sistemas, a primeira abertura cria **Documentos/Moki**, como na 3.0.
 
 #### Linux: distribuições e versões
 
@@ -223,10 +224,10 @@ O build para Linux é um único `.AppImage`: um arquivo que roda sem instalaçã
 | openSUSE | Leap 15.6, Tumbleweed | `sudo zypper install libfuse2` |
 | Arch / Manjaro | rolling | `sudo pacman -S fuse2` |
 
-Para executar: `chmod +x "Quality Agents-<versão>.AppImage"` e depois dê dois cliques no arquivo ou abra-o pelo terminal.
+Para executar: `chmod +x "Moki-<versão>.AppImage"` e depois dê dois cliques no arquivo ou abra-o pelo terminal.
 
 - **Nenhuma entrada no menu** é criada. Deixe o arquivo numa pasta fixa (ex.: `~/Applications`); ferramentas como AppImageLauncher ou Gear Lever podem adicioná-lo ao menu.
-- **Ubuntu 24.04 ou mais recente:** o AppArmor bloqueia o sandbox usado por apps Electron, e o AppImage pode fechar logo ao abrir com um erro de *"sandbox"*. Abra-o com `"./Quality Agents-<versão>.AppImage" --no-sandbox` (isso desliga o sandbox do Chromium para este app).
+- **Ubuntu 24.04 ou mais recente:** o AppArmor bloqueia o sandbox usado por apps Electron, e o AppImage pode fechar logo ao abrir com um erro de *"sandbox"*. Abra-o com `"./Moki-<versão>.AppImage" --no-sandbox` (isso desliga o sandbox do Chromium para este app).
 - **ARM64:** gere numa máquina ARM64 com `npm run app:build` e depois `npx electron-builder --linux AppImage --arm64`.
 
 ---
@@ -248,7 +249,7 @@ E três formas de trabalhar, seja qual for a ferramenta:
 
 ### 4.1 O app desktop (`qa`)
 
-Digite `qa` (ou use o atalho, quando o instalador existir). O Quality Agents abre numa janela própria — sem navegador, sem servidor. A interface é em inglês.
+Digite `qa` (ou use o atalho, quando o instalador existir). O Moki abre numa janela própria — sem navegador, sem servidor. A interface é em inglês.
 
 **Tela inicial** — seus projetos à esquerda; para criar um novo, basta digitar o nome. O último projeto usado reabre automaticamente.
 
@@ -296,7 +297,7 @@ flowchart TD
 Use **↑/↓** para mover, **Enter** para escolher (ou digite o número da opção) e **Ctrl+C** para cancelar. Cada resposta "recolhe" depois de escolhida, então a tela fica limpa. A interface do `qa` é em inglês; enquanto uma pergunta está aberta, ela fica assim:
 
 ```text
-┌  Quality Agents
+┌  Moki
 │  Prepares your request and opens the AI tool you use. Your data stays in workspace/.
 │
 ◇  Which project (system under test)?
@@ -307,6 +308,7 @@ Use **↑/↓** para mover, **Enter** para escolher (ou digite o número da opç
 │  ○ Design tests
 │  ○ Review, then design tests
 │  ○ Failure pre-analysis
+│  ○ Build test evidence  work item + Jam recordings, then spreadsheet and Word document
 │  ○ Project context
 │  ○ Automation  (not available yet: pending-migration)
 │  ○ Resume a run  (no open runs)
@@ -316,7 +318,7 @@ Use **↑/↓** para mover, **Enter** para escolher (ou digite o número da opç
 Uma sessão completa, ao final:
 
 ```text
-┌  Quality Agents
+┌  Moki
 │
 ◇  Which project (system under test)?
 │  billing-portal
@@ -503,7 +505,7 @@ git remote add origin <url-do-seu-repositorio-privado>
 git push -u origin main
 ```
 
-A pasta do projeto já vem com um `.gitignore` que deixa de fora `runs/`, `inbox/` e `temporary/`, então os resultados das atividades continuam privados e sem versionamento. Os colegas clonam esse repositório privado dentro do próprio `workspace/projects/billing-portal/`. Nunca coloque contexto de projeto no repositório público do Quality Agents.
+A pasta do projeto já vem com um `.gitignore` que deixa de fora `runs/`, `inbox/` e `temporary/`, então os resultados das atividades continuam privados e sem versionamento. Os colegas clonam esse repositório privado dentro do próprio `workspace/projects/billing-portal/`. Nunca coloque contexto de projeto no repositório público do Moki.
 
 ---
 
@@ -783,7 +785,7 @@ flowchart TD
   E3 --> REP
 ```
 
-Regras que ela sempre segue: plano e aprovação antes de mexer no código; nunca enfraquece asserções para fazer teste passar; o comportamento esperado vem da documentação, não do que aparece na tela; código de teste fica só no seu repositório de automação, nunca no Quality Agents. Configure onde fica a sua documentação em `project.json` → `knowledgeSources`.
+Regras que ela sempre segue: plano e aprovação antes de mexer no código; nunca enfraquece asserções para fazer teste passar; o comportamento esperado vem da documentação, não do que aparece na tela; código de teste fica só no seu repositório de automação, nunca no Moki. Configure onde fica a sua documentação em `project.json` → `knowledgeSources`.
 
 ### 7.7 Skills planejadas
 
@@ -1027,13 +1029,19 @@ Rode todos os comandos de dentro da pasta `quality-agents`. No PowerShell do Win
 | `qa` (depois do `npm link`) ou `npm run qa` | Abre o app desktop ([4.1](#41-o-app-desktop-qa)) |
 | `qa --terminal` | Menu de terminal que prepara o pedido e abre a sua ferramenta de IA ([4.2](#42-o-menu-de-terminal-qa---terminal)) |
 | `npm run setup` | Configuração inicial: pastas do workspace + proteção de commits |
-| `npm run new-project -- <id> "<Nome>"` | Cria a pasta de um projeto a partir do template |
+| `npm run new-project -- <id> "<Nome>" [--blank]` | Cria a pasta de um projeto a partir do template. `--blank` deixa de fora os arquivos de contexto de QA: a IA entrevista você e propõe um plano (no app, "A blank project") |
 | `npm run new-run -- --project <id> --skill <skill> --slug <nome-curto>` | Cria uma execução (a IA normalmente faz isso por você). Use `--workflow <id>` no lugar de `--skill` para workflows. |
 | `npm run runs` | Lista todos os projetos e execuções e valida cada `state.json` |
 | `npm run runs -- <id>` | Só um projeto |
 | `npm run xlsx -- write --layout <layout.json> --data <data.json> --out <arquivo.xlsx> [--lang en\|pt-BR]` | Gera um entregável em Excel (rótulos em inglês por padrão) |
 | `npm run xlsx -- read <arquivo.xlsx> --layout <layout.json> --out <data.json>` | Lê um Excel devolvido pelo time |
 | `npm run pdf -- <relatorio.md> <relatorio.pdf>` | Gera um PDF a partir de um relatório em Markdown |
+| `npm run xlsx -- fill --template <modelo.xlsx> --data <linhas.json> --out <arquivo.xlsx> [--sheet <nome>]` | Preenche o seu modelo de planilha (logo, cores e listas suspensas mantidos), uma linha por item abaixo do cabeçalho |
+| `npm run xlsx -- inspect <arquivo.xlsx>` | Mostra as primeiras linhas de cada aba (para ler os cabeçalhos de um modelo) |
+| `npm run docx -- write --data <document.json> --out <arquivo.docx> [--template <modelo.docx>]` | Gera um documento Word com imagens, sem dependências externas; com `--template`, dentro do seu modelo de Word |
+| `npm run docx -- inspect <modelo.docx>` | Mostra placeholders, estilos, cabeçalho/rodapé e a estrutura de um modelo de Word |
+
+No app desktop (`qa`) e no menu do terminal (`qa --terminal`), a atividade **Build test evidence** inicia o workflow `test-evidence` (agente `evidence-builder`).
 | `npm run check-output -- <tipo> <arquivo> [opções]` | Verificações objetivas de um entregável: `pre-analysis`, `missing-info --expect "a,b"`, `test-cases --source <doc>`, `review-matrix` |
 | `npm run bundle` | Gera os pacotes para ferramentas de chat em `dist/` |
 | `npm run check` | Valida o framework e procura artefatos/segredos |

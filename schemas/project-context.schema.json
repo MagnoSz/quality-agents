@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "quality-agents/project-context",
-  "title": "Quality Agents project context",
+  "title": "Moki project context",
   "type": "object",
   "required": ["schemaVersion", "project", "name"],
   "properties": {
@@ -11,6 +11,7 @@
     "description": { "type": "string" },
     "deliverableLanguage": { "type": "string", "description": "Language for deliverables, e.g. en or pt-BR. Empty = English (framework default)." },
     "onboardingStatus": { "type": "string", "enum": ["not-started", "partial", "complete"] },
+    "starter": { "type": "string", "enum": ["qa", "blank"], "description": "How the project started: qa (absent) = with the QA context files; blank = without context/, planned with the user (plan.json)." },
     "contextFiles": {
       "type": "array",
       "description": "Files under workspace/projects/<project>/context/ that skills may read, with what each contains.",
