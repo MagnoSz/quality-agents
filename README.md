@@ -260,7 +260,7 @@ And three ways to work, whatever the tool:
 
 Type `qa`, or use the desktop shortcut from the installer. Moki opens in its own window — no browser, no server.
 
-**Start screen** — your projects on the left. Pin one to keep it at the top. Hide one and its files stay on this computer; it moves under **Hidden**, and the eye button shows it again. Create a project by typing its name. That form still says "one project per system you test"; a blank project and a linked folder use the same form. The last project you used reopens automatically. The corner chooses **English or Portuguese** and a **light or dark** theme; the first launch asks for both.
+**Start screen** — your projects on the left, and in the middle the cat, the version, **Create a new project** and **Open a project**. Pin one to keep it at the top. Hide one and its files stay on this computer; it moves under **Hidden**, and the eye button shows it again. The **+** opens the form where you type a name. An empty list does not open that form, and the first launch does not ask you to create a project. That form still says "one project per system you test"; a blank project and a linked folder use the same form. The last project you used reopens automatically. The corner chooses **English or Portuguese** and a **light or dark** theme. Those controls are on this screen from the first launch.
 
 **Workspace** (like Obsidian):
 

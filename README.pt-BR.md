@@ -260,7 +260,7 @@ E três formas de trabalhar, seja qual for a ferramenta:
 
 Digite `qa`, ou use o atalho da área de trabalho criado pelo instalador. O Moki abre numa janela própria — sem navegador, sem servidor.
 
-**Tela inicial** — seus projetos à esquerda. Fixe um para mantê-lo no topo. *Desvisualizar* tira o projeto da lista e os arquivos continuam neste computador; ele vai para **Ocultos**, e o olho mostra de novo. Para criar um projeto, basta digitar o nome. Esse formulário ainda diz "um projeto por sistema que você testa"; um projeto em branco e uma pasta vinculada usam o mesmo formulário. O último projeto usado reabre automaticamente. O canto escolhe **inglês ou português** e o tema **claro ou escuro**; a primeira abertura pergunta os dois.
+**Tela inicial** — os projetos à esquerda e, no centro, o gato, a versão, **Criar um novo projeto** e **Abrir um projeto**. Fixe um para mantê-lo no topo. *Desvisualizar* tira o projeto da lista e os arquivos continuam neste computador; ele vai para **Ocultos**, e o olho mostra de novo. O **+** abre o formulário em que você digita o nome. Uma lista vazia não abre esse formulário, e a primeira abertura não pede para criar um projeto. Esse formulário ainda diz "um projeto por sistema que você testa"; um projeto em branco e uma pasta vinculada usam o mesmo formulário. O último projeto usado reabre automaticamente. O canto escolhe **inglês ou português** e o tema **claro ou escuro**. Esses controles já estão nessa tela desde a primeira abertura.
 
 **Workspace** (como o Obsidian):
 
