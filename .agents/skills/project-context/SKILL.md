@@ -59,7 +59,8 @@ Optional:
 
 1. Read `project.json` and `context/index.md`.
 2. Using the [retrieval map](references/context-files.md#retrieval-map), load only the files (or sections) relevant to the requested activity.
-3. Report briefly what was loaded, the `onboardingStatus`, and gaps that matter for this activity (for example, "no permission model recorded"). Offer to fill critical gaps with a few questions; do not force a full onboarding.
+3. If the request lists **shared context** (files of other projects shared through tags), read only the listed files that matter for the activity, as read-only reference, following the [isolation policy](references/core/isolation-policy.md#shared-context-through-tags). If it says some files of this project must not be used, skip them.
+4. Report briefly what was loaded (shared files with their source project), the `onboardingStatus`, and gaps that matter for this activity (for example, "no permission model recorded"). Offer to fill critical gaps with a few questions; do not force a full onboarding.
 
 ### 2b. New project — onboard
 
@@ -75,7 +76,7 @@ A project with `"starter": "blank"` in `project.json` (created with `npm run new
 
 ### 3. Hand over context
 
-Provide the next skill only the relevant excerpts, with their file paths, plus the list of known gaps. Never pass `proposed-updates.md` content as fact.
+Provide the next skill only the relevant excerpts, with their file paths, plus the list of known gaps. Never pass `proposed-updates.md` content as fact. Excerpts from shared context name their source project and stay reference: they are not this project's confirmed context.
 
 ### 4. Update context
 

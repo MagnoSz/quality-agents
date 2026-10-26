@@ -5,6 +5,7 @@
   "description": "",
   "deliverableLanguage": "",
   "onboardingStatus": "not-started",
+  "tags": [],
   "contextFiles": [
     { "path": "context/index.md", "contains": "Catalog of context files and what each covers; read first" }
   ],

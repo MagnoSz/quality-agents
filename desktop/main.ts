@@ -5,7 +5,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { existsSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
-import { dirname, join, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT } from '../scripts/lib/repo.mjs';
 import { TOOLS, isTool, listProjects, projectsDir } from '../scripts/lib/core.ts';
@@ -30,8 +30,12 @@ const service = createService(ROOT, {
   trash: (path) => shell.trashItem(path),
   pickFolder: async () => {
     if (!win) return null;
-    const r = await dialog.showOpenDialog(win, { title: 'Choose a folder to link', properties: ['openDirectory'] });
+    const r = await dialog.showOpenDialog(win, { title: 'Choose a folder', properties: ['openDirectory', 'createDirectory'] });
     return r.canceled ? null : r.filePaths[0] ?? null;
+  },
+  // Tools and helper commands started from here look for projects in the active workspace.
+  onWorkspace: (dir) => {
+    if (resolve(dir) === resolve(ROOT, 'workspace')) delete process.env.QA_WORKSPACE; else process.env.QA_WORKSPACE = dir;
   },
 });
 const METHODS = new Set(Object.keys(service));

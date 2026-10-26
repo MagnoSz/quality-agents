@@ -4,7 +4,7 @@
 
 import { mkdirSync, writeFileSync, existsSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, SLUG, listSkillDirs, parseArgs, nowStamp } from './lib/repo.mjs';
+import { ROOT, SLUG, listSkillDirs, parseArgs, nowStamp, workspaceDir } from './lib/repo.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const fail = (msg) => { console.error(msg); process.exit(1); };
@@ -20,7 +20,7 @@ if (kind === 'workflow' && !existsSync(join(ROOT, 'skills', 'qa-orchestrator', '
 for (const [label, value] of [['project', args.project], ['slug', args.slug]]) {
   if (!SLUG.test(value)) fail(`--${label} must be lowercase letters, digits and hyphens`);
 }
-const projectDir = join(ROOT, 'workspace', 'projects', args.project);
+const projectDir = join(workspaceDir(), 'projects', args.project); // QA_WORKSPACE selects another workspace
 if (!existsSync(join(projectDir, 'project.json'))) {
   fail(`Project "${args.project}" does not exist. Create it first: npm run new-project -- ${args.project}`);
 }

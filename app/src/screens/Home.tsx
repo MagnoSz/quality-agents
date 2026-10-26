@@ -2,14 +2,15 @@
 // Obsidian's vault switcher.
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { api, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo } from '../api';
+import { api, type ProjectSummary, type Starter, type Tag, type TerminalRef, type ToolInfo, type WorkspaceInfo } from '../api';
 import { recall, remember } from '../prefs';
-import { lang, setLang, t, type Lang } from '../i18n';
-import { PrefsCorner } from '../components/PrefsCorner';
+import { t } from '../i18n';
+import { StartPrefs } from '../components/PrefsCorner';
 import { AddButton } from '../components/AddButton';
-import { IconChevron, IconEye, IconEyeOff, IconOpenProject, IconPin, IconX } from '../components/Icons';
+import { TagPicker } from '../components/TagPicker';
+import { SearchPanel } from '../components/SearchPanel';
+import { IconCheck, IconChevron, IconEye, IconEyeOff, IconOpenProject, IconPin, IconX } from '../components/Icons';
 import { hiddenIds, hideProject, looseNotes, pinnedIds, recentNotes, showProject, togglePin } from '../side-menu';
-import { currentTheme, persistTheme, type Theme } from '../theme';
 import { Settings, type SettingsTab } from './Settings';
 
 interface Props {
@@ -17,30 +18,32 @@ interface Props {
   tools: ToolInfo[];
   version: string;
   onOpen: (id: string) => void;
-  onCreate: (name: string, starter: Starter, folder?: string) => Promise<void>;
+  onCreate: (name: string, starter: Starter, folder?: string, tags?: string[]) => Promise<void>;
   settings: SettingsTab | null;
   onSettings: (tab: SettingsTab | null) => void;
   onBack?: () => void;
   backLabel?: string;
   project: ProjectSummary | null;
   onTerminal: (terminal: TerminalRef, projectId: string) => void;
+  workspace?: WorkspaceInfo | null; // the open workspace, switched at the bottom of the list
+  onWorkspace?: (workspace: WorkspaceInfo | null) => void; // null: back to the workspace picker
+  search?: boolean; // the search panel in place of the list
+  onSearch?: () => void;
+  onFound?: (project: string, path?: string) => void;
 }
 
 const onboarding = (status: string): string => ({
   'not-started': t('Context not started'), partial: t('Context in progress'), complete: t('Context complete'),
 } as Record<string, string>)[status] ?? status;
 
-const UI_OF: Record<string, Lang> = { English: 'en', 'Portuguese (pt-BR)': 'pt-BR', Spanish: 'en' };
-
-const savedConversation = (): string => {
-  const saved = recall('qa-language');
-  if (saved && saved in UI_OF) return saved;
-  return lang === 'pt-BR' ? 'Portuguese (pt-BR)' : 'English';
-};
-
-export function Home({ projects, tools, version, onOpen, onCreate, settings, onSettings, onBack, backLabel, project, onTerminal }: Props) {
-  const [theme, setTheme] = useState<Theme>(currentTheme);
-  const [conversation, setConversation] = useState(savedConversation);
+export function Home({ projects, tools, version, onOpen, onCreate, settings, onSettings, onBack, backLabel, project, onTerminal, workspace, onWorkspace, search = false, onSearch, onFound }: Props) {
+  const [switching, setSwitching] = useState<WorkspaceInfo[] | null>(null); // the workspace menu, open
+  const openSwitcher = () => { api.workspaces().then((r) => setSwitching(r.list)).catch(() => setSwitching([])); };
+  const switchTo = (w: WorkspaceInfo) => {
+    setSwitching(null);
+    if (w.id === workspace?.id) return;
+    api.selectWorkspace(w.id).then((opened) => onWorkspace?.(opened)).catch((e: Error) => setError(e.message));
+  };
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [folder, setFolder] = useState(''); // an existing folder to link, from "Link an existing folder"
@@ -49,6 +52,9 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
   const [busy, setBusy] = useState(false);
   const [pins, setPins] = useState<string[]>(pinnedIds);
   const [hidden, setHidden] = useState<string[]>(hiddenIds);
+  const [catalog, setCatalog] = useState<Tag[]>([]);
+  const [newTags, setNewTags] = useState<string[]>([]);
+  useEffect(() => { api.tags().then(setCatalog).catch(() => setCatalog([])); }, []);
   const [noteTick, setNoteTick] = useState(0);
   useEffect(() => api.onNotesChanged(() => setNoteTick((n) => n + 1)), []);
   const notes = useMemo(() => recentNotes(), [noteTick]);
@@ -93,7 +99,7 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
     e.preventDefault();
     setBusy(true); setError('');
     remember('qa-starter', starter);
-    try { await onCreate(name, starter, folder || undefined); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
+    try { await onCreate(name, starter, folder || undefined, newTags); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
   };
 
   // The project is named after the chosen folder; the name can still be changed before creating it.
@@ -105,17 +111,15 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
     }).catch((err: Error) => { setCreating(true); setError(err.message); });
   };
 
-  const chooseLanguage = (language: string) => {
-    remember('qa-language', language);
-    setLang(UI_OF[language] ?? 'en');
-    setConversation(language);
-  };
-  const chooseTheme = (next: Theme) => { persistTheme(next); setTheme(next); };
-
   return (
     <div className={`home${settings ? ' is-settings' : ''}`}>
-      {!settings && <PrefsCorner language={conversation} theme={theme} onLanguage={chooseLanguage} onTheme={chooseTheme} />}
-      {!settings && <aside className="home-list home-side">
+      {!settings && <StartPrefs />}
+      {!settings && search && onSearch && onFound && (
+        <aside className="home-list home-side">
+          <SearchPanel onOpenProject={(id) => onFound(id)} onOpenFile={onFound} onClose={onSearch} />
+        </aside>
+      )}
+      {!settings && !(search && onSearch && onFound) && <aside className="home-list home-side">
         {pinned.length > 0 && (
           <div className="home-pinned">
             <div className="home-list-head">{t('Pinned')}</div>
@@ -125,6 +129,7 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
         <div className="home-list-scroll">
           {pinned.length > 0 && <hr className="home-split" />}
           <div className="home-list-head">{t('Projects')}</div>
+
           {projects.length === 0 && <p className="muted small home-empty">{t('No projects yet.')}</p>}
           <ul>{rest.map((p) => projectRow(p, false))}</ul>
           {hiddenProjects.length > 0 && (
@@ -167,6 +172,31 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
             ))}
           </ul>
         </div>
+        {workspace && onWorkspace && (
+          <div className="ws-switch">
+            {switching && (
+              <div className="menu-backdrop" onMouseDown={() => setSwitching(null)}>
+                <ul className="ws-menu" role="menu" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setSwitching(null); }}>
+                  {switching.map((w) => (
+                    <li key={w.id}>
+                      <button type="button" role="menuitem" disabled={w.missing} onClick={() => switchTo(w)} title={w.path}>
+                        <span className="ws-menu-name">{w.name}</span>
+                        {w.id === workspace.id && <IconCheck size={14} />}
+                      </button>
+                    </li>
+                  ))}
+                  <li className="ws-menu-sep" />
+                  <li><button type="button" role="menuitem" autoFocus onClick={() => { setSwitching(null); onWorkspace(null); }}>{t('Manage workspaces…')}</button></li>
+                </ul>
+              </div>
+            )}
+            <button type="button" className="ws-switch-btn" onClick={openSwitcher} aria-haspopup="menu" title={`${t('Switch workspace')}
+${workspace.path}`}>
+              <span className="ws-switch-name">{workspace.name}</span>
+              <span className="ws-switch-caret"><IconChevron size={14} /></span>
+            </button>
+          </div>
+        )}
       </aside>}
 
       {settings ? (
@@ -204,6 +234,11 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
                   <span>{t('A blank project')} <span className="muted small">{t('(after your description, the AI asks what it needs and proposes a plan)')}</span></span>
                 </label>
               </fieldset>
+              <div className="field">
+                <strong>{t('Tags')}</strong>
+                <span className="muted small">{t('Optional. Projects and files with the same tag share their context with this one.')}</span>
+                <TagPicker catalog={catalog} value={newTags} onChange={setNewTags} onCatalog={setCatalog} />
+              </div>
               {folder && (
                 <div className="field">
                   <span className="label">{t('Existing folder')}</span>
@@ -217,7 +252,7 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
               {error && <p className="error small">{error}</p>}
               <div className="row-actions">
                 <button type="submit" className="btn" disabled={busy || !name.trim()}>{busy ? t('Creating…') : t('Create project')}</button>
-                <button type="button" className="btn btn-ghost" onClick={() => { setCreating(false); setName(''); setFolder(''); setError(''); }}>{t('Cancel')}</button>
+                <button type="button" className="btn btn-ghost" onClick={() => { setCreating(false); setName(''); setFolder(''); setNewTags([]); setError(''); }}>{t('Cancel')}</button>
               </div>
             </form>
           )}

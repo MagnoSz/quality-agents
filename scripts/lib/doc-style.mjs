@@ -5,12 +5,12 @@
 // the same result. No dependencies.
 //
 // Files:  <root>/workspace/document-style.json                (all projects)
-//         <root>/workspace/projects/<id>/document-style.json  (one project; wins)
+//         <workspace>/projects/<id>/document-style.json  (one project; wins)
 // Header and footer texts can use {project}, {title}, {date}, {page} and {pages}.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { ROOT } from './repo.mjs';
+import { ROOT, workspaceDir } from './repo.mjs';
 
 export const STYLE_FILE = 'document-style.json';
 
@@ -65,9 +65,9 @@ export function normalizeStyle(input, base = DEFAULT_STYLE) {
 
 const readJson = (file) => { try { return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null; } catch { return null; } };
 
-// The project a file is written for, from its path (…/workspace/projects/<id>/…).
+// The project a file is written for, from its path (<workspace>/projects/<id>/…).
 export function projectOf(path, root = ROOT) {
-  const projects = resolve(root, 'workspace', 'projects') + sep;
+  const projects = resolve(workspaceDir(root), 'projects') + sep;
   const full = resolve(path);
   if (!full.startsWith(projects)) return null;
   const id = full.slice(projects.length).split(sep)[0];
@@ -78,10 +78,10 @@ export function projectOf(path, root = ROOT) {
 // Also the values for {project} and {title}.
 export function styleFor(outPath, { root = ROOT, styleFile, title = '' } = {}) {
   const project = outPath ? projectOf(outPath, root) : null;
-  const global = normalizeStyle(readJson(join(root, 'workspace', STYLE_FILE)));
-  let style = project ? normalizeStyle(readJson(join(root, 'workspace', 'projects', project, STYLE_FILE)), global) : global;
+  const global = normalizeStyle(readJson(join(workspaceDir(root), STYLE_FILE)));
+  let style = project ? normalizeStyle(readJson(join(workspaceDir(root), 'projects', project, STYLE_FILE)), global) : global;
   if (styleFile) style = normalizeStyle(readJson(resolve(styleFile)), style);
-  const name = project ? String(readJson(join(root, 'workspace', 'projects', project, 'project.json'))?.name ?? project) : '';
+  const name = project ? String(readJson(join(workspaceDir(root), 'projects', project, 'project.json'))?.name ?? project) : '';
   return { style, vars: { project: name, title, date: new Date().toLocaleDateString('pt-BR') } };
 }
 

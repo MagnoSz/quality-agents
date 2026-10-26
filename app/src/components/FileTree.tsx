@@ -11,6 +11,7 @@ interface Props {
   expanded: Set<string>;
   onToggle: (path: string) => void;
   onNewNote: () => void;
+  tagColors?: (path: string) => string[]; // colors of the file's tags
 }
 
 const friendly = (name: string): string => ({
@@ -28,7 +29,7 @@ export function FileTree(props: Props) {
   return <ul className="tree" role="tree">{props.nodes.map((n) => <Node key={n.path} node={n} depth={0} {...props} />)}</ul>;
 }
 
-function Node({ node, depth, activePath, onOpen, expanded, onToggle, onNewNote }: Props & { node: TreeNode; depth: number }) {
+function Node({ node, depth, activePath, onOpen, expanded, onToggle, onNewNote, tagColors }: Props & { node: TreeNode; depth: number }) {
   const [hover, setHover] = useState(false);
   const isDir = node.type === 'dir';
   const open = expanded.has(node.path);
@@ -55,13 +56,16 @@ function Node({ node, depth, activePath, onOpen, expanded, onToggle, onNewNote }
         {isDir ? <span className={`tree-caret${open ? ' open' : ''}`}><IconChevron size={14} /></span> : <span className="tree-icon"><FileIcon name={node.name} size={16} /></span>}
         {section && <span className="tree-section-icon"><SectionIcon name={section} size={16} /></span>}
         <span className="tree-label">{label}</span>
+        {!isDir && tagColors && tagColors(node.path).length > 0 && (
+          <span className="tree-tags">{tagColors(node.path).map((c, i) => <span key={i} className="dot" style={{ background: c }} />)}</span>
+        )}
         {node.run && <span className={`dot ${statusClass(node.run.status)}`} />}
         {run && !hover && <span className="tree-meta">{run.date}</span>}
         {isDir && depth === 0 && node.children && <span className="tree-meta">{node.children.length}</span>}
       </button>
       {isDir && open && node.children && (
         <ul role="group">
-          {node.children.map((c) => <Node key={c.path} node={c} depth={depth + 1} activePath={activePath} onOpen={onOpen} expanded={expanded} onToggle={onToggle} onNewNote={onNewNote} nodes={[]} />)}
+          {node.children.map((c) => <Node key={c.path} node={c} depth={depth + 1} activePath={activePath} onOpen={onOpen} expanded={expanded} onToggle={onToggle} onNewNote={onNewNote} tagColors={tagColors} nodes={[]} />)}
           {node.path === 'notes' && (
             <li><button type="button" className="tree-row tree-new" style={{ paddingLeft: 8 + (depth + 1) * INDENT }} onClick={onNewNote}><span className="tree-icon"><IconPlus size={14} /></span><span className="tree-label">{t('New note')}</span></button></li>
           )}

@@ -5,7 +5,7 @@
 // ponytail: fonts, colors, underline, alignment and merged-cell shapes are not kept (Markdown has none).
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, posix } from 'node:path';
+import { basename, dirname, posix, resolve } from 'node:path';
 import { unzip } from './zip.mjs';
 
 const decode = (s: string): string => s
@@ -241,9 +241,9 @@ export function docxToMarkdown(buffer: Buffer, { preview = false }: { preview?: 
 export function readableInputs(files: string[], root: string): string[] {
   return files.map((rel) => {
     if (!/\.docx$/i.test(rel)) return rel;
-    const source = join(root, rel);
+    const source = resolve(root, rel); // rel may be an absolute path (a workspace outside the framework)
     const outRel = `${dirname(rel)}/.extracted/${basename(rel)}.md`;
-    const out = join(root, outRel);
+    const out = resolve(root, outRel);
     try {
       if (!existsSync(out) || statSync(out).mtimeMs < statSync(source).mtimeMs) {
         mkdirSync(dirname(out), { recursive: true });

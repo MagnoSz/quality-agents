@@ -26,7 +26,7 @@ It started as software quality work: review a story, design tests, look at a fai
 2. If Windows says it protected your PC, choose **More info → Run anyway**. The installer is not digitally signed yet.
 3. Finish. A **Moki** shortcut appears on the desktop and in the Start menu.
 
-The first launch creates **Documents\Moki**: the app files and your `workspace/`, where projects live. A newer installer refreshes the app files and leaves `workspace/` alone. Uninstalling keeps that folder too.
+The first launch creates **Documents\Moki**: the app files and your `workspace/`, where projects live. A newer installer refreshes the app files and leaves `workspace/` and `workspaces/` alone. Uninstalling keeps them too.
 
 Install an AI tool as well (Claude Code, Cursor, Codex, Gemini, or a chat you already use). Excel, Word and PDF from the built-in activities need [Node.js 22.18+](https://nodejs.org) (LTS). The app itself opens without it.
 
@@ -34,11 +34,22 @@ macOS, Linux, or a checkout of this repository: [From the source](#from-the-sour
 
 ## Use it
 
-Open Moki. The last project comes back on its own. The corner of the start screen chooses **English or Portuguese** and a **light or dark** theme. Creating a project is a button on that screen, not a step you have to take.
+Open Moki and choose a **workspace**, like a vault in Obsidian. The corner of that screen chooses **English or Portuguese** and a **light or dark** theme.
 
-**Start screen.** Projects on the left, loose notes under them. Pin a project to keep it at the top. Hide one and the files stay on the computer; it moves under **Hidden** until you show it again.
+**Workspaces.** A workspace is a folder with its own projects, tags and settings — for example one per client or company. The `workspace/` you already have is the first one, so nothing moves. On the first screen you can:
 
-**Create a project** by typing a name:
+- open a workspace from the list (the last one opened is marked);
+- **create a new workspace** — by default in `workspaces/<name>/` inside the Moki folder, or in a folder you choose;
+- **open a folder as a workspace** — a folder you already have; Moki adds a `projects/` folder inside it;
+- rename one, or remove it from the list (its folder stays on the computer).
+
+Switch workspaces at the bottom of the project list, or go back to the list with *Manage workspaces…*. Projects of one workspace never see another one.
+
+**Start screen.** Projects on the left, loose notes under them, the workspace at the bottom. Pin a project to keep it at the top. Hide one and the files stay on the computer; it moves under **Hidden** until you show it again. Pins and hidden projects are kept per workspace; loose notes belong to none.
+
+**Search** (the magnifier, or **Ctrl+Shift+F**) takes the place of the list and looks through the active workspace: project names and descriptions, and the names and text of the project files (Markdown, text, JSON, CSV and the text of Word files). Tags appear there as filters; text and tags combine. A result opens the project with the file.
+
+**Create a project** by typing a name, and optionally its tags:
 
 | Start with | What you get |
 |---|---|
@@ -48,12 +59,12 @@ Open Moki. The last project comes back on its own. The corner of the start scree
 
 The create form still says "one project per system you test". A blank project and a linked folder use the same form.
 
-**Workspace.** A tree of the project: context, inbox, activities, notes. Drop files onto the window and they are copied into the inbox — up to 40 files, 200 MB each. Folders are skipped. Markdown is formatted; **Ctrl+E** edits, **Ctrl+S** saves, **Ctrl+W** closes. Word files are turned into text so any AI can read them. Excel and PDF open in their own program. Files the AI saves show up in the tree as they land.
+**Inside a project.** A tree of the project: context, inbox, activities, notes. Drop files onto the window and they are copied into the inbox — up to 40 files, 200 MB each. Folders are skipped. Markdown is formatted; **Ctrl+E** edits, **Ctrl+S** saves, **Ctrl+W** closes. Word files are turned into text so any AI can read them. Excel and PDF open in their own program. Files the AI saves show up in the tree as they land.
 
 **Open in your AI tool** (the play button):
 
 1. Choose the activity.
-2. Optionally choose who should do it (an agent) and which inbox files to include.
+2. Optionally choose which inbox files to include, which shared context to keep (when the project has tags, see [Tags](#tags)) and who should do it (an agent).
 3. Add a note and pick the tool.
 
 Claude Code, Codex, Gemini CLI, Antigravity CLI and Cursor Agent open in a terminal tab of the app. Cursor and VS Code open the folder with the request copied. ChatGPT, claude.ai, Gemini web, and *Just show the request*, leave the text on the screen ready to copy. If opening is still running after about 20 seconds, the wizard says so.
@@ -72,7 +83,7 @@ Notes on a project are Markdown files under `notes/` and open in their own windo
 
 ## Projects
 
-A project is one body of work. Its id is short and lowercase (`billing-portal`), and its folder is `workspace/projects/<id>/`.
+A project is one body of work. Its id is short and lowercase (`billing-portal`), and its folder is `workspace/projects/<id>/` — or `<workspace folder>/projects/<id>/` in another workspace.
 
 A quality project looks like this. A blank project has the same skeleton and gains `context/` only after you approve `plan.json`.
 
@@ -82,6 +93,7 @@ workspace/projects/billing-portal/
 ├── context/              # confirmed knowledge only
 ├── proposed-updates.md   # things the AI noticed, waiting for you
 ├── plan.json             # blank projects: the plan, until you approve it
+├── tags.json             # tags of single files
 ├── activity-log.md
 ├── inbox/                # files you hand to the AI
 ├── notes/
@@ -93,6 +105,21 @@ workspace/projects/billing-portal/
 During an activity the AI may notice something that looks like a general rule. It writes that to `proposed-updates.md` and asks you before it becomes context. Confirmed text is the only text it may treat as known.
 
 Deliverables are in **English** unless you set `"deliverableLanguage": "pt-BR"` in `project.json`, or ask for another language in the activity. The conversation follows the language you write in. Quoted messages stay in their original language.
+
+## Tags
+
+Tags connect projects of the same workspace. Give a project or a file a tag (under the project name, or in the bar above an open file); type a new name to create one.
+
+A project with a tag can use, in its activities:
+
+- the **confirmed context** (`context/`) of every other project with that tag — not their inbox, runs or evidence;
+- every **file** tagged with it, in any project.
+
+When you open an activity, a *Which context should the AI consider?* step lists those files, all checked. Uncheck what this activity should not use; files of the project itself can be left out there too. The request then lists exactly the shared files the AI may read. It reads them only, writes nothing in the other projects, says which project each piece came from, and proposes new knowledge in `proposed-updates.md` instead of treating it as confirmed.
+
+The tag catalog is `tags.json` in the workspace folder; a project's tags are in its `project.json`.
+
+## Sharing a project
 
 To share context with a team, put **that project folder** in its own private Git repository. It already ignores `runs/`, `inbox/` and `temporary/`. Project data does not belong in this public repository.
 
@@ -127,17 +154,19 @@ Close the session whenever you want. Each activity writes `state.json` as it goe
 | What | Where |
 |---|---|
 | The app's library and your projects, after the installer | `Documents/Moki` |
-| One project | `workspace/projects/<id>/` |
+| Other workspaces | `workspaces/<name>/` in the Moki folder, or the folder you chose; the list is `workspaces/workspaces.json` |
+| One project | `workspace/projects/<id>/` (or `projects/<id>/` in another workspace) |
 | Confirmed knowledge | `.../context/` |
 | One activity | `.../runs/<run-id>/` |
 | Skills and agents for this project | `workspace/projects/<id>/skills` and `agents`, or `<linked folder>/.claude/` |
 | Skills and agents for every project | `~/.claude/skills`, `~/.agents/skills`, `~/.claude/agents` |
 | Copies of built-in agents | `workspace/library/agents/` |
 | Document style | `workspace/document-style.json`, or the same file inside one project |
+| Tags | `workspace/tags.json` (catalog), `project.json` → `tags`, and `tags.json` inside a project (its files) |
 
 ## Privacy
 
-Projects stay on your computer. `workspace/` is not part of this Git repository. Projects are separate folders; the AI reads the active one. Passwords and tokens do not belong in any file — refer to an environment variable by name. Sending documents to an online AI is your decision and that provider's policy; record the team's rule in `project.json` → `externalDataSharingAllowed`.
+Projects stay on your computer. `workspace/` and `workspaces/` are not part of this Git repository. Projects are separate folders; the AI reads the active one, plus only the shared files of other projects that the request lists because of tags you set. Workspaces never share anything. Passwords and tokens do not belong in any file — refer to an environment variable by name. Sending documents to an online AI is your decision and that provider's policy; record the team's rule in `project.json` → `externalDataSharingAllowed`.
 
 Details: [docs/privacy-and-isolation.md](docs/privacy-and-isolation.md).
 
@@ -186,7 +215,7 @@ How the window is built: [docs/desktop-app.md](docs/desktop-app.md). How a skill
 | `AGENTS.md` | What an AI tool reads when this folder is opened: rules and the skill catalog |
 | `skills/`, `agents/`, `core/` | Skills, built-in agents, shared policies — edit here |
 | `app/`, `desktop/` | The window |
-| `workspace/` | Local projects — never versioned |
+| `workspace/`, `workspaces/` | Local workspaces and projects — never versioned |
 
 ## License
 

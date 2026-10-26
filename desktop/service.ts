@@ -5,13 +5,16 @@
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, extname, isAbsolute, join, relative, sep } from 'node:path';
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
-  ACTIVITIES, LANGUAGES, TOOLS, agentFiles, agentMarkdown, buildPrompt, copyToInbox, createProject, detectTools, installedAgents, installedSkills, isActivity, isTool, isUsable, linkedFolder, listProjects,
+  ACTIVITIES, LANGUAGES, TOOLS, agentFiles, contextChoice, fileTags, listTags, removeTag, saveTag, setFileTags, setProjectTags, agentMarkdown, buildPrompt, copyToInbox, createProject, detectTools, installedAgents, installedSkills, isActivity, isTool, isUsable, linkedFolder, listProjects,
   listRuns, listSkills, openRuns, projectAgentsDir, projectRepository, projectSkillsDir, projectSummary, projectsDir, skillFolders, skillStatus, slugify, windowsSafePrompt, STARTERS, type ProjectSummary, type Starter, type ToolKey,
 } from '../scripts/lib/core.ts';
 import { CATEGORIES, MAX_PAGE, installSkill, searchSkills } from './skill-registry.ts';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
+import { setWorkspaceDir, workspaceDir, workspaceLabel } from '../scripts/lib/repo.mjs';
+import { searchWorkspace } from './search.ts';
+import { activeWorkspace, addWorkspaceFolder, createWorkspace, forgetWorkspace, listWorkspaces, renameWorkspace, setActiveWorkspace, type WorkspaceInfo } from './workspaces.ts';
 import { readableInputs, docxToMarkdown } from '../scripts/lib/docx.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
 import { STYLE_FILE, normalizeStyle } from '../scripts/lib/doc-style.mjs';
@@ -30,6 +33,7 @@ export interface Deps {
   home?: string; // user folder for skills and agents for all projects (tests point it elsewhere)
   fetch?: typeof fetch;
   trash?: (path: string) => Promise<void>; // removing skills/agents moves them to the trash (tests delete)
+  onWorkspace?: (dir: string) => void; // the active workspace changed (the app passes it to the tools it starts)
 }
 
 export interface TreeNode {
@@ -64,6 +68,7 @@ export type FileContent =
 
 export interface LaunchRequest {
   project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string; agent?: string;
+  exclude?: string[]; // context files (this project's or shared through tags) to leave out
 }
 
 export interface AgentInfo extends Omit<Agent, 'body'> { usable: boolean }
@@ -101,6 +106,16 @@ const AI_CONFIG = ['.claude', '.agents', '.codex', '.gemini', '.cursor', 'CLAUDE
 const backupFilter = (src: string): boolean => basename(src) !== 'node_modules' && !/[\\/]\.claude[\\/]worktrees$/.test(src);
 
 export function createService(root: string, deps: Deps) {
+  // Every project path goes through the active workspace; it starts as the one opened last.
+  const useWorkspace = (w: WorkspaceInfo): WorkspaceInfo => {
+    setWorkspaceDir(root, w.path);
+    deps.onWorkspace?.(w.path);
+    return w;
+  };
+  useWorkspace(activeWorkspace(root));
+  let pickedWorkspace: string | null = null; // a folder chosen for a workspace in the native dialog
+  const failing = <T>(fn: () => T): T => { try { return fn(); } catch (e) { throw new ServiceError(e instanceof Error ? e.message : String(e)); } };
+
   const projectDir = (id: unknown): string => {
     if (typeof id !== 'string' || !listProjects(root).includes(id)) throw new ServiceError('Unknown project.');
     return join(projectsDir(root), id);
@@ -385,8 +400,37 @@ export function createService(root: string, deps: Deps) {
 
     projects: () => listProjects(root).map((id) => projectSummary(id, root)),
 
+    // Workspaces (start screen): choose one, create one, open a folder as one.
+    workspaces: () => ({ list: listWorkspaces(root), active: activeWorkspace(root).id }),
+    selectWorkspace: (id: unknown) => useWorkspace(failing(() => setActiveWorkspace(root, String(id)))),
+    // Where a new workspace goes: a folder chosen in the native dialog (its parent).
+    chooseWorkspaceLocation: async () => {
+      if (!deps.pickFolder) throw new ServiceError('Choosing a folder is not available here.');
+      pickedWorkspace = await deps.pickFolder();
+      return pickedWorkspace;
+    },
+    createWorkspace: (name: unknown, location?: unknown) => {
+      if (location != null && location !== pickedWorkspace) throw new ServiceError('Choose the folder again.');
+      const w = failing(() => createWorkspace(root, String(name ?? ''), location == null ? undefined : String(location)));
+      pickedWorkspace = null;
+      return useWorkspace(failing(() => setActiveWorkspace(root, w.id)));
+    },
+    openWorkspaceFolder: async () => {
+      if (!deps.pickFolder) throw new ServiceError('Choosing a folder is not available here.');
+      const chosen = await deps.pickFolder();
+      if (!chosen) return null;
+      const w = failing(() => addWorkspaceFolder(root, chosen));
+      return useWorkspace(failing(() => setActiveWorkspace(root, w.id)));
+    },
+    renameWorkspace: (id: unknown, name: unknown) => failing(() => renameWorkspace(root, String(id), String(name ?? ''))),
+    forgetWorkspace: (id: unknown) => {
+      failing(() => forgetWorkspace(root, String(id)));
+      if (resolve(workspaceDir(root)) !== resolve(activeWorkspace(root).path)) useWorkspace(activeWorkspace(root));
+      return true;
+    },
+
     // With a folder (from pickFolder), the new project is linked to it right away.
-    createProject: (name: unknown, starter: unknown = 'qa', folder?: unknown): ProjectSummary & { backup?: string } => {
+    createProject: (name: unknown, starter: unknown = 'qa', folder?: unknown, tags?: unknown): ProjectSummary & { backup?: string } => {
       const display = String(name ?? '').trim();
       if (!display) throw new ServiceError('Give the project a name.');
       const id = slugify(display);
@@ -396,6 +440,7 @@ export function createService(root: string, deps: Deps) {
       const linked = folder == null ? undefined : checkFolder(String(folder));
       let created: ProjectSummary;
       try { created = createProject(id, display, root, starter as Starter); } catch (e) { throw new ServiceError(e instanceof Error ? e.message : String(e)); }
+      if (Array.isArray(tags) && tags.length) { setProjectTags(id, tags, root); created = projectSummary(id, root); }
       if (!linked) return created;
       picked = null;
       return linkFolder(id, linked);
@@ -409,6 +454,33 @@ export function createService(root: string, deps: Deps) {
       picked = checkFolder(chosen);
       return { folder: picked, name: basename(picked) };
     },
+
+    // Tags share context between projects (see contextChoice in scripts/lib/core.ts).
+    tags: () => listTags(root),
+    saveTag: (tag: unknown) => {
+      const t = (tag ?? {}) as { id?: unknown; name?: unknown; color?: unknown; description?: unknown };
+      try {
+        return saveTag({ id: t.id == null ? undefined : String(t.id), name: String(t.name ?? ''), color: t.color == null ? undefined : String(t.color), description: t.description == null ? undefined : String(t.description) }, root);
+      } catch (e) { throw new ServiceError(e instanceof Error ? e.message : String(e)); }
+    },
+    removeTag: (id: unknown) => {
+      if (!listTags(root).some((t) => t.id === id)) throw new ServiceError('Unknown tag.');
+      removeTag(String(id), root);
+      return true;
+    },
+    setProjectTags: (project: string, ids: unknown) => {
+      projectDir(project);
+      setProjectTags(project, ids, root);
+      return projectSummary(project, root);
+    },
+    fileTags: (project: string) => { projectDir(project); return fileTags(project, root); },
+    setFileTags: (project: string, rel: unknown, ids: unknown) => {
+      inside(projectDir(project), rel);
+      try { return setFileTags(project, String(rel), ids, root); } catch (e) { throw new ServiceError(e instanceof Error ? e.message : String(e)); }
+    },
+    contextChoice: (project: string) => { projectDir(project); return contextChoice(project, root); },
+    // The magnifier: projects and text files of the active workspace, by text and/or tags.
+    search: (query: unknown, tags: unknown) => searchWorkspace(root, String(query ?? ''), Array.isArray(tags) ? tags.map(String).slice(0, 20) : []),
 
     skills: () => listSkills(root),
 
@@ -449,14 +521,14 @@ export function createService(root: string, deps: Deps) {
     // generate look. One for all projects (workspace/) and, optionally, one per project.
     documentStyle: (project?: unknown) => {
       const read = (file: string): unknown => { try { return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null; } catch { return null; } };
-      const global = normalizeStyle(read(join(root, 'workspace', STYLE_FILE)));
+      const global = normalizeStyle(read(join(workspaceDir(root), STYLE_FILE)));
       if (project == null || project === '') return { global, project: null };
       const own = read(join(projectDir(project), STYLE_FILE));
       return { global, project: own ? normalizeStyle(own, global) : null };
     },
     // style null: for a project, go back to the style for all projects; for all projects, the defaults.
     saveDocumentStyle: (project: unknown, style: unknown) => {
-      const dir = project == null || project === '' ? join(root, 'workspace') : projectDir(project);
+      const dir = project == null || project === '' ? workspaceDir(root) : projectDir(project);
       const file = join(dir, STYLE_FILE);
       if (style == null) { rmSync(file, { force: true }); return true; }
       if (typeof style !== 'object' || JSON.stringify(style).length > 1_000_000) throw new ServiceError('Invalid document style.');
@@ -633,7 +705,7 @@ export function createService(root: string, deps: Deps) {
       if (!isTool(tool) || !TOOLS[tool].command) throw new ServiceError('Choose an AI tool installed on this computer.');
       if (existsSync(join(dir, PROPOSALS, name))) throw new ServiceError(`A proposal named "${name}" already exists. Install it, delete it or choose another name.`);
       const language = LANGUAGES.includes(String(req?.language)) ? String(req?.language) : 'English';
-      const folder = `workspace/projects/${project}/${PROPOSALS}/${name}`;
+      const folder = `${workspaceLabel(root)}/projects/${project}/${PROPOSALS}/${name}`;
       const sent = [
         `Follow AGENTS.md. Project: ${project}.`,
         `Draft a proposal for a new Agent Skill named "${name}" from my description: ${JSON.stringify(prompt)}.`,
@@ -695,7 +767,7 @@ export function createService(root: string, deps: Deps) {
       const backup = repo ? backupAiConfig(backupsDir(project), repo, 'claude', ['.claude']) : undefined;
       mkdirSync(f.agents, { recursive: true });
       const file = inside(f.agents, `${name}.md`);
-      const framework = skills.some((s) => 'builtin' in s) ? { root: repo ? posix(root) : '.', project } : undefined;
+      const framework = skills.some((s) => 'builtin' in s) ? { root: repo ? posix(root) : '.', project, workspace: workspaceLabel(root) === 'workspace' ? undefined : workspaceLabel(root) } : undefined;
       writeFileSync(file, agentMarkdown({ name, description, skills: skills.map(({ name: n, path }) => ({ name: n, path })), framework }), 'utf8');
       return { name, file, backup };
     },
@@ -840,7 +912,7 @@ export function createService(root: string, deps: Deps) {
       const unknown = names.filter((n) => !available.has(n));
       if (unknown.length) throw new ServiceError(`Not in the project inbox: ${unknown.join(', ')}`);
       if (ACTIVITIES[activity].needsFiles && !names.length) throw new ServiceError('This activity needs at least one file from the inbox.');
-      const files = names.map((n) => `workspace/projects/${project}/inbox/${n}`);
+      const files = names.map((n) => `${workspaceLabel(root)}/projects/${project}/inbox/${n}`);
       let run = '';
       if (activity === 'resume') {
         run = String(req.run ?? '');
@@ -853,7 +925,19 @@ export function createService(root: string, deps: Deps) {
         if (!enabledAgents(project).includes(chosen.name)) throw new ServiceError(`The ${chosen.name} agent is not enabled in this project.`);
         agent = { name: chosen.name, path: chosen.path };
       }
-      const prompt = buildPrompt({ project, activity, files: readableInputs(files, root), note, run, language, agent, repository: projectRepository(project, root),
+      // Shared context is worked out here again from the tags; the UI only says what to leave out.
+      const exclude = new Set(Array.isArray(req.exclude) ? req.exclude.map(String) : []);
+      const choice = activity === 'resume' ? { own: [], shared: [] } : contextChoice(project, root);
+      const offered = new Set([...choice.own, ...choice.shared.flatMap((g) => g.sources.flatMap((s) => s.paths))]);
+      const stray = [...exclude].filter((p) => !offered.has(p));
+      if (stray.length) throw new ServiceError(`Not in this project's context: ${stray.join(', ')}`);
+      const seen = new Set<string>();
+      const shared = choice.shared.flatMap((g) => g.sources.map((s) => ({
+        tag: g.tag.name, project: s.project,
+        paths: s.paths.filter((p) => !exclude.has(p) && !seen.has(p) && Boolean(seen.add(p))),
+      }))).filter((s) => s.paths.length);
+      const excluded = choice.own.filter((p) => exclude.has(p));
+      const prompt = buildPrompt({ project, activity, files: readableInputs(files, root), note, run, language, agent, repository: projectRepository(project, root), shared, excluded, workspace: workspaceLabel(root),
         skills: installedSkills(project, root), agents: installedAgents(project, root),
         description: cleanPrompt(projectSummary(project, root).description).slice(0, 2000), globalSkills: linkedGlobalSkills(project),
         available: activity === 'plan' ? { skills: [...new Set(globalSkillDirs.flatMap(skillFolders))].sort(), agents: listAgents(root).filter(isUsableAgent).map((a) => a.name) } : undefined });
@@ -862,7 +946,8 @@ export function createService(root: string, deps: Deps) {
         const upload = t.chat ? [
           join(root, 'dist', 'chat', 'quality-agents-all.md'), join(dir, 'project.json'),
           ...[join(dir, 'context', 'index.md'), join(dir, 'plan.json')].filter((f) => existsSync(f)), // blank projects start without context/
-          ...(run ? [join(dir, 'runs', run, 'state.json')] : []), ...files.map((f) => join(root, f)),
+          ...(run ? [join(dir, 'runs', run, 'state.json')] : []), ...files.map((f) => resolve(root, f)),
+          ...shared.flatMap((s) => s.paths.map((p) => resolve(root, p))),
         ] : [];
         return { opened: false, prompt, upload, bundleReady: existsSync(join(root, 'dist', 'chat', 'quality-agents-all.md')) };
       }

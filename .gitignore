@@ -7,6 +7,8 @@
 # ---------------------------------------------------------------
 /workspace/*
 !/workspace/README.md
+# Other workspaces created by the desktop app
+/workspaces/
 
 # Generated distribution bundles (chat bundles, skill zips)
 /dist/

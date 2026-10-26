@@ -22,7 +22,7 @@ export function findViolations(paths) {
   for (const raw of paths) {
     const path = raw.replace(/\\/g, '/');
     const name = path.split('/').pop();
-    if (path.startsWith('workspace/') && path !== 'workspace/README.md') {
+    if ((path.startsWith('workspace/') && path !== 'workspace/README.md') || path.startsWith('workspaces/')) {
       violations.push(`${path}: workspace/ content is never versioned (artifact isolation policy)`);
     } else if (path.startsWith('dist/') || path.startsWith('app/dist/') || path.startsWith('app/dist-electron/') || path.startsWith('release/') || path.startsWith('build/')) {
       violations.push(`${path}: dist/ holds generated bundles and is never versioned`);

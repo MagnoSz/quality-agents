@@ -24,6 +24,11 @@
         }
       }
     },
+    "tags": {
+      "type": "array",
+      "description": "Tags of the project (ids from workspace/tags.json). Projects with a tag in common share their confirmed context, and files tagged in a project's tags.json are shared with every project that has the tag, when the user keeps them in an activity request.",
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+    },
     "agents": {
       "type": "array",
       "description": "Agents enabled in this project (names from agents/ or workspace/library/agents/). Absent = every available agent.",

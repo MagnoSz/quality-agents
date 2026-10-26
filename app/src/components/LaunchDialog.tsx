@@ -1,12 +1,13 @@
 // "Open in your AI tool": a short wizard — one question per screen — that
-// prepares the request (activity, inbox files, agent, notes) and opens the AI
+// prepares the request (activity, inbox files, shared context, agent, notes) and opens the AI
 // tool the QA already uses. Moki has no chat of its own.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { api, describeRun, type ActivityInfo, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type TerminalRef, type ToolInfo, type ToolKind } from '../api';
+import { api, describeRun, type ActivityInfo, type ContextChoice, type AgentInfo, type InboxFile, type LaunchResult, type OpenRun, type ProjectSummary, type TerminalRef, type ToolInfo, type ToolKind } from '../api';
 import { conversationLanguage, t } from '../i18n';
 import { IconCheck, IconCode, IconCopy, IconFile, IconFolder, IconGlobe, IconPlay, IconRefresh, IconTerminal, IconX } from './Icons';
 import { FileIcon } from '../icons';
+import { TagChip } from './TagPicker';
 
 interface Props {
   project: ProjectSummary;
@@ -16,7 +17,7 @@ interface Props {
   onTerminal: (terminal: TerminalRef) => void; // the tool opened in a terminal tab of the app
 }
 
-type StepKey = 'activity' | 'run' | 'files' | 'agent' | 'details' | 'tool' | 'review';
+type StepKey = 'activity' | 'run' | 'files' | 'context' | 'agent' | 'details' | 'tool' | 'review';
 
 const remember = (key: string, value: string) => { try { window.localStorage.setItem(key, value); } catch { /* optional */ } };
 const recall = (key: string) => { try { return window.localStorage.getItem(key); } catch { return null; } };
@@ -39,6 +40,8 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
   const [files, setFiles] = useState<string[]>([]);
   const [runs, setRuns] = useState<OpenRun[]>([]);
   const [run, setRun] = useState(preset?.run ?? '');
+  const [choice, setChoice] = useState<ContextChoice>({ own: [], shared: [] });
+  const [exclude, setExclude] = useState<string[]>([]); // context files left out of this activity
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [agent, setAgent] = useState('');
   const [note, setNote] = useState('');
@@ -57,6 +60,11 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
   const load = useCallback(() => {
     api.inbox(project.id).then((list) => { setInbox(list); setFiles((sel) => sel.filter((f) => list.some((x) => x.name === f))); }).catch(() => setInbox([]));
     api.openRuns(project.id).then(setRuns).catch(() => setRuns([]));
+    api.contextChoice(project.id).then((c) => {
+      setChoice(c);
+      const all = new Set([...c.own, ...c.shared.flatMap((g) => g.sources.flatMap((s) => s.paths))]);
+      setExclude((ex) => ex.filter((p) => all.has(p)));
+    }).catch(() => setChoice({ own: [], shared: [] }));
   }, [project.id]);
 
   useEffect(() => {
@@ -75,7 +83,12 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
 
   const current = activities.find((a) => a.id === activity);
   const resume = activity === 'resume';
-  const steps: StepKey[] = ['activity', ...(resume ? ['run' as const] : ['files' as const, ...(agents.length ? ['agent' as const] : [])]), 'details', 'tool', 'review'];
+  // The context step only shows when the project's tags bring something from other projects.
+  const sharing = choice.shared.length > 0;
+  const steps: StepKey[] = ['activity', ...(resume ? ['run' as const] : ['files' as const, ...(sharing ? ['context' as const] : []), ...(agents.length ? ['agent' as const] : [])]), 'details', 'tool', 'review'];
+  const toggle = (paths: string[]) => setExclude((ex) => (paths.every((p) => ex.includes(p)) ? ex.filter((p) => !paths.includes(p)) : [...new Set([...ex, ...paths])]));
+  const sharedPaths = [...new Set(choice.shared.flatMap((g) => g.sources.flatMap((s) => s.paths)))];
+  const keptShared = sharedPaths.filter((p) => !exclude.includes(p));
   const index = Math.max(0, steps.indexOf(step));
   const next = () => setStep(steps[Math.min(index + 1, steps.length - 1)]);
   const back = () => { setResult(null); setError(''); setStep(steps[Math.max(index - 1, 0)]); };
@@ -98,7 +111,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
       setError(t('The request is taking too long. Close this and try again.'));
     }, 20000);
     try {
-      const r = await api.launch({ project: project.id, activity, tool, files, note, language, run: resume ? run : undefined, agent: agent || undefined });
+      const r = await api.launch({ project: project.id, activity, tool, files, note, language, run: resume ? run : undefined, agent: agent || undefined, exclude: resume ? [] : exclude });
       if (late) return;
       if (r.terminal) { onTerminal(r.terminal); return; }
       setResult(r);
@@ -130,6 +143,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
       title: current?.needsFiles ? t('Which files should the AI use?') : t('Should the AI use any file?'),
       hint: current?.needsFiles ? t('Choose at least one file from the project inbox.') : t('Optional — you can continue without files.'),
     },
+    context: { title: t('Which context should the AI consider?'), hint: t('Your tags share these files from other projects. Uncheck what this activity should not use.') },
     agent: { title: t('Who should do it?'), hint: t('An agent is a specialist with its own instructions. If you are not sure, let the skill decide.') },
     details: { title: t('Anything else the AI should know?'), hint: t('Optional. Write it as you would tell a colleague.') },
     tool: { title: t('Which AI tool do you want to use?'), hint: t('Only the tools found on this computer can be chosen.') },
@@ -142,6 +156,8 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
     { step: 'activity', label: t('Activity'), value: current ? t(current.label) : '—' },
     ...(resume ? [{ step: 'run' as StepKey, label: t('Continue'), value: run ? describeRun(run).title : '—' }] : [
       { step: 'files' as StepKey, label: t('Files'), value: files.length ? files.join(', ') : t('None') },
+      ...(sharing ? [{ step: 'context' as StepKey, label: t('Shared context'), value: t('{n} of {total} files from other projects', { n: keptShared.length, total: sharedPaths.length })
+        + (exclude.some((p) => choice.own.includes(p)) ? ` · ${t('{n} of this project left out', { n: exclude.filter((p) => choice.own.includes(p)).length })}` : '') }] : []),
       ...(agents.length ? [{ step: 'agent' as StepKey, label: t('Who does it'), value: agentLabel }] : []),
     ]),
     { step: 'details', label: t('Notes'), value: note.trim() || t('None') },
@@ -213,6 +229,32 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => { void api.openFolder(project.id, 'inbox'); }}><IconFolder size={15} /> {t('Open inbox folder')}</button>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={load}><IconRefresh size={15} /> {t('Refresh')}</button>
               </div>
+            </>
+          )}
+
+          {step === 'context' && (
+            <>
+              {choice.own.length > 0 && (
+                <div className="context-group">
+                  <p className="answer-group">{t('This project')}</p>
+                  <PathList paths={choice.own} exclude={exclude} onToggle={toggle} />
+                </div>
+              )}
+              {choice.shared.map((g) => (
+                <div key={g.tag.id} className="context-group">
+                  <p className="answer-group"><TagChip tag={g.tag} /></p>
+                  {g.sources.map((src) => (
+                    <div key={src.project}>
+                      <label className="context-source">
+                        <input type="checkbox" checked={src.paths.some((p) => !exclude.includes(p))} disabled={!src.paths.length} onChange={() => toggle(src.paths)} />{' '}
+                        {src.name} <span className="muted small">{src.whole ? t('whole project context') : t('tagged files')}</span>
+                      </label>
+                      {src.paths.length ? <PathList paths={src.paths} exclude={exclude} onToggle={toggle} />
+                        : <p className="muted small">{t('Nothing to share yet: this project has no context files.')}</p>}
+                    </div>
+                  ))}
+                </div>
+              ))}
             </>
           )}
 
@@ -292,6 +334,7 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
               {files.length ? t('Continue') : current?.needsFiles ? t('Choose a file to continue') : t('Continue without files')}
             </button>
           )}
+          {step === 'context' && <button type="button" className="btn" onClick={next}>{t('Continue')}</button>}
           {step === 'details' && <button type="button" className="btn" onClick={next}>{note.trim() ? t('Continue') : t('Nothing else — continue')}</button>}
           {step === 'review' && (result?.opened || requestReady
             ? <button type="button" className="btn" onClick={onClose}>{t('Done')}</button>
@@ -299,6 +342,23 @@ export function LaunchDialog({ project, tools, preset, onClose, onTerminal }: Pr
         </footer>
       </div>
     </div>
+  );
+}
+
+// Files offered as context, checked unless left out. Paths are shown without the workspace/projects/<id>/ prefix.
+function PathList({ paths, exclude, onToggle }: { paths: string[]; exclude: string[]; onToggle: (paths: string[]) => void }) {
+  return (
+    <ul className="file-pick">
+      {paths.map((p) => (
+        <li key={p}>
+          <label className={exclude.includes(p) ? '' : 'on'}>
+            <input type="checkbox" checked={!exclude.includes(p)} onChange={() => onToggle([p])} />
+            <FileIcon name={p} size={16} />
+            <span className="file-name" title={p}>{p.replace(/^workspace\/projects\/[^/]+\//, '')}</span>
+          </label>
+        </li>
+      ))}
+    </ul>
   );
 }
 

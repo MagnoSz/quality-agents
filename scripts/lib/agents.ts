@@ -5,7 +5,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, SLUG, readJson } from './repo.mjs';
+import { ROOT, SLUG, readJson, workspaceDir } from './repo.mjs';
 import { parseFrontmatter } from './frontmatter.mjs';
 
 export const ACCESS_LEVELS = ['read-only', 'project-write', 'repository-write'] as const;
@@ -30,7 +30,7 @@ export interface Agent {
 export interface Category { id: string; label: string; description: string; source: 'builtin' | 'custom' }
 
 export const builtinDir = (root = ROOT): string => join(root, 'agents');
-export const libraryDir = (root = ROOT): string => join(root, 'workspace', 'library', 'agents');
+export const libraryDir = (root = ROOT): string => join(workspaceDir(root), 'library', 'agents');
 
 const list = (v: unknown): string[] => String(v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 const titleCase = (slug: string): string => slug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');

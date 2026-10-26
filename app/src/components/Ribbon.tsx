@@ -4,7 +4,7 @@
 import type { MouseEvent } from 'react';
 import type { ProjectSummary } from '../api';
 import { t } from '../i18n';
-import { IconFolder, IconHome, IconLink, IconPanel, IconPlay, IconRefresh, IconSettings, IconTerminal } from './Icons';
+import { IconFolder, IconHome, IconLink, IconPanel, IconPlay, IconRefresh, IconSearch, IconSettings, IconTerminal } from './Icons';
 
 interface Props {
   settingsOn: boolean;
@@ -17,13 +17,16 @@ interface Props {
   onLink?: () => void;
   onRefresh?: () => void;
   onPanel?: () => void;
+  searchOn?: boolean;
+  onSearch?: () => void; // the magnifier: search the workspace
 }
 
-export function Ribbon({ settingsOn, onHome, onSettings, project, onPlay, onTerminal, onFolder, onLink, onRefresh, onPanel }: Props) {
+export function Ribbon({ settingsOn, onHome, onSettings, project, onPlay, onTerminal, onFolder, onLink, onRefresh, onPanel, searchOn = false, onSearch }: Props) {
   const ready = Boolean(project);
   return (
     <nav className="ribbon" aria-label={t('Actions')}>
       <button type="button" className="icon-btn" onClick={onHome} title={t('All projects')}><IconHome size={19} /></button>
+      {onSearch && <button type="button" className={`icon-btn${searchOn ? ' on' : ''}`} onClick={onSearch} aria-pressed={searchOn} title={t('Search (Ctrl+Shift+F)')}><IconSearch size={19} /></button>}
       <button type="button" className="icon-btn accent" disabled={!ready} onClick={onPlay} title={t('Open in your AI tool')}><IconPlay size={19} /></button>
       <button type="button" className="icon-btn" disabled={!ready} onClick={onTerminal} title={t('New terminal')}><IconTerminal size={19} /></button>
       <button type="button" className="icon-btn" disabled={!ready} onClick={onFolder} title={t('Open the project folder')}><IconFolder size={19} /></button>

@@ -3,7 +3,7 @@
 // the activity or project details.
 
 import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
-import { api, type FileContent, type ProjectSummary, type TerminalRef, type ToolInfo, type TreeNode } from '../api';
+import { api, type FileContent, type ProjectSummary, type Tag, type TerminalRef, type ToolInfo, type TreeNode } from '../api';
 import { t } from '../i18n';
 import { recall, remember } from '../prefs';
 import { DocView } from '../components/DocView';
@@ -13,6 +13,8 @@ import { NoteDialog } from '../components/NoteDialog';
 import { SidePanel } from '../components/SidePanel';
 import { SetupDialog } from '../components/SetupDialog';
 import { TerminalView } from '../components/TerminalView';
+import { TagPicker } from '../components/TagPicker';
+import { SearchPanel } from '../components/SearchPanel';
 import { IconEyeOff, IconGraph, IconPlay, IconTerminal, IconX } from '../components/Icons';
 import { hideProject } from '../side-menu';
 import { AddButton } from '../components/AddButton';
@@ -20,10 +22,13 @@ import { FileIcon } from '../icons';
 import { Ribbon } from '../components/Ribbon';
 import { Settings, type SettingsTab } from './Settings';
 
-interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; settings: SettingsTab | null; onSettings: (tab: SettingsTab | null) => void; onProjectChanged: () => void; launchOnOpen?: boolean; startSetup?: boolean; startNotice?: string; pendingTerminal?: TerminalRef | null; onPendingTerminal?: () => void; pendingPath?: string | null; onPendingPath?: () => void }
+interface Props { project: ProjectSummary; tools: ToolInfo[]; onHome: () => void; settings: SettingsTab | null; onSettings: (tab: SettingsTab | null) => void; onProjectChanged: () => void; launchOnOpen?: boolean; startSetup?: boolean; startNotice?: string; pendingTerminal?: TerminalRef | null; onPendingTerminal?: () => void; pendingPath?: string | null; onPendingPath?: () => void; search?: boolean; onSearch?: () => void; onFound?: (project: string, path?: string) => void }
 
 interface Tab { path: string; content: FileContent; draft: string; mode: 'preview' | 'edit'; saving: boolean }
 interface TermTab extends TerminalRef { running: boolean }
+
+// The picture above the project name when nothing is open.
+const THINKING_CAT = `./${encodeURIComponent('Thoughtful Pixel Cat at Work.png')}`;
 
 const textOf = (c: FileContent): string => (c.kind === 'markdown' || c.kind === 'text' ? c.text : '');
 const isDirty = (t: Tab): boolean => (t.content.kind === 'markdown' || t.content.kind === 'text') && t.content.editable && t.draft !== t.content.text;
@@ -43,7 +48,7 @@ export const linkedNotice = (r: ProjectSummary & { backup?: string }): string =>
   ? t('Linked {folder}. Its AI settings were backed up to {backup}', { folder: r.repository, backup: r.backup })
   : t('Linked {folder}. It has no AI settings (.claude, AGENTS.md…) to back up.', { folder: r.repository }));
 
-export function Workspace({ project, tools, onHome, settings, onSettings, onProjectChanged, launchOnOpen = false, startSetup = false, startNotice = '', pendingTerminal = null, onPendingTerminal, pendingPath = null, onPendingPath }: Props) {
+export function Workspace({ project, tools, onHome, settings, onSettings, onProjectChanged, launchOnOpen = false, startSetup = false, startNotice = '', pendingTerminal = null, onPendingTerminal, pendingPath = null, onPendingPath, search = false, onSearch, onFound }: Props) {
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [tabs, setTabs] = useState<Tab[]>([]);
@@ -72,7 +77,23 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
   const tabsRef = useRef(tabs);
   tabsRef.current = tabs;
 
-  const loadTree = useCallback(() => { api.tree(project.id).then(setTree).catch((e: Error) => setError(e.message)); }, [project.id]);
+  // Tags: the catalog, and the tags of this project's files (the tree marks them, the open file can change them).
+  const [catalog, setCatalog] = useState<Tag[]>([]);
+  const [fileTags, setFileTags] = useState<Record<string, string[]>>({});
+  const loadTree = useCallback(() => {
+    api.tree(project.id).then(setTree).catch((e: Error) => setError(e.message));
+    api.fileTags(project.id).then(setFileTags).catch(() => setFileTags({}));
+  }, [project.id]);
+  useEffect(() => { api.tags().then(setCatalog).catch(() => setCatalog([])); }, []);
+  const tagProject = (ids: string[]) => { api.setProjectTags(project.id, ids).then(onProjectChanged).catch((e: Error) => setError(e.message)); };
+  const tagFile = (path: string, ids: string[]) => {
+    api.setFileTags(project.id, path, ids).then((saved) => setFileTags((all) => {
+      const next = { ...all };
+      if (saved.length) next[path] = saved; else delete next[path];
+      return next;
+    })).catch((e: Error) => setError(e.message));
+  };
+  const colorsOf = (path: string) => (fileTags[path] ?? []).map((id) => catalog.find((tg) => tg.id === id)?.color).filter((c): c is string => Boolean(c));
 
   // Live updates: the AI tool writes files while the app is open.
   useEffect(() => {
@@ -285,6 +306,8 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         onLink={linkFolder}
         onRefresh={() => { loadTree(); setRefreshKey((k) => k + 1); }}
         onPanel={togglePanel}
+        searchOn={search}
+        onSearch={onSearch}
       />
 
       {settings ? (
@@ -293,12 +316,17 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         </main>
       ) : <>
       <aside className="sidebar">
+        {search && onSearch && onFound ? <SearchPanel onOpenProject={(id) => onFound(id)} onOpenFile={onFound} onClose={onSearch} /> : <>
         <div className="sidebar-head">
           <button type="button" className="project-switch" onClick={goHome} title={t('Switch project')}>{project.name}</button>
           <button type="button" className="icon-btn sidebar-hide" onClick={hideThis} title={t('Hide from Moki')} aria-label={t('Hide from Moki')}><IconEyeOff size={16} /></button>
         </div>
+        <div className="sidebar-tags" title={t('Projects and files with the same tag share their context with this project')}>
+          <TagPicker catalog={catalog} value={project.tags} onChange={tagProject} onCatalog={setCatalog} compact />
+        </div>
         <div className="sidebar-scroll">
           <FileTree
+            tagColors={colorsOf}
             nodes={tree}
             activePath={activeTerm || graphFocus ? null : active}
             onOpen={openPath}
@@ -307,6 +335,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
             onToggle={(p) => setExpanded((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; })}
           />
         </div>
+        </>}
       </aside>
 
       <main className="main">
@@ -350,7 +379,13 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
             <h1>{t('Graph view')}</h1>
             <p className="muted">{t('Under construction.')}</p>
           </div>
-        ) : activeTerm ? null : tab ? (
+        ) : activeTerm ? null : tab ? (<>
+          {tab.path !== 'project.json' && tab.path !== 'tags.json' && (
+            <div className="file-tags-bar">
+              <span className="label">{t('Tags')}</span>
+              <TagPicker catalog={catalog} value={fileTags[tab.path] ?? []} onChange={(ids) => tagFile(tab.path, ids)} onCatalog={setCatalog} compact />
+            </div>
+          )}
           <DocView
             content={tab.content}
             mode={tab.mode}
@@ -363,8 +398,9 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
             onOpenExternal={() => { api.openExternal(project.id, tab.path).catch((e: Error) => setError(e.message)); }}
             onLink={onLink}
           />
-        ) : (
+        </>) : (
           <div className="welcome">
+            <img className="hero" src={THINKING_CAT} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
             <h1>{project.name}</h1>
             <p className="muted">{t('Open a file on the left, drop files here to keep them in the project, or start working with your AI tool.')}</p>
             <div className="welcome-tips muted small">

@@ -8,7 +8,16 @@ export interface ProjectSummary {
   repository: string; // folder linked to the project ('' when none)
   linkedSkills: string[]; // global skills this project uses, by name
   starter: Starter;
+  tags: string[]; // tag ids
 }
+// A tag shares context between projects: the context of the projects with it and the files marked with it.
+export interface Tag { id: string; name: string; color: string; description: string }
+export interface SharedSource { project: string; name: string; whole: boolean; paths: string[] }
+export interface FileHit { project: string; projectName: string; path: string; snippet: string; line: number; tags: string[] }
+export interface SearchResult { projects: ProjectSummary[]; files: FileHit[]; truncated: boolean }
+export interface ContextChoice { own: string[]; shared: { tag: Tag; sources: SharedSource[] }[] }
+// A workspace, like an Obsidian vault: a folder with its own projects, tags and settings.
+export interface WorkspaceInfo { id: string; name: string; path: string; isDefault: boolean; missing: boolean; projects: number }
 // How a new project starts: with the QA context files, or blank (the AI interviews and proposes a plan).
 export type Starter = 'qa' | 'blank';
 // The AI's recommendation for a blank project (plan.json), reviewed in "Set up project".
@@ -70,7 +79,7 @@ export interface DocumentStyle {
 }
 export const DOCUMENT_FONTS = ['Calibri', 'Arial', 'Segoe UI', 'Helvetica', 'Verdana', 'Tahoma', 'Georgia', 'Times New Roman', 'Cambria', 'Garamond', 'Consolas'];
 
-export interface LaunchRequest { project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string; agent?: string }
+export interface LaunchRequest { project: string; activity: string; tool: string; files: string[]; note: string; language: string; run?: string; agent?: string; exclude?: string[] }
 export interface LaunchResult { opened: boolean; message?: string; copied?: boolean; prompt: string; upload?: string[]; bundleReady?: boolean; terminal?: TerminalRef }
 export interface TerminalRef { id: string; title: string }
 
@@ -132,7 +141,22 @@ async function call<T>(method: string, ...args: unknown[]): Promise<T> {
 export const api = {
   session: () => call<{ version: string; platform: string }>('session'),
   projects: () => call<ProjectSummary[]>('projects'),
-  createProject: (name: string, starter: Starter, folder?: string) => call<ProjectSummary & { backup?: string }>('createProject', name, starter, folder ?? null),
+  workspaces: () => call<{ list: WorkspaceInfo[]; active: string }>('workspaces'),
+  selectWorkspace: (id: string) => call<WorkspaceInfo>('selectWorkspace', id),
+  chooseWorkspaceLocation: () => call<string | null>('chooseWorkspaceLocation'),
+  createWorkspace: (name: string, location?: string | null) => call<WorkspaceInfo>('createWorkspace', name, location ?? null),
+  openWorkspaceFolder: () => call<WorkspaceInfo | null>('openWorkspaceFolder'),
+  renameWorkspace: (id: string, name: string) => call<WorkspaceInfo>('renameWorkspace', id, name),
+  forgetWorkspace: (id: string) => call<boolean>('forgetWorkspace', id),
+  createProject: (name: string, starter: Starter, folder?: string, tags: string[] = []) => call<ProjectSummary & { backup?: string }>('createProject', name, starter, folder ?? null, tags),
+  tags: () => call<Tag[]>('tags'),
+  saveTag: (tag: { id?: string; name: string; color?: string; description?: string }) => call<Tag>('saveTag', tag),
+  removeTag: (id: string) => call<boolean>('removeTag', id),
+  setProjectTags: (project: string, ids: string[]) => call<ProjectSummary>('setProjectTags', project, ids),
+  fileTags: (project: string) => call<Record<string, string[]>>('fileTags', project),
+  setFileTags: (project: string, path: string, ids: string[]) => call<string[]>('setFileTags', project, path, ids),
+  search: (query: string, tags: string[]) => call<SearchResult>('search', query, tags),
+  contextChoice: (project: string) => call<ContextChoice>('contextChoice', project),
   pickFolder: () => call<{ folder: string; name: string } | null>('pickFolder'),
   skills: () => call<SkillInfo[]>('skills'),
   activities: () => call<{ activities: ActivityInfo[]; languages: string[] }>('activities'),
