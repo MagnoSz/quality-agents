@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Clone the repository and start Codex in its folder: `cd quality-agents && codex`.
+1. Clone the repository and start Codex in its folder: `cd moki && codex`.
 2. Optional: `npm run setup`.
 
 What loads automatically:

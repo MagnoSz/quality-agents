@@ -2,7 +2,7 @@
 
 ## Setup
 
-1. Clone the repository and open its folder: `cd quality-agents && claude` (or open the folder in the VS Code / JetBrains extension or the desktop app).
+1. Clone the repository and open its folder: `cd moki && claude` (or open the folder in the VS Code / JetBrains extension or the desktop app).
 2. Optional but recommended: `npm run setup` (pre-commit protection and workspace folders).
 
 What loads automatically:

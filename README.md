@@ -5,8 +5,8 @@
 <p align="center"><img src="app/public/hero.png" alt="Moki" width="280" /></p>
 
 <p align="center">
-  <a href="https://github.com/Orsi88/quality-agents/releases/latest"><b>⬇️ Download Moki for Windows</b></a>
-  &nbsp;·&nbsp; <a href="https://github.com/Orsi88/quality-agents/releases/download/v0.2.1/Moki.Setup.0.2.1.exe">Moki.Setup.0.2.1.exe</a>
+  <a href="https://github.com/Orsi88/moki/releases/latest"><b>⬇️ Download Moki for Windows</b></a>
+  &nbsp;·&nbsp; <a href="https://github.com/Orsi88/moki/releases/download/v0.2.1/Moki.Setup.0.2.1.exe">Moki.Setup.0.2.1.exe</a>
   &nbsp;·&nbsp; <a href="#install">how to install</a>
 </p>
 
@@ -22,7 +22,7 @@ It started as software quality work: review a story, design tests, look at a fai
 
 ### Windows
 
-1. Download [Moki.Setup.0.2.1.exe](https://github.com/Orsi88/quality-agents/releases/download/v0.2.1/Moki.Setup.0.2.1.exe) (or the latest file on [Releases](https://github.com/Orsi88/quality-agents/releases)).
+1. Download [Moki.Setup.0.2.1.exe](https://github.com/Orsi88/moki/releases/download/v0.2.1/Moki.Setup.0.2.1.exe) (or the latest file on [Releases](https://github.com/Orsi88/moki/releases)).
 2. If Windows says it protected your PC, choose **More info → Run anyway**. The installer is not digitally signed yet.
 3. Finish. A **Moki** shortcut appears on the desktop and in the Start menu.
 
@@ -177,8 +177,8 @@ Use this to run Moki from a checkout, on macOS or Linux, or to change the app. W
 You need Git and Node.js 22.18 or newer.
 
 ```bash
-git clone https://github.com/Orsi88/quality-agents.git
-cd quality-agents
+git clone https://github.com/Orsi88/moki.git
+cd moki
 npm run setup
 npm run qa
 ```
