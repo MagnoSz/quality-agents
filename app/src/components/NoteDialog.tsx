@@ -8,7 +8,7 @@
 // while typing, and "Use with the AI" to start an activity with the note as input.
 
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
-import { api, type ActivityInfo, type ToolInfo, type TreeNode } from '../api';
+import { api, type ActivityInfo, type Tag, type ToolInfo, type TreeNode } from '../api';
 import { conversationLanguage, t } from '../i18n';
 import { recall, remember } from '../prefs';
 import { looseNotes, noteTitle, removeLooseNote, saveLooseNote, touchNote } from '../side-menu';
@@ -18,6 +18,7 @@ import { ACTIVITY_CAT } from '../icons/cats';
 import { FileIcon } from '../icons';
 import { IconChevron, IconCode, IconEdit, IconEye, IconLink, IconPlay, IconTerminal, IconX } from './Icons';
 import { ToolCatalog } from './ToolCatalog';
+import { TagPicker } from './TagPicker';
 
 interface Props {
   project: string | null; // null: a loose note, which can be sent to a project from here
@@ -89,6 +90,8 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
   const [catalog, setCatalog] = useState<'activity' | 'tool' | null>(null);
   const [launching, setLaunching] = useState(false);
   const [aiMsg, setAiMsg] = useState('');
+  const [tagCatalog, setTagCatalog] = useState<Tag[]>([]);
+  const [tags, setTags] = useState<string[]>([]); // a saved project note's tags (shared context)
   const editor = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const loose = project == null;
@@ -132,6 +135,16 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     }, 600);
     return () => clearTimeout(timer);
   }, [text, title, dirty, loaded, draft, key]);
+
+  useEffect(() => {
+    if (!path || !project) return;
+    api.tags().then(setTagCatalog).catch(() => setTagCatalog([]));
+    api.fileTags(project).then((all) => setTags(all[path] ?? [])).catch(() => setTags([]));
+  }, [project, path]);
+  const changeTags = (ids: string[]) => {
+    if (!path || !project) return;
+    api.setFileTags(project, path, ids).then(setTags).catch((e: Error) => setError(e.message));
+  };
 
   useEffect(() => { if (mode === 'preview') api.renderMarkdown(text).then(setHtml).catch((e: Error) => setError(e.message)); }, [mode, text]);
 
@@ -470,6 +483,12 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
               <span className="label">{t('Title')}</span>
               <input value={title} maxLength={60} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={t('e.g. Test ideas')} />
             </label>
+          )}
+          {project && path && (
+            <div className="field inline">
+              <span className="label">{t('Tags')}</span>
+              <TagPicker catalog={tagCatalog} value={tags} onChange={changeTags} onCatalog={setTagCatalog} compact />
+            </div>
           )}
           {loose && projects.length > 0 && (
             <label className="field">

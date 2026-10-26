@@ -1,9 +1,11 @@
 // Top-right of the start screen: the language the AI talks in, and light or dark.
 // Siglas only, no labels. The theme applies to the whole app.
 
+import { useState } from 'react';
 import { IconMoon, IconSun } from './Icons';
-import { t } from '../i18n';
-import type { Theme } from '../theme';
+import { lang, setLang, t, type Lang } from '../i18n';
+import { recall, remember } from '../prefs';
+import { currentTheme, persistTheme, type Theme } from '../theme';
 
 export const UI_LANGUAGES: [string, string][] = [
   ['English', 'EN'],
@@ -33,4 +35,25 @@ export function PrefsCorner({ language, theme, onLanguage, onTheme }: Props) {
       </button>
     </div>
   );
+}
+
+const UI_OF: Record<string, Lang> = { English: 'en', 'Portuguese (pt-BR)': 'pt-BR', Spanish: 'en' };
+
+const savedConversation = (): string => {
+  const saved = recall('qa-language');
+  if (saved && saved in UI_OF) return saved;
+  return lang === 'pt-BR' ? 'Portuguese (pt-BR)' : 'English';
+};
+
+// The corner with its own state: the chosen language (also the app's) and theme are remembered.
+export function StartPrefs() {
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const [conversation, setConversation] = useState(savedConversation);
+  const chooseLanguage = (language: string) => {
+    remember('qa-language', language);
+    setLang(UI_OF[language] ?? 'en');
+    setConversation(language);
+  };
+  const chooseTheme = (next: Theme) => { persistTheme(next); setTheme(next); };
+  return <PrefsCorner language={conversation} theme={theme} onLanguage={chooseLanguage} onTheme={chooseTheme} />;
 }

@@ -34,9 +34,25 @@ Use `workspace/temporary/` only for scratch work that is not tied to a project.
 
 - Every activity belongs to exactly one project. Identify it before reading any context. If it is ambiguous, ask.
 - Read and write only inside `workspace/projects/<project-id>/` of the active project.
-- Never read, quote, reuse or compare another project's context, inputs or results, unless the user explicitly asks for a cross-project comparison and names both projects.
+- Never read, quote, reuse or compare another project's context, inputs or results, unless the user explicitly asks for a cross-project comparison and names both projects, or the request lists them as shared context (see below).
 - Never carry knowledge from a previous conversation about another project into the current one.
 - Never mix outputs of two projects in one run.
+
+## Workspaces
+
+`workspace/` is the default workspace. The desktop app can open other workspaces: folders with the same layout (`projects/`, `tags.json`, ...), by default under `workspaces/<name>/` (ignored by Git) or anywhere the user chooses. When a request names a workspace folder, it replaces `workspace/` in every path of this policy. Only the active workspace exists for an activity: never read, list or write another workspace, and tags never share context across workspaces.
+
+## Shared context through tags
+
+The user can tag projects and files (catalog in `workspace/tags.json`, a project's tags in its `project.json` `tags`, its files' tags in `workspace/projects/<project-id>/tags.json`). A tag shares, with every project that has it, the confirmed `context/` of the other projects with the tag and each file tagged with it. The request that starts an activity lists the shared files the user kept; that list is the user's explicit authorization for the activity.
+
+- Read only the shared files listed in the request, and nothing else from other projects. Without such a list, the rules above apply unchanged.
+- Shared files are read-only. Never write, move or delete anything in another project.
+- Cite the source project (and file) of anything taken from shared context.
+- Knowledge from shared context is never confirmed context of the active project: propose it in `proposed-updates.md` and promote it only after approval.
+- Record the shared files read in the run's `state.json` under `contextSources`.
+- When the request says a file of the active project must not be used in the activity, do not read or use it.
+- Sharing between projects never authorizes sending data to external services; `externalDataSharingAllowed` still applies.
 
 ## Forbidden destinations
 

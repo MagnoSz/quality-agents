@@ -206,6 +206,52 @@ test('launch builds the request; Word files are extracted', () => {
   assert.equal(launched.length, 1, 'chat does not launch anything');
 });
 
+test('tags share context between projects; launch lists it and applies exclusions', () => {
+  const projects = join(root, 'workspace', 'projects');
+  try {
+    const a = service.saveTag({ name: 'Pagamentos' });
+    assert.equal(a.id, 'pagamentos');
+    assert.equal(service.saveTag({ name: 'Pagamentos' }).id, a.id, 'same name returns the existing tag');
+    assert.throws(() => service.saveTag({ name: '  ' }), /name is required/);
+    const other = service.createProject('Docs', 'qa', null, [a.id, 'unknown']);
+    assert.deepEqual(other.tags, [a.id], 'unknown ids are dropped');
+    service.createProject('Plain');
+    writeFileSync(join(projects, 'docs', 'context', 'rules.md'), '# Rules');
+    writeFileSync(join(projects, 'docs', 'inbox', 'secret.md'), 'not shared');
+    writeFileSync(join(projects, 'plain', 'inbox', 'flow.md'), '# Flow');
+    assert.deepEqual(service.setFileTags('plain', 'inbox/flow.md', [a.id]), [a.id]);
+    assert.throws(() => service.setFileTags('plain', '../docs/inbox/secret.md', [a.id]), ServiceError);
+    assert.throws(() => service.setFileTags('plain', 'inbox/missing.md', [a.id]), /not found/);
+    assert.throws(() => service.setFileTags('plain', 'project.json', [a.id]), /cannot be tagged/);
+
+    assert.deepEqual(service.contextChoice('acme').shared, [], 'acme has no tags yet');
+    service.setProjectTags('acme', [a.id]);
+    const choice = service.contextChoice('acme');
+    assert.ok(choice.own.includes('workspace/projects/acme/context/index.md'));
+    const sources = choice.shared[0].sources;
+    assert.deepEqual(sources.map((s) => [s.project, s.whole]), [['docs', true], ['plain', false]]);
+    assert.ok(sources[0].paths.includes('workspace/projects/docs/context/rules.md'));
+    assert.ok(!sources[0].paths.some((p) => p.includes('/inbox/')), 'the inbox of a tagged project is not shared');
+    assert.deepEqual(sources[1].paths, ['workspace/projects/plain/inbox/flow.md']);
+
+    const base = { project: 'acme', activity: 'open', tool: 'print', files: [], language: 'English', note: '' };
+    assert.throws(() => service.launch({ ...base, exclude: ['workspace/projects/docs/inbox/secret.md'] }), /Not in this project's context/);
+    const r = service.launch({ ...base, exclude: ['workspace/projects/docs/context/rules.md', 'workspace/projects/acme/context/index.md'] });
+    assert.match(r.prompt, /Shared context I authorize .*tag Pagamentos, project docs: [^;]*workspace\/projects\/docs\/context\/index\.md[^;]*; tag Pagamentos, project plain: workspace\/projects\/plain\/inbox\/flow\.md\./);
+    assert.doesNotMatch(r.prompt, /docs\/context\/rules\.md|secret\.md/);
+    assert.match(r.prompt, /Do not use these files of this project in this activity: workspace\/projects\/acme\/context\/index\.md\./);
+
+    service.removeTag(a.id);
+    assert.deepEqual(service.tags(), []);
+    assert.deepEqual(service.projects().find((p) => p.id === 'acme')?.tags, []);
+    assert.deepEqual(service.fileTags('plain'), {});
+    assert.doesNotMatch(service.launch(base).prompt, /Shared context/);
+  } finally {
+    for (const p of ['docs', 'plain']) rmSync(join(projects, p), { recursive: true, force: true });
+    rmSync(join(root, 'workspace', 'tags.json'), { force: true });
+  }
+});
+
 test('agent library: built-in agents are read-only, copies are editable and validated', () => {
   const names = service.agents().map((a) => a.name);
   assert.ok(names.includes('requirements-analyst') && names.includes('automation-engineer'));
@@ -817,4 +863,79 @@ test('fs-guard sandbox and file type rules', () => {
   assert.equal(isEditable('state.json'), false);
   assert.equal(isOpenable('report.xlsx'), true);
   assert.equal(isOpenable('run.bat'), false);
+});
+
+test('workspaces: each one has its own projects; requests name a workspace outside the default', async () => {
+  const outside = mkdtempSync(join(tmpdir(), 'qa-vault-'));
+  let pick: string | null = outside;
+  const svc = createService(root, { launch: (tool, prompt): LaunchResult => { launched.push({ tool, prompt }); return { opened: true, message: '' }; }, openFolder: () => {}, openPath: () => {}, pickFolder: async () => pick });
+  try {
+    const start = svc.workspaces();
+    assert.equal(start.active, 'default');
+    assert.deepEqual(start.list.map((w) => [w.id, w.isDefault]), [['default', true]]);
+    const defaultProjects = svc.projects().map((p) => p.id);
+    assert.ok(defaultProjects.includes('acme'));
+
+    const client = svc.createWorkspace('Cliente X');
+    assert.equal(client.path, join(root, 'workspaces', 'cliente-x'));
+    assert.equal(svc.workspaces().active, client.id);
+    assert.deepEqual(svc.projects(), [], 'a new workspace starts empty');
+    assert.throws(() => svc.createWorkspace('Cliente X'), /already/);
+    const made = svc.createProject('Portal');
+    assert.ok(existsSync(join(client.path, 'projects', 'portal', 'project.json')));
+    assert.ok(!existsSync(join(root, 'workspace', 'projects', 'portal')));
+    writeFileSync(join(client.path, 'projects', 'portal', 'inbox', 'us.md'), '# US');
+    const r = svc.launch({ project: made.id, activity: 'review', tool: 'print', files: ['us.md'], language: 'English', note: '' });
+    const label = client.path.split(sep).join('/');
+    assert.ok(r.prompt.includes(`Workspace folder: ${label}.`));
+    assert.ok(r.prompt.includes(`${label}/projects/portal/inbox/us.md`));
+    assert.throws(() => svc.readFile('acme', 'context/index.md'), /Unknown project/, 'projects of other workspaces are not reachable');
+
+    const opened = await svc.openWorkspaceFolder();
+    assert.equal(opened?.path, outside);
+    assert.ok(existsSync(join(outside, 'projects')));
+    assert.equal((await svc.openWorkspaceFolder())?.id, opened?.id, 'the same folder is not listed twice');
+    pick = root;
+    await assert.rejects(svc.openWorkspaceFolder(), /Moki folder itself/);
+
+    assert.equal(svc.renameWorkspace('default', 'Principal').name, 'Principal');
+    assert.throws(() => svc.forgetWorkspace('default'), /cannot be removed/);
+    svc.forgetWorkspace(opened!.id);
+    assert.ok(existsSync(join(outside, 'projects')), 'removing from the list keeps the folder');
+    svc.selectWorkspace('default');
+    assert.ok(svc.projects().some((p) => p.id === 'acme'));
+    assert.doesNotMatch(svc.launch({ project: 'acme', activity: 'open', tool: 'print', files: [], language: 'English', note: '' }).prompt, /Workspace folder/);
+  } finally {
+    svc.selectWorkspace('default');
+    rmSync(join(root, 'workspaces'), { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('search: projects by name, files by name and text, filters by tag', () => {
+  const inbox = join(root, 'workspace', 'projects', 'acme', 'inbox');
+  writeFileSync(join(inbox, 'renewal.md'), '# Story\n\nThe user renews the Loan before the due date.');
+  try {
+    assert.deepEqual(service.search('', []), { projects: [], files: [], truncated: false }, 'nothing asked, nothing listed');
+    assert.deepEqual(service.search('acm', []).projects.map((p) => p.id), ['acme']);
+    const hit = service.search('LOAN', []).files.find((f) => f.path === 'inbox/renewal.md');
+    assert.ok(hit, 'content matches ignore case');
+    assert.equal(hit.line, 3);
+    assert.match(hit.snippet, /renews the Loan before/);
+    assert.ok(service.search('renewal', []).files.some((f) => f.path === 'inbox/renewal.md'), 'file names match too');
+
+    const tag = service.saveTag({ name: 'Emprestimos' });
+    assert.deepEqual(service.search('', [tag.id]).files, [], 'no file has the tag yet');
+    service.setFileTags('acme', 'inbox/renewal.md', [tag.id]);
+    assert.deepEqual(service.search('', [tag.id]).files.map((f) => f.path), ['inbox/renewal.md']);
+    assert.deepEqual(service.search('', [tag.id]).projects, [], 'the project itself has no tag');
+    assert.deepEqual(service.search('story', [tag.id]).files.map((f) => f.path), ['inbox/renewal.md'], 'text and tag together');
+    service.setProjectTags('acme', [tag.id]);
+    assert.deepEqual(service.search('', [tag.id]).projects.map((p) => p.id), ['acme']);
+  } finally {
+    service.setProjectTags('acme', []);
+    rmSync(join(inbox, 'renewal.md'), { force: true });
+    rmSync(join(root, 'workspace', 'projects', 'acme', 'tags.json'), { force: true });
+    rmSync(join(root, 'workspace', 'tags.json'), { force: true });
+  }
 });

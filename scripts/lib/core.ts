@@ -6,7 +6,7 @@ import { existsSync, readdirSync, statSync, copyFileSync, cpSync, mkdirSync, rea
 import { join, basename, extname, resolve, sep } from 'node:path';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { ROOT, SLUG, readJson } from './repo.mjs';
+import { ROOT, SLUG, readJson, workspaceDir, workspaceLabel } from './repo.mjs';
 import { parseFrontmatter } from './frontmatter.mjs';
 
 export type ActivityKey = 'open' | 'review' | 'tests' | 'review-then-tests' | 'failure' | 'evidence' | 'context' | 'setup' | 'plan' | 'automation' | 'resume';
@@ -107,9 +107,10 @@ export interface ProjectSummary {
   repository: string; // folder on this machine linked to the project ('' when none)
   linkedSkills: string[]; // global skills this project uses, by name (project.json linkedSkills)
   starter: Starter;
+  tags: string[]; // tag ids (project.json tags)
 }
 
-export const projectsDir = (root = ROOT): string => join(root, 'workspace', 'projects');
+export const projectsDir = (root = ROOT): string => join(workspaceDir(root), 'projects');
 
 export function listProjects(root = ROOT): string[] {
   const dir = projectsDir(root);
@@ -146,6 +147,7 @@ export function projectSummary(id: string, root = ROOT): ProjectSummary {
     repository: linkedOf(data)?.path ?? '',
     linkedSkills: Array.isArray(data.linkedSkills) ? data.linkedSkills.filter((s): s is string => typeof s === 'string') : [],
     starter: data.starter === 'blank' ? 'blank' : 'qa',
+    tags: Array.isArray(data.tags) ? [...new Set(data.tags.filter((s): s is string => typeof s === 'string'))] : [],
   };
 }
 
@@ -177,13 +179,13 @@ export const agentFiles = (dir: string): string[] =>
 
 // Where one project's installed skills or agents live, as the AI is told: <linked folder>/.claude/<kind>, or workspace/projects/<id>/<kind>.
 type Kind = 'skills' | 'agents';
-const folderLabel = (project: string, repository: string, kind: Kind): string =>
-  repository ? `${repository.split(sep).join('/')}/.claude/${kind}` : `workspace/projects/${project}/${kind}`;
+const folderLabel = (project: string, repository: string, kind: Kind, workspace = 'workspace'): string =>
+  repository ? `${repository.split(sep).join('/')}/.claude/${kind}` : `${workspace}/projects/${project}/${kind}`;
 
 // `dir` on disk, `label` as written in requests and agents.
 function projectFolder(project: string, kind: Kind, root: string): { dir: string; label: string } {
   const repo = linkedFolder(project, root)?.path ?? '';
-  return { dir: repo ? join(repo, '.claude', kind) : join(projectsDir(root), project, kind), label: folderLabel(project, repo, kind) };
+  return { dir: repo ? join(repo, '.claude', kind) : join(projectsDir(root), project, kind), label: folderLabel(project, repo, kind, workspaceLabel(root)) };
 }
 export const projectSkillsDir = (project: string, root = ROOT) => projectFolder(project, 'skills', root);
 export const projectAgentsDir = (project: string, root = ROOT) => projectFolder(project, 'agents', root);
@@ -192,7 +194,7 @@ export const installedAgents = (project: string, root = ROOT): string[] => agent
 
 export interface AgentSpec {
   name: string; description: string; skills: { name: string; path: string }[];
-  framework?: { root: string; project: string }; // set when the agent uses Moki's own skills
+  framework?: { root: string; project: string; workspace?: string }; // set when the agent uses Moki's own skills; workspace: its folder when not <root>/workspace
 }
 
 // An agent in the Claude Code subagent format (plain Markdown any AI tool can follow).
@@ -205,7 +207,7 @@ export function agentMarkdown({ name, description, skills, framework }: AgentSpe
     '## Skills', '',
     'Use only these skills (read the SKILL.md when one fits the task). Do not use or install any other skill; if the task needs one that is not listed, say so and stop.', '',
     ...skills.map((s) => `- \`${s.name}\`: \`${s.path}\``), '',
-    ...(framework ? [`The Moki skills follow \`${framework.root}/AGENTS.md\` for the project \`${framework.project}\`: its context, runs and approvals are in \`${framework.root}/workspace/projects/${framework.project}/\`.`, ''] : []),
+    ...(framework ? [`The Moki skills follow \`${framework.root}/AGENTS.md\` for the project \`${framework.project}\`: its context, runs and approvals are in \`${framework.workspace ?? `${framework.root}/workspace`}/projects/${framework.project}/\`.`, ''] : []),
   ].join('\n');
 }
 
@@ -229,6 +231,128 @@ export function createProject(id: string, name: string, root = ROOT, starter: St
 export const slugify = (name: string): string => name.normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
 
+// ---------------------------------------------------------------- tags
+
+// A tag shares context between projects: the confirmed context (context/) of every
+// project with the tag, plus each file marked with it. Catalog in workspace/tags.json;
+// a project's tags in project.json "tags"; its files' tags in <project>/tags.json.
+export interface Tag { id: string; name: string; color: string; description: string }
+export interface SharedSource { project: string; name: string; whole: boolean; paths: string[] } // whole: the project has the tag
+export interface SharedTag { tag: Tag; sources: SharedSource[] }
+export interface ContextChoice { own: string[]; shared: SharedTag[] } // what an activity may read, before the user's exclusions
+
+export const TAG_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#64748b'];
+const tagsFile = (root: string) => join(workspaceDir(root), 'tags.json');
+const fileTagsFile = (project: string, root: string) => join(projectsDir(root), project, 'tags.json');
+const writeJson = (file: string, data: unknown) => { mkdirSync(join(file, '..'), { recursive: true }); writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`); };
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []);
+
+export function listTags(root = ROOT): Tag[] {
+  let data: { tags?: unknown } = {};
+  try { data = readJson(tagsFile(root)) as { tags?: unknown }; } catch { /* no catalog yet */ }
+  const list = Array.isArray(data.tags) ? (data.tags as Partial<Tag>[]) : [];
+  return list.filter((t) => typeof t?.id === 'string' && SLUG.test(t.id) && typeof t.name === 'string')
+    .map((t, i) => ({ id: t.id!, name: t.name!, color: typeof t.color === 'string' && /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : TAG_COLORS[i % TAG_COLORS.length], description: String(t.description ?? '') }));
+}
+
+// Creates the tag (id from the name) or updates the one with `id`. A new name that matches an existing tag returns it.
+export function saveTag(input: { id?: string; name: string; color?: string; description?: string }, root = ROOT): Tag {
+  const name = String(input.name ?? '').trim().slice(0, 40);
+  if (!name) throw new Error('Tag name is required.');
+  const tags = listTags(root);
+  const id = input.id ? String(input.id) : slugify(name);
+  if (!SLUG.test(id)) throw new Error('Tag name: use at least one letter or digit.');
+  const old = tags.find((t) => t.id === id);
+  if (!input.id && old) return old;
+  if (input.id && !old) throw new Error('Unknown tag.');
+  const color = input.color && /^#[0-9a-f]{6}$/i.test(input.color) ? input.color : old?.color ?? TAG_COLORS[tags.length % TAG_COLORS.length];
+  const tag: Tag = { id, name, color, description: String(input.description ?? old?.description ?? '').slice(0, 300) };
+  writeJson(tagsFile(root), { tags: old ? tags.map((t) => (t.id === id ? tag : t)) : [...tags, tag] });
+  return tag;
+}
+
+// Removes the tag from the catalog, from every project and from every file.
+export function removeTag(id: string, root = ROOT): void {
+  writeJson(tagsFile(root), { tags: listTags(root).filter((t) => t.id !== id) });
+  for (const project of listProjects(root)) {
+    if (projectSummary(project, root).tags.includes(id)) setProjectTags(project, projectSummary(project, root).tags.filter((t) => t !== id), root);
+    const files = fileTags(project, root);
+    for (const [path, ids] of Object.entries(files)) if (ids.includes(id)) setFileTags(project, path, ids.filter((t) => t !== id), root);
+  }
+}
+
+const knownTags = (ids: unknown, root: string): string[] => {
+  const known = new Set(listTags(root).map((t) => t.id));
+  return [...new Set(strings(ids).filter((id) => known.has(id)))];
+};
+
+export function setProjectTags(project: string, ids: unknown, root = ROOT): string[] {
+  const file = join(projectsDir(root), project, 'project.json');
+  const data = readJson(file) as Record<string, unknown>;
+  const tags = knownTags(ids, root);
+  writeJson(file, { ...data, tags });
+  return tags;
+}
+
+// Tags of the project's files, keyed by path relative to the project folder ("/" separators).
+export function fileTags(project: string, root = ROOT): Record<string, string[]> {
+  let data: { files?: unknown } = {};
+  try { data = readJson(fileTagsFile(project, root)) as { files?: unknown }; } catch { /* nothing tagged */ }
+  const files = data.files && typeof data.files === 'object' ? (data.files as Record<string, unknown>) : {};
+  return Object.fromEntries(Object.entries(files).map(([path, ids]) => [path, strings(ids)]).filter(([, ids]) => ids.length));
+}
+
+// A relative path inside the project, normalized to "/", that is an existing file (not project.json or tags.json).
+export function projectFilePath(project: string, path: string, root = ROOT): string {
+  const rel = String(path ?? '').replace(/\\/g, '/').replace(/^\.\//, '');
+  const parts = rel.split('/');
+  if (!rel || rel.includes('\0') || rel.startsWith('/') || /^[a-zA-Z]:/.test(rel) || parts.some((p) => p === '..' || p === '.' || p === '')) throw new Error('Invalid path.');
+  if (rel === 'project.json' || rel === 'tags.json') throw new Error('This file cannot be tagged.');
+  if (!isFile(join(projectsDir(root), project, ...parts))) throw new Error('File not found in the project.');
+  return rel;
+}
+
+export function setFileTags(project: string, path: string, ids: unknown, root = ROOT): string[] {
+  const files = fileTags(project, root);
+  const rel = String(path).replace(/\\/g, '/');
+  const tags = knownTags(ids, root);
+  if (tags.length) files[projectFilePath(project, rel, root)] = tags;
+  else delete files[rel]; // untagging also works for a file that is gone
+  writeJson(fileTagsFile(project, root), { files });
+  return tags;
+}
+
+const contextFilesOf = (project: string, root: string): string[] => {
+  const dir = join(projectsDir(root), project, 'context');
+  const walk = (d: string): string[] => (existsSync(d) ? readdirSync(d).sort().flatMap((n) => {
+    const full = join(d, n);
+    return statSync(full).isDirectory() ? walk(full) : [full];
+  }) : []);
+  return walk(dir).map((f) => `${workspaceLabel(root)}/projects/${project}/${f.slice(join(projectsDir(root), project).length + 1).split(sep).join('/')}`);
+};
+
+// What an activity of `project` may read: its own context files, and, for each of its tags,
+// the context of the other projects with the tag and the files tagged with it elsewhere.
+export function contextChoice(project: string, root = ROOT): ContextChoice {
+  const own = contextFilesOf(project, root);
+  const mine = projectSummary(project, root).tags;
+  const catalog = listTags(root);
+  const others = listProjects(root).filter((p) => p !== project).map((p) => ({ summary: projectSummary(p, root), files: fileTags(p, root) }));
+  const shared = mine.flatMap((id): SharedTag[] => {
+    const tag = catalog.find((t) => t.id === id);
+    if (!tag) return [];
+    const sources = others.flatMap(({ summary, files }): SharedSource[] => {
+      const whole = summary.tags.includes(id);
+      const tagged = Object.entries(files).filter(([path, ids]) => ids.includes(id) && isFile(join(projectsDir(root), summary.id, ...path.split('/'))))
+        .map(([path]) => `${workspaceLabel(root)}/projects/${summary.id}/${path}`);
+      const paths = [...new Set([...(whole ? contextFilesOf(summary.id, root) : []), ...tagged])];
+      return paths.length || whole ? [{ project: summary.id, name: summary.name, whole, paths }] : [];
+    });
+    return sources.length ? [{ tag, sources }] : [];
+  });
+  return { own, shared };
+}
+
 // ---------------------------------------------------------------- files
 
 // Accepts paths typed or dragged into a terminal ("quoted", 'quoted', escaped spaces).
@@ -248,13 +372,13 @@ export const isFile = (p: string): boolean => existsSync(p) && statSync(p).isFil
 export function copyToInbox(project: string, source: string, root = ROOT): string {
   const inbox = join(projectsDir(root), project, 'inbox');
   mkdirSync(inbox, { recursive: true });
-  if (resolve(source).startsWith(resolve(inbox))) return `workspace/projects/${project}/inbox/${basename(source)}`;
+  if (resolve(source).startsWith(resolve(inbox))) return `${workspaceLabel(root)}/projects/${project}/inbox/${basename(source)}`;
   const ext = extname(source);
   const stem = basename(source, ext);
   let name = basename(source);
   for (let i = 1; existsSync(join(inbox, name)); i++) name = `${stem}-${i}${ext}`;
   copyFileSync(source, join(inbox, name));
-  return `workspace/projects/${project}/inbox/${name}`;
+  return `${workspaceLabel(root)}/projects/${project}/inbox/${name}`;
 }
 
 // ---------------------------------------------------------------- requests
@@ -274,11 +398,18 @@ export interface Request {
   description?: string; // the project's goal, for the setup activity
   globalSkills?: { name: string; path: string }[]; // global skills linked to the project, with their SKILL.md
   available?: { skills: string[]; agents: string[] }; // what the plan activity may recommend (global skills, usable agents)
+  shared?: { tag: string; project: string; paths: string[] }[]; // other projects' files shared through tags and kept by the user
+  excluded?: string[]; // this project's context files the user left out of the activity
+  workspace?: string; // workspaceLabel: "workspace", or the folder of another workspace
 }
 
-export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English', agent, repository = '', skills = [], agents = [], description = '', globalSkills = [], available }: Request): string {
+export function buildPrompt({ project, activity, files = [], note = '', run = '', language = 'English', agent, repository = '', skills = [], agents = [], description = '', globalSkills = [], available, shared = [], excluded = [], workspace = 'workspace' }: Request): string {
   const list = files.length ? files.join(', ') : '';
   const parts = [`Follow AGENTS.md. Project: ${project}.`];
+  if (workspace !== 'workspace') {
+    parts.push(`Workspace folder: ${workspace}. Every path that AGENTS.md and the skills write as workspace/... is inside this folder, not in this repository's workspace/ folder;`
+      + ` paths recorded inside state.json and project files keep the workspace/... form. Run the npm helper commands with the environment variable QA_WORKSPACE=${workspace}.`);
+  }
   if (repository) parts.push(`Linked folder (the system's repository): ${repository}.`);
   if (agent) parts.push(`Act as the ${agent.name} agent: read ${agent.path} and follow it.`);
   switch (activity) {
@@ -310,11 +441,11 @@ export function buildPrompt({ project, activity, files = [], note = '', run = ''
     case 'setup':
       parts.push(`Use the project-context skill to prepare this project for its goal: ${description.trim() ? JSON.stringify(description.trim()) : 'the description in project.json (ask me for it if it is empty)'}.`
         + `${repository ? ' Look at the linked folder first.' : ''} Propose how to adapt the context files and which of the available skills fit;`
-        + ` write the proposals to workspace/projects/${project}/proposed-updates.md and wait for my approval before changing context/. Do not install skills: I install them from the app.`);
+        + ` write the proposals to ${workspace}/projects/${project}/proposed-updates.md and wait for my approval before changing context/. Do not install skills: I install them from the app.`);
       if (list) parts.push(`Documents to use: ${list}.`);
       break;
     case 'plan': {
-      const dir = `workspace/projects/${project}`;
+      const dir = `${workspace}/projects/${project}`;
       const names = (l: string[] = []) => (l.length ? l.join(', ') : 'none');
       parts.push(`Use the project-context skill to plan this blank project ("Plan a blank project" procedure). Read ${dir}/plan.json first.`
         + ` If it has "approved": true, create only the contextFiles it lists (confirmed answers only), list them in context/index.md and project.json contextFiles, and stop.`
@@ -329,14 +460,20 @@ export function buildPrompt({ project, activity, files = [], note = '', run = ''
       parts.push(`Use the automation skill.${list ? ` Inputs: ${list}.` : ''}`);
       break;
     case 'resume':
-      parts.push(`Resume run ${run}: read workspace/projects/${project}/runs/${run}/state.json first, summarize where we stopped and continue from the current step.`);
+      parts.push(`Resume run ${run}: read ${workspace}/projects/${project}/runs/${run}/state.json first, summarize where we stopped and continue from the current step.`);
       break;
     default:
       throw new Error(`Unknown activity "${String(activity)}"`);
   }
-  if (skills.length) parts.push(`Skills installed for this project (read ${folderLabel(project, repository, 'skills')}/<name>/SKILL.md when one fits the task): ${skills.join(', ')}.`);
+  if (skills.length) parts.push(`Skills installed for this project (read ${folderLabel(project, repository, 'skills', workspace)}/<name>/SKILL.md when one fits the task): ${skills.join(', ')}.`);
   if (globalSkills.length) parts.push(`Global skills linked to this project (read the SKILL.md when one fits the task): ${globalSkills.map((s) => `${s.name} (${s.path})`).join(', ')}.`);
-  if (agents.length) parts.push(`Agents defined for this project (when I ask for one, follow ${folderLabel(project, repository, 'agents')}/<name>.md and use only the skills it lists): ${agents.join(', ')}.`);
+  if (agents.length) parts.push(`Agents defined for this project (when I ask for one, follow ${folderLabel(project, repository, 'agents', workspace)}/<name>.md and use only the skills it lists): ${agents.join(', ')}.`);
+  const sources = shared.filter((s) => s.paths.length);
+  if (sources.length) {
+    parts.push(`Shared context I authorize for this activity, through project tags (read-only files of other projects; cite the source project of anything you use; never write in those projects; new knowledge for this project goes to ${workspace}/projects/${project}/proposed-updates.md, not to context/): ${sources.map((s) => `tag ${s.tag}, project ${s.project}: ${s.paths.join(', ')}`).join('; ')}.`
+      + " Read nothing else from other projects. Record these files in the run's state.json under contextSources.");
+  }
+  if (excluded.length) parts.push(`Do not use these files of this project in this activity: ${excluded.join(', ')}.`);
   if (note.trim()) parts.push(`Additional instructions: ${note.trim().replace(/([^.!?])$/, '$1.')}`);
   parts.push(`Talk to me in ${language}.`);
   return parts.join(' ');
@@ -394,7 +531,7 @@ export function windowsSafePrompt(prompt: string, project: string, root = ROOT, 
   mkdirSync(dir, { recursive: true });
   const name = `request-${new Date().toISOString().replace(/[:.]/g, '-')}.md`;
   writeFileSync(join(dir, name), `${prompt}\n`, 'utf8');
-  return `Follow AGENTS.md. Project: ${project}. Your request is in the file workspace/projects/${project}/temporary/${name} (UTF-8 text). Read it and follow it exactly.`;
+  return `Follow AGENTS.md. Project: ${project}. Your request is in the file ${workspaceLabel(root)}/projects/${project}/temporary/${name} (UTF-8 text). Read it and follow it exactly.`;
 }
 
 // Windows shells (.cmd shims) need the prompt as a single quoted argument.
@@ -411,7 +548,7 @@ export function launchTool(tool: ToolKey, prompt: string, cwd = ROOT): ChildProc
 
 // ---------------------------------------------------------------- preferences
 
-const prefsFile = (root = ROOT): string => join(root, 'workspace', '.qa-preferences.json');
+const prefsFile = (root = ROOT): string => join(workspaceDir(root), '.qa-preferences.json');
 
 export interface Prefs { project?: string; language?: string; tool?: string }
 
@@ -420,5 +557,5 @@ export function loadPrefs(root = ROOT): Prefs {
 }
 
 export function savePrefs(prefs: Prefs, root = ROOT): void {
-  try { mkdirSync(join(root, 'workspace'), { recursive: true }); writeFileSync(prefsFile(root), JSON.stringify(prefs, null, 2)); } catch { /* optional */ }
+  try { mkdirSync(workspaceDir(root), { recursive: true }); writeFileSync(prefsFile(root), JSON.stringify(prefs, null, 2)); } catch { /* optional */ }
 }

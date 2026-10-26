@@ -54,6 +54,19 @@
         }
       }
     },
+    "contextSources": {
+      "type": "array",
+      "description": "Files of other projects read as shared context, through project tags, with the user's authorization in the request.",
+      "items": {
+        "type": "object",
+        "required": ["path", "project"],
+        "properties": {
+          "path": { "type": "string", "pattern": "^workspace/projects/[a-z0-9-]+/" },
+          "project": { "type": "string" },
+          "tag": { "type": "string" }
+        }
+      }
+    },
     "results": { "type": "array", "items": { "type": "object" } },
     "artifacts": {
       "type": "array",

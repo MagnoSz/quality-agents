@@ -4,7 +4,7 @@ This repository is a portable library of **QA skills** (Agent Skills format). Yo
 
 ## Golden rules
 
-1. **Identify the project first.** Every activity belongs to one project in `workspace/projects/<project-id>/`. Never read or reuse another project's files.
+1. **Identify the project first.** Every activity belongs to one project in `workspace/projects/<project-id>/`. Never read or reuse another project's files, except the shared context (through tags) that the request lists.
 2. **Files go to the project folder.** Inputs, outputs, evidence, logs and state live under `workspace/projects/<project-id>/` (ignored by Git). Never write them into `skills/`, `core/`, `templates/`, `schemas/`, `adapters/`, `docs/`, `examples/` or the repository root.
 3. **Stop at approval gates.** Never run a step that needs approval in the same response that asks for it.
 4. **Never invent** requirements, rules, messages, data or ids. Missing information becomes a pending item. Hypotheses are labeled as hypotheses.
@@ -70,11 +70,15 @@ Workflows: `skills/qa-orchestrator/references/workflows/` — `requirements-to-t
 ## Where results go
 
 ```text
+workspace/tags.json                                                # tag catalog (tags share context between projects)
 workspace/projects/<project-id>/
 ├── project.json, context/, proposed-updates.md, activity-log.md   # project knowledge (confirmed only in context/)
+├── tags.json                                                      # tags of the project's files
 ├── inbox/                                                         # files the user provides
 └── runs/<run-id>/{state.json, inputs/, outputs/, evidence/, logs/}  # each execution
 ```
+
+**Workspaces.** `workspace/` is the default workspace. The desktop app can open others (folders with the same layout, like Obsidian vaults). When the request names a workspace folder, every `workspace/...` path in this file and in the skills means that folder; paths written inside `state.json` and project files keep the `workspace/...` form, and the npm helper commands need `QA_WORKSPACE=<folder>`. Never read or write another workspace.
 
 Exception: an authorized change to a **target repository** (e.g. automation code) is written there and follows that repository's Git policy.
 

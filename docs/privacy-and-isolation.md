@@ -8,7 +8,7 @@ Only the framework: skills, core policies, workflows, templates, schemas, adapte
 
 ## What it never versions
 
-Everything under `workspace/`: project context, received documents, user stories, spreadsheets, PDFs, logs, evidence, screenshots, traces, temporary files, automation results, run history and any customer data. Also `dist/` (generated bundles).
+Everything under `workspace/` and `workspaces/` (other workspaces created by the desktop app): project context, received documents, user stories, spreadsheets, PDFs, logs, evidence, screenshots, traces, temporary files, automation results, run history and any customer data. Also `dist/` (generated bundles).
 
 ## Layers of protection
 
@@ -16,14 +16,14 @@ Everything under `workspace/`: project context, received documents, user stories
 |---|---|---|
 | Folder layout | Every project has its own folder; skills write only there | Relies on the AI following instructions |
 | Skill instructions | Isolation policy loaded by every skill; project identified before reading anything | Same |
-| `.gitignore` | Ignores `workspace/*` and `dist/` | `git add -f` bypasses it — it is not a security control |
+| `.gitignore` | Ignores `workspace/*`, `workspaces/` and `dist/` | `git add -f` bypasses it — it is not a security control |
 | Pre-commit hook (`npm run setup`) | Blocks commits containing workspace files, documents/images/evidence outside skill assets, `.env` files, known secret formats, and stale skill mirrors | Must be enabled per clone; can be skipped with `--no-verify` |
 | CI (`.github/workflows/ci.yml`) | Same checks on every push/PR | Runs after the push — rotate any leaked secret anyway |
 | `npm run runs` | Flags runs whose `state.json` names another project or artifacts outside the project | Checks state, not content |
 
 ## Project isolation
 
-- One folder per system: `workspace/projects/<project-id>/`.
+- One folder per system: `workspace/projects/<project-id>/` (or `<workspace>/projects/<project-id>/` in another workspace). Workspaces never share anything; inside one, project tags share only the files the activity request lists (see [core/isolation-policy.md](../core/isolation-policy.md#shared-context-through-tags)).
 - An activity reads only its project's folder; cross-project comparison only when the user explicitly asks and names both projects.
 - No per-project branches in this repository.
 

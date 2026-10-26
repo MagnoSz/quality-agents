@@ -3,10 +3,10 @@
 
 import { readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT, readJson } from './lib/repo.mjs';
+import { ROOT, readJson, workspaceDir } from './lib/repo.mjs';
 import { validateSchema } from './lib/schema.mjs';
 
-const projectsDir = join(ROOT, 'workspace', 'projects');
+const projectsDir = join(workspaceDir(), 'projects'); // QA_WORKSPACE selects another workspace
 const schema = readJson(join(ROOT, 'schemas', 'execution-state.schema.json'));
 const [onlyProject, onlyRun] = process.argv.slice(2);
 const dirs = (p) => (existsSync(p) ? readdirSync(p).filter((d) => statSync(join(p, d)).isDirectory()).sort() : []);

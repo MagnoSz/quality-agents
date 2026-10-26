@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, hasBridge, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo } from './api';
+import { api, hasBridge, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo, type WorkspaceInfo } from './api';
 import { t, useLang } from './i18n';
 import { NoteDialog } from './components/NoteDialog';
-import { hiddenIds } from './side-menu';
+import { hiddenIds, setMenuWorkspace } from './side-menu';
 import { Ribbon } from './components/Ribbon';
 import { Home } from './screens/Home';
 import { Workspace, linkedNotice } from './screens/Workspace';
+import { WorkspacePicker } from './screens/WorkspacePicker';
 import type { SettingsTab } from './screens/Settings';
 
 const noteParams = new URLSearchParams(window.location.search);
@@ -31,6 +32,15 @@ export function App() {
   const [launchOnOpen, setLaunchOnOpen] = useState(false);
   const [pendingTerm, setPendingTerm] = useState<TerminalRef | null>(null);
   const [pendingPath, setPendingPath] = useState<string | null>(null); // a file a note window asked to open
+  // The open workspace. null: the app starts on the workspace picker, like Obsidian's vault switcher.
+  const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
+  const [search, setSearch] = useState(false); // the search panel replaces the left list
+  const toggleSearch = useCallback(() => setSearch((s) => !s), []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') { e.preventDefault(); setSearch(true); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Note windows can show a terminal they started, or open a file they mention, here.
   useEffect(() => {
@@ -45,15 +55,18 @@ export function App() {
 
   useEffect(() => {
     if (!hasBridge()) { setError(t('Moki must be opened with the qa command.')); return; }
-    Promise.all([api.session(), api.projects(), api.integrations()])
-      .then(([session, list, toolList]) => {
+    Promise.all([api.session(), api.projects(), api.integrations(), api.workspaces()])
+      .then(([session, list, toolList, spaces]) => {
         setVersion(session.version);
         setProjects(list);
         setTools(toolList);
-        // Reopen the last project, like Obsidian reopens the last vault.
+        setMenuWorkspace(spaces.active);
         const params = new URLSearchParams(window.location.search);
         if (params.get('view') === 'note') { setReady(true); return; }
         const requested = params.get('project');
+        // A project asked for at start (checks, shortcuts) opens in the workspace opened last; otherwise the picker comes first.
+        if (!requested) { setReady(true); return; }
+        setWorkspace(spaces.list.find((w) => w.id === spaces.active) ?? null);
         if (params.get('view') === 'library') setSettings('agents');
         if (params.get('view') === 'launch') setLaunchOnOpen(true);
         const last = requested || recall();
@@ -66,14 +79,22 @@ export function App() {
 
   const open = (id: string) => { setSettings(null); setProjectId(id); setCreated(null); remember(id); };
   const home = () => { setSettings(null); setProjectId(null); setCreated(null); remember(null); void loadProjects(); };
-  const create = async (name: string, starter: Starter, folder?: string) => {
-    const project = await api.createProject(name, starter, folder);
+  const create = async (name: string, starter: Starter, folder?: string, tags: string[] = []) => {
+    const project = await api.createProject(name, starter, folder, tags);
     await loadProjects();
     open(project.id);
     setCreated(project.id);
     setCreatedNotice(folder ? linkedNotice(project) : '');
   };
   const onProjectChanged = useCallback(() => { void loadProjects(); }, [loadProjects]);
+  // A workspace was opened (picker or switcher): its projects, on the start screen. null goes back to the picker.
+  const openWorkspace = (w: WorkspaceInfo | null) => {
+    setSettings(null); setProjectId(null); setCreated(null); remember(null);
+    setWorkspace(w);
+    if (!w) return;
+    setMenuWorkspace(w.id);
+    void loadProjects();
+  };
 
   if (error) return <div className="notice"><img src="./favicon.svg" alt="" width={40} height={40} /><h1>{t('Something went wrong')}</h1><p>{error}</p></div>;
   if (!ready) return <div className="notice muted">{t('Loading…')}</div>;
@@ -93,6 +114,13 @@ export function App() {
     );
   }
 
+  // A search result: its project, and the file in it.
+  const openFound = (id: string, path?: string) => {
+    setSearch(false); setSettings(null); setCreated(null);
+    setProjectId(id); remember(id);
+    if (path) setPendingPath(path);
+  };
+
   const openTerminal = (terminal: TerminalRef, id: string) => {
     setPendingTerm(terminal);
     setSettings(null);
@@ -100,14 +128,16 @@ export function App() {
     remember(id);
   };
 
+  if (!workspace) return <WorkspacePicker version={version} onOpen={openWorkspace} />;
+
   const project = projects.find((p) => p.id === projectId);
   if (!project) {
     return (
       <div className="shell">
-        <Ribbon settingsOn={settings !== null} onHome={home} onSettings={() => setSettings(settings ? null : 'agents')} />
-        <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} settings={settings} onSettings={setSettings} project={null} onTerminal={openTerminal} />
+        <Ribbon settingsOn={settings !== null} onHome={home} onSettings={() => setSettings(settings ? null : 'agents')} searchOn={search} onSearch={toggleSearch} />
+        <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} settings={settings} onSettings={setSettings} project={null} onTerminal={openTerminal} workspace={workspace} onWorkspace={openWorkspace} search={search} onSearch={toggleSearch} onFound={openFound} />
       </div>
     );
   }
-  return <Workspace key={project.id} project={project} tools={tools} onHome={home} settings={settings} onSettings={setSettings} onProjectChanged={onProjectChanged} launchOnOpen={launchOnOpen} startSetup={created === project.id} startNotice={created === project.id ? createdNotice : ''} pendingTerminal={pendingTerm} onPendingTerminal={() => setPendingTerm(null)} pendingPath={pendingPath} onPendingPath={() => setPendingPath(null)} />;
+  return <Workspace key={project.id} project={project} tools={tools} onHome={home} settings={settings} onSettings={setSettings} onProjectChanged={onProjectChanged} launchOnOpen={launchOnOpen} startSetup={created === project.id} startNotice={created === project.id ? createdNotice : ''} pendingTerminal={pendingTerm} onPendingTerminal={() => setPendingTerm(null)} pendingPath={pendingPath} onPendingPath={() => setPendingPath(null)} search={search} onSearch={toggleSearch} onFound={openFound} />;
 }

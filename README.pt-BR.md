@@ -5,8 +5,8 @@
 <p align="center"><img src="app/public/hero.png" alt="Moki" width="280" /></p>
 
 <p align="center">
-  <a href="https://github.com/Orsi88/quality-agents/releases/latest"><b>⬇️ Baixar o Moki para Windows</b></a>
-  &nbsp;·&nbsp; <a href="https://github.com/Orsi88/quality-agents/releases/download/v0.2.1/Moki.Setup.0.2.1.exe">Moki.Setup.0.2.1.exe</a>
+  <a href="https://github.com/Orsi88/moki/releases/latest"><b>⬇️ Baixar o Moki para Windows</b></a>
+  &nbsp;·&nbsp; <a href="https://github.com/Orsi88/moki/releases/download/v0.2.1/Moki.Setup.0.2.1.exe">Moki.Setup.0.2.1.exe</a>
   &nbsp;·&nbsp; <a href="#instalar">como instalar</a>
 </p>
 
@@ -22,11 +22,11 @@ Começou como trabalho de qualidade de software: revisar uma história, projetar
 
 ### Windows
 
-1. Baixe o [Moki.Setup.0.2.1.exe](https://github.com/Orsi88/quality-agents/releases/download/v0.2.1/Moki.Setup.0.2.1.exe) (ou o arquivo mais recente em [Releases](https://github.com/Orsi88/quality-agents/releases)).
+1. Baixe o [Moki.Setup.0.2.1.exe](https://github.com/Orsi88/moki/releases/download/v0.2.1/Moki.Setup.0.2.1.exe) (ou o arquivo mais recente em [Releases](https://github.com/Orsi88/moki/releases)).
 2. Se o Windows disser que protegeu o computador, escolha **Mais informações → Executar assim mesmo**. O instalador ainda não tem assinatura digital.
 3. Conclua. Um atalho **Moki** aparece na área de trabalho e no menu Iniciar.
 
-A primeira abertura cria **Documentos\Moki**: os arquivos do app e a sua `workspace/`, onde ficam os projetos. Um instalador mais novo atualiza os arquivos do app e deixa a `workspace/` quieta. Desinstalar também mantém essa pasta.
+A primeira abertura cria **Documentos\Moki**: os arquivos do app e a sua `workspace/`, onde ficam os projetos. Um instalador mais novo atualiza os arquivos do app e deixa `workspace/` e `workspaces/` quietas. Desinstalar também mantém essas pastas.
 
 Instale também uma ferramenta de IA (Claude Code, Cursor, Codex, Gemini, ou um chat que você já usa). Excel, Word e PDF das atividades que vêm com o app precisam do [Node.js 22.18+](https://nodejs.org) (LTS). O app em si abre sem ele.
 
@@ -34,11 +34,22 @@ macOS, Linux, ou uma cópia deste repositório: [A partir do código](#a-partir-
 
 ## Usar
 
-Abra o Moki. O último projeto volta sozinho. O canto da tela inicial escolhe **inglês ou português** e o tema **claro ou escuro**. Criar um projeto é um botão nessa tela, não um passo obrigatório.
+Abra o Moki e escolha um **workspace**, como um cofre do Obsidian. O canto dessa tela escolhe **inglês ou português** e o tema **claro ou escuro**.
 
-**Tela inicial.** Projetos à esquerda, notas soltas embaixo. Fixe um projeto para mantê-lo no topo. *Desvisualizar* tira o projeto da lista e os arquivos continuam no computador; ele vai para **Ocultos** até você mostrar de novo.
+**Workspaces.** Um workspace é uma pasta com seus próprios projetos, tags e configurações — por exemplo, um por cliente ou empresa. A `workspace/` que você já tem é o primeiro, então nada muda de lugar. Na primeira tela você pode:
 
-**Criar um projeto** digitando o nome:
+- abrir um workspace da lista (o aberto por último fica marcado);
+- **criar um novo workspace** — por padrão em `workspaces/<nome>/`, dentro da pasta do Moki, ou numa pasta que você escolher;
+- **abrir uma pasta como workspace** — uma pasta que você já tem; o Moki cria uma pasta `projects/` dentro dela;
+- renomear um workspace, ou removê-lo da lista (a pasta continua no computador).
+
+Troque de workspace no rodapé da lista de projetos, ou volte para a lista com *Gerenciar workspaces…*. Os projetos de um workspace nunca enxergam outro.
+
+**Tela inicial.** Projetos à esquerda, notas avulsas embaixo, o workspace no rodapé. Fixe um projeto para mantê-lo no topo. *Desvisualizar* tira o projeto da lista e os arquivos continuam no computador; ele vai para **Ocultos** até você mostrar de novo. Fixados e ocultos são guardados por workspace; as notas avulsas não pertencem a nenhum.
+
+**Busca** (a lupa, ou **Ctrl+Shift+F**) toma o lugar da lista e procura no workspace ativo: nome e descrição dos projetos, e nome e texto dos arquivos deles (Markdown, texto, JSON, CSV e o texto dos arquivos Word). As tags aparecem ali como filtros; texto e tags se combinam. Um resultado abre o projeto com o arquivo.
+
+**Criar um projeto** digitando o nome e, se quiser, as tags:
 
 | Começar com | O que você ganha |
 |---|---|
@@ -48,15 +59,15 @@ Abra o Moki. O último projeto volta sozinho. O canto da tela inicial escolhe **
 
 O formulário de criar ainda diz "um projeto por sistema que você testa". Um projeto em branco e uma pasta vinculada usam o mesmo formulário.
 
-**Workspace.** A árvore do projeto: contexto, inbox, atividades, notas. Solte arquivos sobre a janela e eles são copiados para o inbox — até 40 arquivos, 200 MB cada. Pastas são ignoradas. Markdown aparece formatado; **Ctrl+E** edita, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word viram texto para qualquer IA conseguir ler. Excel e PDF abrem no programa deles. Os arquivos que a IA salva aparecem na árvore assim que chegam.
+**Dentro de um projeto.** A árvore do projeto: contexto, entrada (inbox), atividades, notas. Solte arquivos sobre a janela e eles são copiados para o inbox — até 40 arquivos, 200 MB cada. Pastas são ignoradas. Markdown aparece formatado; **Ctrl+E** edita, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word viram texto para qualquer IA conseguir ler. Excel e PDF abrem no programa deles. Os arquivos que a IA salva aparecem na árvore assim que chegam.
 
 **Abrir na sua ferramenta de IA** (o botão de play):
 
 1. Escolha a atividade.
-2. Se quiser, escolha quem deve fazer (um agente) e quais arquivos do inbox entram.
+2. Se quiser, escolha quais arquivos do inbox entram, qual contexto compartilhado manter (quando o projeto tem tags, veja [Tags](#tags)) e quem deve fazer (um agente).
 3. Acrescente uma observação e escolha a ferramenta.
 
-Claude Code, Codex, Gemini CLI, Antigravity CLI e Cursor Agent abrem numa aba de terminal do app. Cursor e VS Code abrem a pasta com o pedido copiado. ChatGPT, claude.ai, Gemini web e *Just show the request* deixam o texto na tela, pronto para copiar. Se a abertura ainda estiver rodando depois de cerca de 20 segundos, o assistente avisa.
+Claude Code, Codex, Gemini CLI, Antigravity CLI e Cursor Agent abrem numa aba de terminal do app. Cursor e VS Code abrem a pasta com o pedido copiado. ChatGPT, claude.ai, Gemini web e *Só mostrar a solicitação* deixam o texto na tela, pronto para copiar. Se a abertura ainda estiver rodando depois de cerca de 20 segundos, o assistente avisa.
 
 Aí você conversa nessa ferramenta como de costume. O pedido cita o projeto, a pasta vinculada e as skills e os agentes instalados nele.
 
@@ -68,11 +79,11 @@ Aí você conversa nessa ferramenta como de costume. O pedido cita o projeto, a 
 | **Skills** | O que já está instalado, o que vem com o Moki, e **Adicionar skill**: busque no registro público [SkillMD](https://skillmd.com) (programação, design, QA, segurança, documentação) ou descreva uma para a sua ferramenta de IA redigir. |
 | **Modelos** | Fonte, cores, cabeçalho, rodapé, logo e marca d'água dos PDF, Word e Excel que as atividades geram. Um estilo para todos os projetos, ou o de um projeto. |
 
-Notas de um projeto são arquivos Markdown em `notes/` e abrem numa janela própria. Notas soltas da tela inicial ficam no app até você enviar uma para um projeto.
+Notas de um projeto são arquivos Markdown em `notes/` e abrem numa janela própria. Notas avulsas da tela inicial ficam no app até você enviar uma para um projeto.
 
 ## Projetos
 
-Um projeto é um trabalho. O id é curto e em minúsculas (`billing-portal`), e a pasta é `workspace/projects/<id>/`.
+Um projeto é um trabalho. O id é curto e em minúsculas (`billing-portal`), e a pasta é `workspace/projects/<id>/` — ou `<pasta do workspace>/projects/<id>/` em outro workspace.
 
 Um projeto de qualidade fica assim. Um projeto em branco tem o mesmo esqueleto e só ganha `context/` depois que você aprova o `plan.json`.
 
@@ -82,6 +93,7 @@ workspace/projects/billing-portal/
 ├── context/              # somente conhecimento confirmado
 ├── proposed-updates.md   # o que a IA notou, esperando você
 ├── plan.json             # projeto em branco: o plano, até você aprovar
+├── tags.json             # tags de arquivos avulsos
 ├── activity-log.md
 ├── inbox/                # arquivos que você entrega à IA
 ├── notes/
@@ -93,6 +105,21 @@ workspace/projects/billing-portal/
 Durante uma atividade, a IA pode notar algo que parece uma regra geral. Ela grava isso em `proposed-updates.md` e pergunta antes de virar contexto. Texto confirmado é o único texto que ela pode tratar como sabido.
 
 Os entregáveis saem em **inglês**, a menos que você defina `"deliverableLanguage": "pt-BR"` no `project.json` ou peça outro idioma na atividade. A conversa segue o idioma em que você escreve. Mensagens citadas ficam no idioma original.
+
+## Tags
+
+As tags ligam projetos do mesmo workspace. Dê uma tag a um projeto ou a um arquivo (abaixo do nome do projeto, ou na barra acima de um arquivo aberto); digite um nome novo para criar uma.
+
+Um projeto com uma tag pode usar, nas atividades:
+
+- o **contexto confirmado** (`context/`) de todos os outros projetos com aquela tag — não o inbox, as execuções nem as evidências deles;
+- todos os **arquivos** marcados com ela, em qualquer projeto.
+
+Ao abrir uma atividade, o passo *Qual contexto a IA deve considerar?* lista esses arquivos, todos marcados. Desmarque o que essa atividade não deve usar; arquivos do próprio projeto também podem ficar de fora ali. O pedido então lista exatamente os arquivos compartilhados que a IA pode ler. Ela só lê, não grava nada nos outros projetos, diz de qual projeto veio cada informação e propõe o conhecimento novo em `proposed-updates.md`, em vez de tratá-lo como confirmado.
+
+O catálogo de tags é o `tags.json` da pasta do workspace; as tags de um projeto ficam no `project.json` dele.
+
+## Compartilhar um projeto
 
 Para compartilhar o contexto com o time, coloque **a pasta daquele projeto** num repositório Git privado. Ela já ignora `runs/`, `inbox/` e `temporary/`. Dados de projeto não entram neste repositório público.
 
@@ -127,17 +154,19 @@ Feche a sessão quando quiser. Cada atividade grava o `state.json` no caminho. P
 | O quê | Onde |
 |---|---|
 | A biblioteca do app e os seus projetos, depois do instalador | `Documentos/Moki` |
-| Um projeto | `workspace/projects/<id>/` |
+| Outros workspaces | `workspaces/<nome>/` na pasta do Moki, ou a pasta que você escolheu; a lista é `workspaces/workspaces.json` |
+| Um projeto | `workspace/projects/<id>/` (ou `projects/<id>/` em outro workspace) |
 | Conhecimento confirmado | `.../context/` |
 | Uma atividade | `.../runs/<run-id>/` |
 | Skills e agentes deste projeto | `workspace/projects/<id>/skills` e `agents`, ou `<pasta vinculada>/.claude/` |
 | Skills e agentes de todos os projetos | `~/.claude/skills`, `~/.agents/skills`, `~/.claude/agents` |
 | Cópias de agentes prontos | `workspace/library/agents/` |
 | Aparência dos documentos | `workspace/document-style.json`, ou o mesmo arquivo dentro de um projeto |
+| Tags | `workspace/tags.json` (catálogo), `project.json` → `tags`, e `tags.json` dentro de um projeto (os arquivos dele) |
 
 ## Privacidade
 
-Os projetos ficam no seu computador. A `workspace/` não faz parte deste repositório Git. Cada projeto é uma pasta; a IA lê a que está ativa. Senhas e tokens não entram em arquivo nenhum — cite o nome de uma variável de ambiente. Enviar documentos para uma IA online é decisão sua e política daquele fornecedor; registre a regra do time em `project.json` → `externalDataSharingAllowed`.
+Os projetos ficam no seu computador. `workspace/` e `workspaces/` não fazem parte deste repositório Git. Cada projeto é uma pasta; a IA lê a que está ativa e, de outros projetos, só os arquivos compartilhados que o pedido lista por causa das tags que você definiu. Workspaces nunca compartilham nada. Senhas e tokens não entram em arquivo nenhum — cite o nome de uma variável de ambiente. Enviar documentos para uma IA online é decisão sua e política daquele fornecedor; registre a regra do time em `project.json` → `externalDataSharingAllowed`.
 
 Detalhes: [docs/privacy-and-isolation.md](docs/privacy-and-isolation.md).
 
@@ -148,8 +177,8 @@ Use isto para rodar o Moki a partir de uma cópia do repositório, no macOS ou n
 Você precisa de Git e Node.js 22.18 ou mais recente.
 
 ```bash
-git clone https://github.com/Orsi88/quality-agents.git
-cd quality-agents
+git clone https://github.com/Orsi88/moki.git
+cd moki
 npm run setup
 npm run qa
 ```
@@ -164,7 +193,7 @@ O `npm run setup` instala as ferramentas, constrói o app, cria a `workspace/` e
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Gera um instalador naquele sistema. A saída fica em `release/`. |
 | `npm run check` e `npm test` | Validam o repositório e rodam os testes dele. |
 
-O `qa --terminal` é em inglês e ainda pergunta *Which project (system under test)?*. Qualquer id de projeto serve.
+O `qa --terminal` é em inglês e ainda pergunta *Which project (system under test)?*. Qualquer id de projeto serve. Os comandos trabalham na `workspace/`; defina `QA_WORKSPACE=<pasta>` para usar outro workspace.
 
 ### Alterar o Moki
 
@@ -186,7 +215,7 @@ Como a janela é construída: [docs/desktop-app.md](docs/desktop-app.md). Como u
 | `AGENTS.md` | O que uma ferramenta de IA lê quando esta pasta é aberta: regras e o catálogo de skills |
 | `skills/`, `agents/`, `core/` | Skills, agentes prontos, políticas comuns — edite aqui |
 | `app/`, `desktop/` | A janela |
-| `workspace/` | Projetos locais — nunca versionados |
+| `workspace/`, `workspaces/` | Workspaces e projetos locais — nunca versionados |
 
 ## Licença
 
