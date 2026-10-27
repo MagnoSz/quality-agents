@@ -134,8 +134,11 @@ export function duplicateAgent(name: string, root = ROOT): Agent {
 }
 
 // Claude Code subagent generated from an agent (portable: no app needed).
+// Read-only agents lose the editing tools, like Claude Code's own Explore agent;
+// the shell stays for read-only commands and their Boundaries forbid writing with it.
 export function claudeSubagent(agent: Agent): string {
   const description = agent.description.replace(/^\[[A-Z ]+\]\s*/, '').replace(/\n/g, ' ');
   const skills = agent.skills.map((s) => `- \`${s}\`: read and follow \`.claude/skills/${s}/SKILL.md\``).join('\n');
-  return `---\nname: ${agent.name}\ndescription: ${JSON.stringify(description)}\n---\n${agent.body.trimEnd()}\n\n## Skills\n\n${skills}\n`;
+  const tools = agent.access === 'read-only' ? 'disallowedTools: Edit, Write, NotebookEdit\n' : '';
+  return `---\nname: ${agent.name}\ndescription: ${JSON.stringify(description)}\n${tools}---\n${agent.body.trimEnd()}\n\n## Skills\n\n${skills}\n`;
 }

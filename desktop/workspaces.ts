@@ -105,6 +105,11 @@ export function renameWorkspace(root: string, id: string, name: string): Workspa
   return findWorkspace(root, id);
 }
 
+// Tools and helper commands started by the app look for projects in the active workspace.
+export function setWorkspaceEnv(root: string, dir: string): void {
+  if (resolve(dir) === resolve(root, 'workspace')) delete process.env.QA_WORKSPACE; else process.env.QA_WORKSPACE = dir;
+}
+
 // Removes the workspace from the list. Its folder and files stay where they are.
 export function forgetWorkspace(root: string, id: string): void {
   if (id === DEFAULT_WORKSPACE) throw new Error('The default workspace cannot be removed from the list.');

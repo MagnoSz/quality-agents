@@ -1,6 +1,7 @@
 // Skills: "Already installed" lists what this project has and what is global,
 // each row saying where it lives. "Add a skill" searches the SkillMD registry
-// or asks the AI tool to draft a proposal. Agents are not created here.
+// or asks the AI tool to draft a proposal. "Plugins" turns caveman on for this
+// project only (ponytail and rtk are always on). Agents are not created here.
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, type InstallResult, type ProjectSummary, type RegistrySkill, type SkillScope, type SkillSearchPage, type TerminalRef, type ToolInfo } from '../api';
@@ -11,7 +12,7 @@ import { InstalledSkills } from './InstalledSkills';
 import { SkillLibrary } from './SkillLibrary';
 import { SkillForm } from './SkillForm';
 
-export type SkillDialogTab = 'installed' | 'library' | 'add';
+export type SkillDialogTab = 'installed' | 'library' | 'add' | 'plugins';
 type Tab = SkillDialogTab;
 type AddMode = 'find' | 'create';
 
@@ -31,7 +32,47 @@ const tabList = (): { id: Tab; label: string; intro: string }[] => [
   { id: 'installed', label: t('Already installed'), intro: t('Skills you already have, for this project and for all projects. Each one shows where it lives.') },
   { id: 'library', label: t('Native and created'), intro: t('The skills that come with Moki and the ones you created, installed or not.') },
   { id: 'add', label: t('Add a skill'), intro: t('Search the public SkillMD registry or describe a skill for your AI tool to draft.') },
+  { id: 'plugins', label: t('Plugins'), intro: t('Plugins the app loads in the Claude Code and Codex sessions it opens. Sessions started outside the app are not affected.') },
 ];
+
+// The app plugins (adapters/app-plugins/README.md). Only the optional ones have a switch, saved in project.json.
+export const pluginList = (): { name: string; text: string; optional: boolean }[] => [
+  { name: 'ponytail', text: t('Simplest code that works: YAGNI, standard library first, no unrequested abstractions.'), optional: false },
+  { name: 'rtk', text: t('Runs shell commands through rtk to shrink their output. Needs the rtk command installed.'), optional: false },
+  { name: 'caveman', text: t('Terse replies: answer first, no filler, every technical fact kept. Fewer tokens per answer.'), optional: true },
+];
+
+function PluginsPanel({ project }: { project: ProjectSummary }) {
+  const [on, setOn] = useState(project.plugins);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const toggle = async (name: string) => {
+    setBusy(true); setError('');
+    try { setOn((await api.setProjectPlugins(project.id, on.includes(name) ? on.filter((p) => p !== name) : [...on, name])).plugins); }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  return (<>
+    {error && <div className="result warn" role="status"><p className="result-title">{error}</p></div>}
+    <ul className="skill-list">
+      {pluginList().map((p) => (
+        <li key={p.name} className="skill-card">
+          <div className="skill-card-head">
+            <span className="choice-title">{p.name}</span>
+            <span className="statusbar-spacer" />
+            {p.optional ? (
+              <label className="field inline">
+                <input type="checkbox" checked={on.includes(p.name)} disabled={busy} onChange={() => { void toggle(p.name); }} />
+                <span>{t('Use in {name}', { name: project.name })}</span>
+              </label>
+            ) : <span className="chip">{t('Always on')}</span>}
+          </div>
+          <p className="skill-desc small">{p.text}</p>
+        </li>
+      ))}
+    </ul>
+    <p className="muted small">{t('A change applies to the next session opened from this project.')}</p>
+  </>);
+}
 
 // Preset searches: a registry category, or a query where the registry has no category (QA).
 const presets = (): { label: string; query: string; category: string }[] => [
@@ -150,6 +191,7 @@ export function SkillsDialog({ project, initialQuery = '', onClose, tools, onTer
           </div>}
 
           {tab === 'installed' ? <InstalledSkills project={project} />
+            : tab === 'plugins' ? <PluginsPanel project={project} />
             : tab === 'library' ? <SkillLibrary project={project} scope={scope} />
             : tab === 'add' && addMode === 'create' && canCreate && tools && onTerminal ? <SkillForm project={project} scope={scope} tools={tools} onTerminal={onTerminal} /> : (<>
           <form className="skill-search" onSubmit={submit}>

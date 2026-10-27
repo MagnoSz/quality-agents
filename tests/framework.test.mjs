@@ -16,6 +16,7 @@ import { unzip } from '../scripts/lib/zip.mjs';
 import { checkPreAnalysis, checkMissingInfo, checkTestCases, checkReviewMatrix } from '../scripts/check-output.mjs';
 import { markdownToHtml } from '../scripts/pdf.mjs';
 import { ACTIVITIES, buildPrompt, cleanPath, copyToInbox, isUsable } from '../scripts/lib/core.ts';
+import { claudeSubagent } from '../scripts/lib/agents.ts';
 
 // A temporary copy of the framework with one skill, to mutate safely.
 function fixture() {
@@ -104,6 +105,12 @@ test('frontmatter parser', () => {
   assert.equal(data.description, 'a: b');
   assert.equal(data.metadata.version, '1.0.0');
   assert.match(parseFrontmatter('no frontmatter').errors[0], /first line/);
+});
+
+test('read-only agents become Claude Code subagents without the editing tools', () => {
+  const agent = { name: 'a', description: 'd', skills: ['failure-analysis'], access: 'read-only', body: '# A\n' };
+  assert.match(claudeSubagent(agent), /^disallowedTools: Edit, Write, NotebookEdit$/m);
+  assert.doesNotMatch(claudeSubagent({ ...agent, access: 'repository-write' }), /disallowedTools/);
 });
 
 test('artifact check', () => {

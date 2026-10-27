@@ -13,6 +13,8 @@ export type ActivityKey = 'open' | 'review' | 'tests' | 'review-then-tests' | 'f
 // How a new project starts: 'qa' copies the QA context files; 'blank' leaves context/ out and plans it with the AI.
 export type Starter = 'qa' | 'blank';
 export const STARTERS: Starter[] = ['qa', 'blank'];
+// App plugins a project turns on itself (adapters/app-plugins/README.md); ponytail and rtk are always on.
+export const PROJECT_PLUGINS = ['caveman'];
 export type ToolKey = 'claude' | 'codex' | 'cursor-agent' | 'gemini' | 'antigravity' | 'cursor' | 'vscode' | 'chat' | 'print';
 
 export interface Activity { label: string; hint?: string; skill: string; needsFiles: boolean }
@@ -108,6 +110,7 @@ export interface ProjectSummary {
   linkedSkills: string[]; // global skills this project uses, by name (project.json linkedSkills)
   starter: Starter;
   tags: string[]; // tag ids (project.json tags)
+  plugins: string[]; // app plugins turned on for this project (project.json plugins)
 }
 
 export const projectsDir = (root = ROOT): string => join(workspaceDir(root), 'projects');
@@ -148,6 +151,7 @@ export function projectSummary(id: string, root = ROOT): ProjectSummary {
     linkedSkills: Array.isArray(data.linkedSkills) ? data.linkedSkills.filter((s): s is string => typeof s === 'string') : [],
     starter: data.starter === 'blank' ? 'blank' : 'qa',
     tags: Array.isArray(data.tags) ? [...new Set(data.tags.filter((s): s is string => typeof s === 'string'))] : [],
+    plugins: Array.isArray(data.plugins) ? PROJECT_PLUGINS.filter((p) => (data.plugins as unknown[]).includes(p)) : [],
   };
 }
 

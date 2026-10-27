@@ -4,16 +4,14 @@
 
 import { app } from 'electron';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { syncFramework } from './framework.ts';
+import { frameworkTarget, syncFramework } from './framework.ts';
 
 if (app.isPackaged) {
   const here = dirname(fileURLToPath(import.meta.url));
-  const docs = app.getPath('documents');
-  const legacy = join(docs, 'Quality Agents'); // installs made before the rename keep their workspace
-  const target = process.env.QA_ROOT || (existsSync(legacy) ? legacy : join(docs, 'Moki'));
+  const target = frameworkTarget(app.getPath('documents'));
   let buildId = app.getVersion();
   try { buildId = (JSON.parse(readFileSync(join(here, 'build-info.json'), 'utf8')) as { buildId: string }).buildId; } catch { /* use the version */ }
   syncFramework(join(process.resourcesPath, 'framework'), target, buildId);

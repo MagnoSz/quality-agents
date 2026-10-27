@@ -44,7 +44,11 @@ Rules (checked by `npm run validate` for built-in agents and by the app when you
 - `metadata.status`: `stable`, `draft`, `pending-migration` or `planned`. Only `stable` and `draft` agents can be used; the description of the others starts with `[PENDING MIGRATION]` or `[PLANNED]`.
 - The four sections `Role`, `When to use`, `How to work` and `Boundaries` are required.
 
-> Access levels are instructions to the AI today, written into the agent and the core policies. Enforcement by the AI tool itself (permission settings per tool) is planned for the project-sharing work.
+> Access levels are instructions to the AI today, written into the agent and the core policies. One exception: a `read-only` built-in agent becomes a Claude Code subagent without the editing tools (`disallowedTools: Edit, Write, NotebookEdit`); the shell stays for read-only commands, and the agent's Boundaries forbid writing with it. Enforcement by the other AI tools (permission settings per tool) is planned for the project-sharing work.
+
+## Framework agents
+
+The `framework` category maintains Moki itself, not a project. `moki-consultant` (read-only) explains how Moki works and analyzes a change, a diff or a failing check, ending with a proposal that shows the code and its impact. `moki-executor` (repository-write) implements a proposal the user approved — or analyzes the request itself and stops for approval first — and runs the checks. Both share the `moki-architecture` skill (layers, business rules, invariants) and the `moki-change` skill (impact checklist, proposal format, best practices, playbooks, verification), so they differ only in role, where they stop and access.
 
 ## Agents per project
 
