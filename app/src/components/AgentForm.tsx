@@ -3,9 +3,10 @@
 // folder are offered; the service checks it again before writing the file.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type SyntheticEvent } from 'react';
-import { api, type ProjectSummary, type ScopeAgents, type SkillScope } from '../api';
+import { api, emptyContract, type AgentContract, type ProjectSummary, type ScopeAgents, type SkillScope, type ToolInfo } from '../api';
 import { t } from '../i18n';
 import { IconCheck, IconInfo } from './Icons';
+import { AgentContractFields } from './AgentContractFields';
 
 interface Props { project: ProjectSummary; scope: SkillScope; onFindSkills: () => void; onCreated?: () => void }
 
@@ -22,6 +23,9 @@ export function AgentForm({ project, scope, onFindSkills, onCreated }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
+  const [contract, setContract] = useState<AgentContract>(emptyContract);
+  const [mcps, setMcps] = useState<string[]>([]);
+  const [tools, setTools] = useState<ToolInfo[]>([]);
   const [menu, setMenu] = useState<{ query: string; start: number; index: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<{ name: string; file: string; backup?: string } | null>(null);
@@ -30,6 +34,10 @@ export function AgentForm({ project, scope, onFindSkills, onCreated }: Props) {
 
   const load = useCallback(() => { api.scopeAgents(project.id, scope).then(setData).catch((e) => setError(message(e))); }, [project.id, scope]);
   useEffect(() => { setPicked([]); load(); }, [load]);
+  useEffect(() => {
+    api.knownMcps(project.id).then(setMcps).catch(() => setMcps([]));
+    api.integrations().then(setTools).catch(() => setTools([]));
+  }, [project.id]);
 
   const installed = data?.skills ?? [];
   const builtin = data?.builtin ?? []; // Moki's own skills (project and repository agents only)
@@ -82,8 +90,8 @@ export function AgentForm({ project, scope, onFindSkills, onCreated }: Props) {
     if (toClaude && !window.confirm(t("Create the agent in {folder}?\n\nThis CHANGES {folder}/.claude: the agent is written to its agents folder (the current .claude is backed up to the project's backups/ first).", { folder: project.repository ?? '' }))) return;
     setBusy(true); setError(''); setCreated(null);
     try {
-      setCreated(await api.createScopeAgent(project.id, { name, description, skills: chosen, scope }, toClaude));
-      setName(''); setDescription(''); setPicked([]);
+      setCreated(await api.createScopeAgent(project.id, { name, description, skills: chosen, scope, contract }, toClaude));
+      setName(''); setDescription(''); setPicked([]); setContract(emptyContract());
       load();
       onCreated?.();
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
@@ -154,6 +162,8 @@ export function AgentForm({ project, scope, onFindSkills, onCreated }: Props) {
           <p className="small warn-text">{t('Not installed in this folder:')} {notInstalled.map((m) => `@${m}`).join(', ')}. {t('Install it in Find skills or remove the mention.')}</p>
         )}
       </div>
+
+      <AgentContractFields value={contract} onChange={setContract} mcps={mcps} tools={tools} />
 
       {(created || error) && (
         <div className={`result${error ? ' warn' : ''}`} role="status">

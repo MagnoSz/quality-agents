@@ -4,8 +4,10 @@ description: Builds the evidence of an executed test end to end - takes the test
 category: quality
 skills: evidence-collection, evidence-sheet, evidence-document, project-context
 access: project-write
+inputs: Source item, Execution data, Result per test case, Jam link or print
+outputs: evidence.json, *.xlsx, *.docx
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
   status: draft
 ---
 

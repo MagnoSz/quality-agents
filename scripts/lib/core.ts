@@ -8,6 +8,7 @@ import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_pr
 import { createRequire } from 'node:module';
 import { ROOT, SLUG, readJson, workspaceDir, workspaceLabel } from './repo.mjs';
 import { parseFrontmatter } from './frontmatter.mjs';
+import { contractLines, type AgentContract } from './agents.ts';
 
 export type ActivityKey = 'open' | 'review' | 'tests' | 'review-then-tests' | 'failure' | 'evidence' | 'context' | 'setup' | 'plan' | 'automation' | 'resume';
 // How a new project starts: 'qa' copies the QA context files; 'blank' leaves context/ out and plans it with the AI.
@@ -129,8 +130,9 @@ export function listRuns(project: string, root = ROOT): RunState[] {
     .sort((a, b) => b.id.localeCompare(a.id));
 }
 
+// Runs to resume in an AI tool. Multi-agent operation runs are left out: Moki runs them step by step (the Operations panel).
 export const openRuns = (project: string, root = ROOT): RunState[] =>
-  listRuns(project, root).filter((s) => !['completed', 'cancelled'].includes(s.status));
+  listRuns(project, root).filter((s) => !['completed', 'cancelled'].includes(s.status) && !s.operation);
 
 export function projectSummary(id: string, root = ROOT): ProjectSummary {
   let data: Record<string, unknown> = {};
@@ -195,14 +197,15 @@ export const installedAgents = (project: string, root = ROOT): string[] => agent
 export interface AgentSpec {
   name: string; description: string; skills: { name: string; path: string }[];
   framework?: { root: string; project: string; workspace?: string }; // set when the agent uses Moki's own skills; workspace: its folder when not <root>/workspace
+  contract?: AgentContract; // inputs, outputs, MCP servers and AI tool (for multi-agent operations)
 }
 
 // An agent in the Claude Code subagent format (plain Markdown any AI tool can follow).
 // The skills list closes the agent to the skills chosen for it.
-export function agentMarkdown({ name, description, skills, framework }: AgentSpec): string {
+export function agentMarkdown({ name, description, skills, framework, contract }: AgentSpec): string {
   const summary = description.split('\n')[0].split(/(?<=[.!?])\s/)[0].slice(0, 300);
   return [
-    '---', `name: ${name}`, `description: ${JSON.stringify(summary)}`, '---', '',
+    '---', `name: ${name}`, `description: ${JSON.stringify(summary)}`, ...(contract ? contractLines(contract) : []), '---', '',
     description, '',
     '## Skills', '',
     'Use only these skills (read the SKILL.md when one fits the task). Do not use or install any other skill; if the task needs one that is not listed, say so and stop.', '',

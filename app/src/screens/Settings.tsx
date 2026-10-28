@@ -1,5 +1,6 @@
 // Settings. Agents: the library, plus agents installed for one project or for
-// every project, and the only place an agent is created. Skills: what is
+// every project, and the only place an agent is created. Operations: agents
+// linked by arrows into multi-agent operations. Skills: what is
 // already installed (and where), and adding a skill. Documents: the look of the files
 // activities and agents generate (header, footer, fonts, colours, watermark).
 
@@ -11,8 +12,9 @@ import { AgentForm } from '../components/AgentForm';
 import { SkillsDialog, type SkillDialogTab } from '../components/SkillsDialog';
 import { Library } from './Library';
 import { DocumentStyleForm } from '../components/DocumentStyleForm';
+import { Operations } from './Operations';
 
-export type SettingsTab = 'agents' | 'skills' | 'documents';
+export type SettingsTab = 'agents' | 'operations' | 'skills' | 'documents';
 
 interface Props {
   tab: SettingsTab;
@@ -55,6 +57,7 @@ export function Settings({ tab, onTab, onClose, onBack, backLabel, project, proj
         {onBack && <button type="button" className="btn btn-ghost btn-sm" onClick={onBack}>{backLabel}</button>}
         <div className="dialog-tabs settings-tabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === 'agents'} className={`dialog-tab${tab === 'agents' ? ' on' : ''}`} onClick={() => onTab('agents')}>{t('Agents')}</button>
+          <button type="button" role="tab" aria-selected={tab === 'operations'} className={`dialog-tab${tab === 'operations' ? ' on' : ''}`} onClick={() => onTab('operations')}>{t('Operations')}</button>
           <button type="button" role="tab" aria-selected={tab === 'skills'} className={`dialog-tab${tab === 'skills' ? ' on' : ''}`} onClick={() => onTab('skills')}>{t('Skills')}</button>
           <button type="button" role="tab" aria-selected={tab === 'documents'} className={`dialog-tab${tab === 'documents' ? ' on' : ''}`} onClick={() => onTab('documents')}>{t('Documents')}</button>
         </div>
@@ -69,6 +72,7 @@ export function Settings({ tab, onTab, onClose, onBack, backLabel, project, proj
       </div>
       <div className="settings-body">
         {tab === 'documents' ? <DocumentStyleForm key={target?.id ?? 'none'} project={target} />
+          : tab === 'operations' ? <Operations tools={tools} />
           : tab === 'agents'
           ? (
             <Library

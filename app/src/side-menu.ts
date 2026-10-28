@@ -1,7 +1,7 @@
 // What the start-screen sidebar remembers on this computer: which projects stay
-// pinned, notes that were not sent to a project, and the project notes opened
-// most recently. Pins, hidden projects and recent notes are kept per workspace;
-// loose notes belong to no workspace.
+// pinned, notes that were not sent to a project, the project notes opened
+// most recently and the favorite notes. Pins, hidden projects, recent and favorite
+// project notes are kept per workspace; loose notes belong to no workspace.
 
 import { recall, remember } from './prefs';
 
@@ -9,6 +9,8 @@ const PINS = 'qa-pinned-projects';
 const HIDDEN = 'qa-hidden-projects';
 const NOTES = 'qa-recent-notes';
 const LOOSE = 'qa-loose-notes';
+const FAVORITES = 'qa-favorite-notes';
+const LOOSE_FAVORITES = 'qa-favorite-loose-notes';
 const NOTE_LIMIT = 6;
 
 // The active workspace; the default one keeps the original keys.
@@ -17,8 +19,10 @@ export const setMenuWorkspace = (id: string): void => { scope = id && id !== 'de
 const PINS_KEY = () => PINS + scope;
 const HIDDEN_KEY = () => HIDDEN + scope;
 const NOTES_KEY = () => NOTES + scope;
+const FAVORITES_KEY = () => FAVORITES + scope;
 
 export interface RecentNote { project: string; path: string; title: string; at: number }
+export type NoteRef = { project: string; path: string } | { loose: string };
 export interface LooseNote { id: string; title: string; text: string; at: number }
 
 const readList = (key: string): unknown[] => {
@@ -50,7 +54,15 @@ export const showProject = (id: string): string[] => {
   return next;
 };
 
-export const noteTitle = (path: string): string => (path.split('/').pop() ?? path).replace(/\.md$/, '').replace(/-/g, ' ');
+// A deleted project leaves no pin, hidden entry or recent note behind.
+export const forgetProject = (id: string): void => {
+  remember(PINS_KEY(), JSON.stringify(pinnedIds().filter((x) => x !== id)));
+  remember(HIDDEN_KEY(), JSON.stringify(hiddenIds().filter((x) => x !== id)));
+  remember(NOTES_KEY(), JSON.stringify(recentNotes().filter((n) => n.project !== id)));
+  remember(FAVORITES_KEY(), JSON.stringify(favoriteNotes().filter((n) => n.project !== id)));
+};
+
+export const noteTitle =(path: string): string => (path.split('/').pop() ?? path).replace(/\.md$/, '').replace(/-/g, ' ');
 
 export const looseNotes = (): LooseNote[] => readList(LOOSE).flatMap((item) => {
   if (!item || typeof item !== 'object') return [];
@@ -69,6 +81,30 @@ export const saveLooseNote = (note: { id?: string | null; title: string; text: s
 
 export const removeLooseNote = (id: string): void => {
   remember(LOOSE, JSON.stringify(looseNotes().filter((n) => n.id !== id)));
+  remember(LOOSE_FAVORITES, JSON.stringify(favoriteLooseIds().filter((x) => x !== id)));
+};
+
+// Favorite notes: the star in the note, the tree and the start screen. Newest first.
+export const favoriteNotes = (): { project: string; path: string }[] => readList(FAVORITES_KEY()).flatMap((item) => {
+  const n = (item ?? {}) as { project?: unknown; path?: unknown };
+  return typeof n.project === 'string' && typeof n.path === 'string' && n.path.startsWith('notes/') ? [{ project: n.project, path: n.path }] : [];
+});
+export const favoriteLooseIds = (): string[] => readList(LOOSE_FAVORITES).filter((id): id is string => typeof id === 'string');
+
+export const isFavorite = (note: NoteRef): boolean => ('loose' in note
+  ? favoriteLooseIds().includes(note.loose)
+  : favoriteNotes().some((n) => n.project === note.project && n.path === note.path));
+
+// Turns the star on or off; returns whether the note is now a favorite.
+export const setFavorite = (note: NoteRef, on: boolean): boolean => {
+  if ('loose' in note) {
+    const rest = favoriteLooseIds().filter((x) => x !== note.loose);
+    remember(LOOSE_FAVORITES, JSON.stringify(on ? [note.loose, ...rest] : rest));
+  } else {
+    const rest = favoriteNotes().filter((n) => !(n.project === note.project && n.path === note.path));
+    remember(FAVORITES_KEY(), JSON.stringify(on ? [{ project: note.project, path: note.path }, ...rest] : rest));
+  }
+  return on;
 };
 
 export const recentNotes = (): RecentNote[] => readList(NOTES_KEY()).flatMap((item) => {

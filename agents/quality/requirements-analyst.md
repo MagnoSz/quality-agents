@@ -4,8 +4,10 @@ description: Reviews user stories before development - ambiguities, contradictio
 category: quality
 skills: requirements-review, project-context
 access: project-write
+inputs: User stories
+outputs: review-matrix.json, *.xlsx, *.pdf
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   status: draft
 ---
 

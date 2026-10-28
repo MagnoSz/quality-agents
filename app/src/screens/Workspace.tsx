@@ -2,21 +2,25 @@
 // (view and edit) and terminals (AI tools or a shell), and a side panel with
 // the activity or project details.
 
-import { useCallback, useEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import { api, type FileContent, type ProjectSummary, type Tag, type TerminalRef, type ToolInfo, type TreeNode } from '../api';
-import { t } from '../i18n';
+import { conversationLanguage, t } from '../i18n';
 import { recall, remember } from '../prefs';
 import { DocView } from '../components/DocView';
 import { FileTree } from '../components/FileTree';
 import { LaunchDialog } from '../components/LaunchDialog';
 import { NoteDialog } from '../components/NoteDialog';
+import { OperationsPanel } from '../components/OperationsPanel';
+import { OperationLaunch } from '../components/OperationLaunch';
+import { OperationRunView } from '../components/OperationRunView';
 import { SidePanel } from '../components/SidePanel';
 import { SetupDialog } from '../components/SetupDialog';
 import { TerminalView } from '../components/TerminalView';
 import { TagPicker } from '../components/TagPicker';
 import { SearchPanel } from '../components/SearchPanel';
-import { IconEyeOff, IconGraph, IconPlay, IconTerminal, IconX } from '../components/Icons';
-import { hideProject } from '../side-menu';
+import { IconCopy, IconExternal, IconEyeOff, IconFile, IconFolder, IconGraph, IconMore, IconPlay, IconStar, IconTerminal, IconX } from '../components/Icons';
+import { NewEntryDialog } from '../components/NewEntryDialog';
+import { favoriteNotes, hideProject, isFavorite, setFavorite } from '../side-menu';
 import { AddButton } from '../components/AddButton';
 import { FileIcon } from '../icons';
 import { Ribbon } from '../components/Ribbon';
@@ -70,8 +74,15 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
   const toggleGraph = () => { if (graphFocus) closeGraph(); else openGraph(); };
   const openedTerm = useRef<string | null>(null);
   const [showSetup, setShowSetup] = useState(startSetup); // after creating the project or linking a folder
-  const [note, setNote] = useState<{ path: string | null } | null>(null); // open note popup; path null = new note
+  const [note, setNote] = useState<{ path: string | null } | null>(null); // open note (main area); path null = new note
+  // A multi-agent operation in the main area: its start screen, or one of its runs.
+  const [opView, setOpView] = useState<{ kind: 'launch' | 'run'; id: string } | null>(null);
+  const [opsTick, setOpsTick] = useState(0);
+  const advanceRef = useRef<() => void>(() => {});
   const [termMenu, setTermMenu] = useState<{ left: number; top: number } | null>(null);
+  // The tree item menu (right click or ⋯); path '' is the project folder. canCreate: a folder outside runs/.
+  const [itemMenu, setItemMenu] = useState<{ path: string; canCreate: boolean; left: number; top: number } | null>(null);
+  const [creating, setCreating] = useState<{ parent: string; kind: 'file' | 'folder' } | null>(null);
   const [dropping, setDropping] = useState(false);
   const dragDepth = useRef(0);
   const tabsRef = useRef(tabs);
@@ -101,6 +112,8 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
     void api.watch(project.id);
     const off = api.onChanged((changed) => {
       if (changed !== project.id) return;
+      setOpsTick((n) => n + 1);
+      advanceRef.current(); // a step may have just delivered its work
       loadTree();
       setRefreshKey((k) => k + 1);
       onProjectChanged();
@@ -114,14 +127,16 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
     return () => { off(); void api.watch(null); };
   }, [project.id, loadTree, onProjectChanged]);
 
-  const openPath = useCallback((path: string) => {
+  const openPath = useCallback((path: string, mode: Tab['mode'] = 'preview') => {
     setError('');
-    if (/^notes\/[^/]+\.md$/.test(path)) { setNote({ path }); return; } // notes open in a popup
+    setOpView(null);
+    if (/^notes\/[^/]+\.md$/.test(path)) { setNote({ path }); return; } // notes open in the main area, over the tabs
+    setNote(null);
     setGraphFocus(false);
     setActiveTerm(null);
     if (tabsRef.current.some((t) => t.path === path)) { setActive(path); return; }
     api.readFile(project.id, path).then((content) => {
-      setTabs((all) => [...all, { path, content, draft: textOf(content), mode: 'preview', saving: false }]);
+      setTabs((all) => [...all, { path, content, draft: textOf(content), mode: content.kind === 'markdown' ? mode : 'preview', saving: false }]);
       setActive(path);
       // Reveal the file in the tree.
       setExpanded((s) => { const n = new Set(s); path.split('/').slice(0, -1).reduce((acc, seg) => { const p = acc ? `${acc}/${seg}` : seg; n.add(p); return p; }, ''); return n; });
@@ -151,6 +166,21 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
   }, []);
 
   const addTerminal = useCallback((t: TerminalRef) => { setTerms((all) => (all.some((x) => x.id === t.id) ? all : [...all, { ...t, running: true }])); setGraphFocus(false); setActiveTerm(t.id); }, []);
+
+  // Operations move on when a step's files are there: the next step starts in a terminal tab (or waits for approval).
+  const advancing = useRef(false);
+  const advanceOps = useCallback(() => {
+    if (advancing.current) return;
+    advancing.current = true;
+    api.advanceOperations(project.id)
+      .then((ready) => Promise.all(ready.map((r) => api.startOperationStep(project.id, r.run, r.step, conversationLanguage())
+        .then((res) => { if (res.terminal) addTerminal(res.terminal); else if (!res.opened) setError(res.message ?? t('Could not open the tool.')); })
+        .catch((e: Error) => setError(e.message)))))
+      .catch(() => { /* shown in the run */ })
+      .finally(() => { advancing.current = false; setOpsTick((n) => n + 1); });
+  }, [project.id, addTerminal]);
+  advanceRef.current = advanceOps;
+  useEffect(() => { advanceOps(); }, [advanceOps]);
 
   // A skill draft started in Settings opens here, once, when this project comes back.
   useEffect(() => {
@@ -191,6 +221,40 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
       setActiveTerm((cur) => (cur === id ? next[Math.min(i, next.length - 1)]?.id ?? null : cur));
       return next;
     });
+  };
+
+  // Where a tree item is on this computer: shown selected in the file manager, or its full path copied.
+  const openItemMenu = (node: TreeNode | null, at: { left: number; top: number }) => {
+    const path = node?.path ?? '';
+    const canCreate = (!node || node.type === 'dir') && path !== 'runs' && !path.startsWith('runs/');
+    setItemMenu({ path, canCreate, left: Math.min(at.left, window.innerWidth - 220), top: Math.min(at.top, window.innerHeight - (canCreate ? 160 : 90)) });
+  };
+  // Favorite notes of this project (the star in a note, or the note's menu here). Note windows tell when it changes.
+  const [favTick, setFavTick] = useState(0);
+  useEffect(() => api.onNotesChanged(() => setFavTick((n) => n + 1)), []);
+  const favorites = useMemo(() => new Set(favoriteNotes().filter((n) => n.project === project.id).map((n) => n.path)), [favTick, project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isNote = (path: string) => /^notes\/[^/]+\.md$/.test(path);
+  const toggleFavorite = (path: string) => {
+    setItemMenu(null);
+    setFavorite({ project: project.id, path }, !isFavorite({ project: project.id, path }));
+    setFavTick((n) => n + 1);
+    window.qa?.notesChanged();
+  };
+  const startCreate = (parent: string, kind: 'file' | 'folder') => { setItemMenu(null); setCreating({ parent, kind }); };
+  // The new file opens to be written; a new folder shows open in the tree.
+  const created = (path: string, kind: 'file' | 'folder') => {
+    setCreating(null);
+    loadTree();
+    setExpanded((s) => { const n = new Set(s); path.split('/').slice(0, kind === 'folder' ? undefined : -1).reduce((acc, seg) => { const p = acc ? `${acc}/${seg}` : seg; n.add(p); return p; }, ''); return n; });
+    if (kind === 'file') openPath(path, 'edit');
+  };
+  const revealItem = (path: string) => {
+    setItemMenu(null);
+    api.revealPath(project.id, path).catch((e: Error) => setError(e.message));
+  };
+  const copyItemPath = (path: string) => {
+    setItemMenu(null);
+    api.copyPath(project.id, path).then((full) => setNotice(t('Path copied: {path}', { path: full }))).catch((e: Error) => setError(e.message));
   };
 
   // Leaving the workspace closes its terminals.
@@ -319,12 +383,14 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         {search && onSearch && onFound ? <SearchPanel onOpenProject={(id) => onFound(id)} onOpenFile={onFound} onClose={onSearch} /> : <>
         <div className="sidebar-head">
           <button type="button" className="project-switch" onClick={goHome} title={t('Switch project')}>{project.name}</button>
+          <button type="button" className="icon-btn sidebar-more" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); openItemMenu(null, { left: r.left, top: r.bottom + 2 }); }}
+            title={t('Project folder options')} aria-label={t('Project folder options')} aria-haspopup="menu"><IconMore size={16} /></button>
           <button type="button" className="icon-btn sidebar-hide" onClick={hideThis} title={t('Hide from Moki')} aria-label={t('Hide from Moki')}><IconEyeOff size={16} /></button>
         </div>
         <div className="sidebar-tags" title={t('Projects and files with the same tag share their context with this project')}>
           <TagPicker catalog={catalog} value={project.tags} onChange={tagProject} onCatalog={setCatalog} compact />
         </div>
-        <div className="sidebar-scroll">
+        <div className="sidebar-scroll" onContextMenu={(e) => { e.preventDefault(); openItemMenu(null, { left: e.clientX, top: e.clientY }); }}>
           <FileTree
             tagColors={colorsOf}
             nodes={tree}
@@ -332,13 +398,35 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
             onOpen={openPath}
             expanded={expanded}
             onNewNote={() => setNote({ path: null })}
+            onMenu={openItemMenu}
+            favorites={favorites}
             onToggle={(p) => setExpanded((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; })}
           />
+          <OperationsPanel project={project.id} tick={opsTick} active={opView?.id ?? null}
+            onStart={(id) => { setNote(null); setOpView({ kind: 'launch', id }); }}
+            onRun={(id) => { setNote(null); setOpView({ kind: 'run', id }); }} />
         </div>
         </>}
       </aside>
 
       <main className="main">
+        {opView && !note && (
+          <div className="note-host ops-host">
+            {opView.kind === 'launch'
+              ? <OperationLaunch key={opView.id} project={project.id} operation={opView.id} tools={tools} onClose={() => setOpView(null)}
+                  onStarted={(run) => { setOpView({ kind: 'run', id: run.id }); advanceOps(); }} />
+              : <OperationRunView key={opView.id} project={project.id} run={opView.id} tick={opsTick} tools={tools}
+                  hasTerminal={(id) => terms.some((x) => x.id === id)}
+                  onTerminal={(term) => { setOpView(null); addTerminal(term); }}
+                  onOpenFile={(path) => openPath(path)} onClose={() => setOpView(null)} onChanged={advanceOps} />}
+          </div>
+        )}
+        {note && (
+          <div className="note-host">
+            <NoteDialog key={note.path ?? 'new'} embedded project={project.id} path={note.path}
+              onSaved={(saved) => { if ('path' in saved && saved.path !== note.path) loadTree(); }} onClose={() => { setNote(null); loadTree(); }} />
+          </div>
+        )}
         <div className="tabs" role="tablist">
           {graphOpen && (
             <div role="tab" aria-selected={graphFocus} className={`tab${graphFocus ? ' active' : ''}`} onClick={openGraph} title={t('Graph view')}>
@@ -439,7 +527,29 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
           </ul>
         </div>
       )}
-      {note && <NoteDialog project={project.id} path={note.path} onClose={() => { setNote(null); loadTree(); }} />}
+      {itemMenu && (
+        <div className="menu-backdrop" onMouseDown={() => setItemMenu(null)} onContextMenu={(e) => { e.preventDefault(); setItemMenu(null); }}>
+          <ul className="term-menu item-menu" role="menu" style={{ left: itemMenu.left, top: itemMenu.top }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setItemMenu(null); }}>
+            {itemMenu.canCreate && <>
+              <li><button type="button" role="menuitem" autoFocus onClick={() => startCreate(itemMenu.path, 'file')}><IconFile size={15} /> {t('New file')}</button></li>
+              <li><button type="button" role="menuitem" onClick={() => startCreate(itemMenu.path, 'folder')}><IconFolder size={15} /> {t('New folder')}</button></li>
+              <li className="ws-menu-sep" />
+            </>}
+            {isNote(itemMenu.path) && <>
+              <li><button type="button" role="menuitem" autoFocus onClick={() => { const path = itemMenu.path; setItemMenu(null); void api.openNoteWindow({ project: project.id, path }); }}>
+                <IconExternal size={15} /> {t('Open in the notebook')}
+              </button></li>
+              <li><button type="button" role="menuitem" onClick={() => toggleFavorite(itemMenu.path)}>
+                <span className={`star-mark${favorites.has(itemMenu.path) ? '' : ' off'}`}><IconStar size={15} /></span> {favorites.has(itemMenu.path) ? t('Remove from favorites') : t('Add to favorites')}
+              </button></li>
+              <li className="ws-menu-sep" />
+            </>}
+            <li><button type="button" role="menuitem" autoFocus={!itemMenu.canCreate && !isNote(itemMenu.path)} onClick={() => revealItem(itemMenu.path)}><IconFolder size={15} /> {t('Show in folder')}</button></li>
+            <li><button type="button" role="menuitem" onClick={() => copyItemPath(itemMenu.path)}><IconCopy size={15} /> {t('Copy path')}</button></li>
+          </ul>
+        </div>
+      )}
+      {creating && <NewEntryDialog project={project.id} parent={creating.parent} kind={creating.kind} onClose={() => setCreating(null)} onCreated={(path) => created(path, creating.kind)} />}
       {showSetup && <SetupDialog project={project} onClose={() => setShowSetup(false)}
         onSaved={(activity) => { setShowSetup(false); onProjectChanged(); if (activity) setLaunch({ activity }); }} />}
       {launch && <LaunchDialog project={project} tools={tools} preset={launch} onClose={() => setLaunch(null)} onTerminal={(t) => { setLaunch(null); addTerminal(t); }} />}

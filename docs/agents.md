@@ -22,6 +22,12 @@ description: Reviews user stories before development ... Never writes test cases
 category: quality
 skills: requirements-review, project-context
 access: project-write
+inputs: User stories                        # optional: what it needs to start, in words
+outputs: review-matrix.json, *.xlsx, *.pdf  # optional: files it delivers in the run's outputs folder
+outcomes: approved, rejected                # optional: the results it can end with (an operation can branch on them)
+mcps:                                       # optional: MCP servers it uses
+  jira: read                                #   read = only queries data; execute = changes something outside Moki
+ai: claude                                  # optional: default AI tool
 metadata:
   version: "1.0.0"
   status: draft
@@ -43,6 +49,14 @@ Rules (checked by `npm run validate` for built-in agents and by the app when you
 - `access`: `read-only` (reads the project, writes nothing), `project-write` (writes only inside `workspace/projects/<project-id>/`) or `repository-write` (may also change a linked code repository, after an approved plan).
 - `metadata.status`: `stable`, `draft`, `pending-migration` or `planned`. Only `stable` and `draft` agents can be used; the description of the others starts with `[PENDING MIGRATION]` or `[PLANNED]`.
 - The four sections `Role`, `When to use`, `How to work` and `Boundaries` are required.
+- Optional, for multi-agent operations (an operation passes the files one agent delivers to the next):
+  - `inputs`: comma-separated, in words (max 80 characters each).
+  - `outputs`: comma-separated file names with an extension, no folders; `*` matches any name (`*.pdf`).
+  - `outcomes`: comma-separated results the agent can end with (up to 8, a word or two each). It writes the one it ended with in its summary (`outcome: <result>`); an operation follows the arrow of that result.
+  - `mcps`: one `name: read` or `name: execute` line per MCP server. An operation asks for approval before a step that executes.
+  - `ai`: `claude`, `codex`, `cursor-agent`, `gemini` or `antigravity`; left out, the AI is chosen when it runs.
+  - A `read-only` agent writes nothing, so it cannot list outputs or execute through an MCP.
+- In the desktop app, the **In an operation** section of an agent shows these fields; on your own agents (and in *Create agent*) they are edited there, without touching the file.
 
 > Access levels are instructions to the AI today, written into the agent and the core policies. Enforcement by the AI tool itself (permission settings per tool) is planned for the project-sharing work.
 
@@ -69,3 +83,23 @@ Without the list, every usable agent is enabled. In the desktop app the side pan
 3. Click **Edit**, change the instructions (for example, add your team's conventions to *How to work*), and **Save**. Invalid changes are refused with the reason.
 
 Without the app, copy a file from `agents/` to `workspace/library/agents/<category>/`, rename it and its `name`, and edit it.
+
+## Multi-agent operations
+
+In the desktop app, **Settings › Operations** links agents into an operation: each agent is a card (a step) and an arrow passes the files one agent delivers to the next — right away (**Direct**) or after your approval (**Approval**). On an arrow you say which output answers each input of the next agent; inputs nobody answers are asked when the operation starts. Coloured **lanes** split the board into phases (visual only: the arrows set the order).
+
+- From a step with **results**, each dot of its card leads to a different step ("if rejected → fixer"); the arrow without a result (**otherwise**) covers the rest. A result with no arrow ends the operation there.
+- Arrows may go **back** to an earlier step (a loop). A step runs at most N times (set on the board, 3 by default); a loop must have a result to leave it.
+- **Start**: the step chosen with *Start with this step*, or the one no arrow leads to. One step runs at a time (no steps in parallel).
+- A step whose agent executes through an MCP always waits for your approval.
+- Operations are saved in `workspace/library/operations/<id>.json` (stays on your computer).
+
+### Running one in a project
+
+1. In the project's side panel, under **Operations**, the **+** links operations to the project (`project.json` → `"operations"`).
+2. Click an operation: choose the AI of each step (each agent's own, or one for all), answer what the agents need to start (text and inbox files) and say what you want. Moki warns when a step uses an MCP server its AI does not have configured.
+3. **Start operation** creates a run (`runs/<date>-op-<id>/`): `inputs/request.md` holds the request; each step delivers in `outputs/<step>/` and, when done, writes `handoff/<step>.md`. Moki starts each step in a terminal tab of its AI.
+4. A step is done when its handoff and its declared outputs are there. Then Moki follows the arrow of its result: the next step starts, or waits for your approval. When no arrow fits the result (or the agent did not say it), or a step reached its limit of runs, the run waits for you to choose the way on, or to end it. Each time a step runs it has its own folders (`outputs/s2`, then `outputs/s2-2` in a loop). While an agent waits for your answer in its terminal it writes `waiting/<step>.md` and the run shows **Waiting for you** with the question. **Pause** lets the running step finish and starts nothing after it; **Cancel** ends the run (what was done stays in its folder).
+5. The side panel shows the status of each run (In progress, Waiting for your approval, Paused, Completed); finished runs stay there, folded, as history.
+
+The app has to be open for the next step to start (it can be minimized).

@@ -85,6 +85,23 @@ test('projects and project creation', () => {
   assert.equal(slugify('Ação & Crítica!'), 'acao-critica');
 });
 
+test('deleting a project needs the word "delete" and removes only its folder', () => {
+  const linked = mkdtempSync(join(tmpdir(), 'qa-linked-'));
+  writeFileSync(join(linked, 'keep.txt'), 'x');
+  service.createProject('Doomed');
+  const dir = join(root, 'workspace', 'projects', 'doomed');
+  const file = join(dir, 'project.json');
+  writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), repository: linked }));
+  for (const word of ['', 'Delete', 'excluir', 'delete ']) assert.throws(() => service.deleteProject('doomed', word), /Type delete/);
+  assert.ok(existsSync(dir));
+  assert.throws(() => service.deleteProject('../doomed', 'delete'), /Unknown project/);
+  assert.equal(service.deleteProject('doomed', 'delete'), true);
+  assert.ok(!existsSync(dir));
+  assert.ok(existsSync(join(linked, 'keep.txt')), 'the linked folder stays');
+  assert.ok(!service.projects().some((p) => p.id === 'doomed'));
+  rmSync(linked, { recursive: true, force: true });
+});
+
 test('tree lists the project, hides dot files and annotates activities', () => {
   const tree = service.tree('acme');
   assert.deepEqual(tree.slice(0, 3).map((n) => n.name), ['context', 'inbox', 'runs']);
@@ -173,6 +190,48 @@ test('open folder / open with default program are confined and filtered', () => 
   service.openExternal('acme', 'inbox/us-1.md');
   assert.equal(opened.length, 1);
   assert.throws(() => service.openExternal('acme', 'inbox/tool.exe'), /not opened from the app/);
+});
+
+test('new files and folders: Markdown/text only, safe names, never inside activities', () => {
+  const project = join(root, 'workspace', 'projects', 'acme');
+  assert.equal(service.createEntry('acme', 'inbox', 'cenarios login', 'file'), 'inbox/cenarios login.md');
+  assert.equal(readFileSync(join(project, 'inbox', 'cenarios login.md'), 'utf8'), '');
+  assert.equal(service.createEntry('acme', 'inbox', 'notas.txt', 'file'), 'inbox/notas.txt');
+  assert.equal(service.createEntry('acme', '', 'sprint-12', 'folder'), 'sprint-12');
+  assert.equal(service.createEntry('acme', 'sprint-12', 'casos', 'file'), 'sprint-12/casos.md');
+  assert.ok(existsSync(join(project, 'sprint-12', 'casos.md')));
+  assert.throws(() => service.createEntry('acme', 'inbox', 'cenarios login.md', 'file'), /already exists/);
+  assert.throws(() => service.createEntry('acme', 'inbox', 'planilha.xlsx', 'file'), /Only Markdown/);
+  for (const bad of ['', '../fora', 'a/b', 'a\\b', '.oculto', 'nome.', 'con', 'x:y', 'a*b']) {
+    assert.throws(() => service.createEntry('acme', 'inbox', bad, 'file'), ServiceError, bad);
+  }
+  assert.throws(() => service.createEntry('acme', 'runs', 'x', 'folder'), /Activities/);
+  assert.throws(() => service.createEntry('acme', `runs/${RUN}`, 'x', 'file'), /Activities/);
+  assert.throws(() => service.createEntry('acme', '../..', 'x', 'folder'), ServiceError);
+  assert.throws(() => service.createEntry('acme', 'inbox/us-1.md', 'x', 'folder'), /Folder not found/);
+  assert.throws(() => service.createEntry('acme', 'inbox', 'x', 'link'), /Unknown kind/);
+  rmSync(join(project, 'sprint-12'), { recursive: true });
+  rmSync(join(project, 'inbox', 'cenarios login.md'));
+  rmSync(join(project, 'inbox', 'notas.txt'));
+});
+
+test('where an item is on this computer: shown in its folder or its full path, inside the project only', () => {
+  const project = join(root, 'workspace', 'projects', 'acme');
+  const copied: string[] = [];
+  const svc = createService(root, { ...noLaunch, copy: (text) => { copied.push(text); } });
+  assert.equal(svc.copyPath('acme', 'inbox/us-1.md'), join(project, 'inbox', 'us-1.md'));
+  assert.equal(svc.copyPath('acme', 'runs'), join(project, 'runs'));
+  assert.deepEqual(copied, [join(project, 'inbox', 'us-1.md'), join(project, 'runs')]);
+  assert.throws(() => service.copyPath('acme', 'runs'), /not available/);
+  service.revealPath('acme', 'inbox/us-1.md');
+  assert.equal(folders.at(-1), join(project, 'inbox'), 'without a file manager it opens the folder that holds the file');
+  service.revealPath('acme', 'context');
+  assert.equal(folders.at(-1), join(project, 'context'));
+  for (const bad of ['../../secret.txt', 'inbox/missing.md']) {
+    assert.throws(() => svc.copyPath('acme', bad), ServiceError);
+    assert.throws(() => service.revealPath('acme', bad), ServiceError);
+  }
+  assert.throws(() => svc.copyPath('nope', 'inbox'), /Unknown project/);
 });
 
 test('run details and open activities', () => {
@@ -278,6 +337,325 @@ test('agent library: built-in agents are read-only, copies are editable and vali
 
   assert.equal(service.deleteAgent(copy.name), true);
   assert.ok(!existsSync(file));
+});
+
+test('agents in operations: inputs, outputs, MCP servers and AI are read, validated and saved', () => {
+  const builtin = service.agent('requirements-analyst');
+  assert.deepEqual(builtin.inputs, ['User stories']);
+  assert.deepEqual(builtin.outputs, ['review-matrix.json', '*.xlsx', '*.pdf']);
+  assert.deepEqual(builtin.mcps, []);
+  assert.equal(builtin.ai, '');
+  assert.throws(() => service.saveAgentContract('requirements-analyst', { inputs: [] }), /cannot be edited/);
+
+  const copy = service.duplicateAgent('requirements-analyst');
+  const contract = { inputs: ['User stories', 'Business rules'], outputs: ['matriz.xlsx'], mcps: [{ name: 'jira', mode: 'read' }, { name: 'azure-devops', mode: 'execute' }], ai: 'codex' };
+  assert.equal(service.saveAgentContract(copy.name, contract), true);
+  const saved = service.agent(copy.name);
+  assert.deepEqual({ inputs: saved.inputs, outputs: saved.outputs, mcps: saved.mcps, ai: saved.ai }, contract);
+  const file = join(root, 'workspace', 'library', 'agents', 'quality', `${copy.name}.md`);
+  const text = readFileSync(file, 'utf8');
+  assert.match(text, /^mcps:\n {2}jira: read\n {2}azure-devops: execute\nai: codex\nmetadata:$/m, 'written before metadata, in the file format');
+  assert.match(text, /^# Requirements Analyst \(custom\)$/m, 'the body stays');
+
+  // Saved again: replaced, never duplicated; an empty contract removes the keys.
+  service.saveAgentContract(copy.name, { ...contract, mcps: [{ name: 'jira', mode: 'read' }], ai: '' });
+  assert.equal(readFileSync(file, 'utf8').match(/^mcps:/gm)?.length, 1);
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /azure-devops|^ai:/m);
+  service.saveAgentContract(copy.name, { inputs: [], outputs: [], mcps: [], ai: '' });
+  assert.doesNotMatch(readFileSync(file, 'utf8'), /^(inputs|outputs|mcps|ai):/m);
+
+  for (const [bad, why] of [
+    [{ outputs: ['folder/file.md'] }, /must be a file name/],
+    [{ outputs: ['no-extension'] }, /must be a file name/],
+    [{ inputs: ['A', 'a'] }, /listed twice/],
+    [{ inputs: ['one, two'] }, /no commas/],
+    [{ mcps: [{ name: 'jira', mode: 'write' }] }, /mode must be read or execute/],
+    [{ mcps: [{ name: '../x', mode: 'read' }] }, /invalid MCP server name/],
+    [{ ai: 'chat' }, /ai must be one of/],
+  ] as const) assert.throws(() => service.saveAgentContract(copy.name, bad), why);
+
+  // Reading only means writing nothing.
+  writeFileSync(file, readFileSync(file, 'utf8').replace('access: project-write', 'access: read-only'));
+  assert.throws(() => service.saveAgentContract(copy.name, { outputs: ['x.md'] }), /read-only agent writes nothing/);
+  assert.throws(() => service.saveAgentContract(copy.name, { mcps: [{ name: 'jira', mode: 'execute' }] }), /cannot execute/);
+  assert.equal(service.saveAgentContract(copy.name, { inputs: ['Log'], mcps: [{ name: 'jira', mode: 'read' }] }), true);
+  service.deleteAgent(copy.name);
+
+  // Agents created for a project carry the same fields in their file.
+  mkdirSync(join(root, 'workspace', 'projects', 'acme', 'skills', 'my-skill'), { recursive: true });
+  writeFileSync(join(root, 'workspace', 'projects', 'acme', 'skills', 'my-skill', 'SKILL.md'), '---\nname: my-skill\ndescription: x\n---\n');
+  const created = service.createScopeAgent('acme', { name: 'api-tester', description: 'Tests APIs.', skills: ['my-skill'], scope: 'project', contract: { inputs: ['Contract'], outputs: ['report.md'], mcps: [{ name: 'jira', mode: 'read' }], ai: 'claude' } });
+  assert.match(readFileSync(created.file, 'utf8'), /^description: "Tests APIs\."\ninputs: Contract\noutputs: report\.md\nmcps:\n {2}jira: read\nai: claude\n---$/m);
+  assert.deepEqual(service.projectItems('acme').agents.find((a) => a.name === 'api-tester')?.contract, { inputs: ['Contract'], outputs: ['report.md'], mcps: [{ name: 'jira', mode: 'read' }], ai: 'claude' });
+  assert.throws(() => service.createScopeAgent('acme', { name: 'bad', description: 'x', skills: ['my-skill'], scope: 'project', contract: { outputs: ['a/b.md'] } as never }), /Not created: output "a\/b\.md"/);
+  rmSync(created.file);
+  rmSync(join(root, 'workspace', 'projects', 'acme', 'skills'), { recursive: true });
+});
+
+test('operations: a line of agents; arrows pass outputs, the rest goes to the initial form; saved in the library', () => {
+  const keys = service.operationAgents().map((a) => a.key);
+  assert.ok(keys.includes('library:requirements-analyst') && keys.includes('library:test-designer'));
+  assert.ok(!keys.includes('library:automation-engineer'), 'agents not usable yet are left out');
+
+  const ra = 'library:requirements-analyst';
+  const td = 'library:test-designer';
+  const fa = 'library:failure-analyst';
+  const base = { name: 'Revisão e testes', description: '', steps: [{ id: 's1', agent: ra, x: 20, y: 40 }, { id: 's2', agent: td, x: 300, y: 40.6 }] };
+  const saved = service.saveOperation({ ...base, links: [{ from: 's1', to: 's2', gate: 'approval', map: { 'Business rules': 'review-matrix.json' } }] });
+  assert.equal(saved.id, 'revisao-e-testes');
+  assert.equal(saved.steps[1].y, 41, 'positions are whole pixels');
+  assert.deepEqual(saved.check.order, ['s1', 's2']);
+  assert.deepEqual(saved.check.initialInputs.map((i) => `${i.step}:${i.input}`), ['s1:User stories', 's2:User stories', 's2:Acceptance criteria']);
+  assert.deepEqual(saved.check.approvals, ['s2']);
+  assert.deepEqual(saved.check.errors, []);
+  const file = join(root, 'workspace', 'library', 'operations', 'revisao-e-testes.json');
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).links[0].map['Business rules'], 'review-matrix.json');
+  assert.equal(service.operations().length, 1);
+
+  // Renamed: same id. A second one with the same name is refused; another name gets its own id.
+  assert.equal(service.saveOperation({ ...saved, name: 'Revisão completa' }).id, 'revisao-e-testes');
+  assert.throws(() => service.saveOperation({ ...base, name: 'revisão completa', links: [] }), /already an operation named/);
+  assert.equal(service.saveOperation({ ...base, name: 'Outra', links: [] }).id, 'outra');
+
+  // Lanes: coloured bands of the board, kept as drawn (width within limits); a bad colour is refused.
+  const lanes = [{ id: 'l1', name: 'Análise', color: '#7FB2E5', width: 90 }, { id: 'l2', name: 'Testes', color: '#8fbf7f', width: 320 }];
+  assert.deepEqual(service.saveOperation({ ...base, id: 'outra', name: 'Outra', lanes, links: [] }).lanes,
+    [{ id: 'l1', name: 'Análise', color: '#7fb2e5', width: 160 }, { id: 'l2', name: 'Testes', color: '#8fbf7f', width: 320 }]);
+  assert.throws(() => service.saveOperation({ ...base, id: 'outra', name: 'Outra', lanes: [{ id: 'l1', name: 'X', color: 'red', width: 200 }], links: [] }), /Invalid lane "X"/);
+
+  const fill = (m: { text: string; params: Record<string, string> }) => m.text.replace(/\{(\w+)\}/g, (_, k: string) => m.params[k]);
+  const check = (links: unknown[], steps = base.steps) => {
+    const c = service.checkOperation({ ...base, steps, links });
+    return { ...c, errors: c.errors.map(fill), warnings: c.warnings.map(fill) };
+  };
+  const three = [...base.steps, { id: 's3', agent: fa, x: 600, y: 40 }];
+  assert.match(check([{ from: 's1', to: 's2', gate: 'auto', map: {} }, { from: 's1', to: 's3', gate: 'auto', map: {} }], three).errors.join(), /two steps/);
+  assert.match(check([{ from: 's1', to: 's2', gate: 'auto', map: {} }, { from: 's2', to: 's1', gate: 'auto', map: {} }]).errors.join(), /loop/);
+  assert.match(check([{ from: 's1', to: 's2', gate: 'auto', map: { 'User stories': 'made-up.md' } }]).errors.join(), /not an output of requirements-analyst/);
+  assert.match(check([{ from: 's1', to: 's2', gate: 'auto', map: { Nope: 'review-matrix.json' } }]).errors.join(), /not an input of test-designer/);
+  assert.match(check([{ from: 's1', to: 's2', gate: 'later', map: {} }]).errors.join(), /unknown kind/);
+  assert.match(check([], [{ id: 's1', agent: 'library:gone', x: 0, y: 0 }]).errors.join(), /not available/);
+  assert.match(check([]).warnings.join(), /not linked to the others: test-designer/);
+  // The failure analyst delivers no file: in the middle, the next step would receive nothing.
+  const middle = check([{ from: 's3', to: 's1', gate: 'auto', map: {} }, { from: 's1', to: 's2', gate: 'auto', map: {} }], three);
+  assert.deepEqual(middle.order, ['s3', 's1', 's2']);
+  assert.match(middle.warnings.join(), /failure-analyst delivers no files/);
+  assert.deepEqual(middle.approvals, [], 'auto arrows and no MCP that executes: nothing waits');
+  assert.throws(() => service.saveOperation({ ...base, name: 'Loop', links: [{ from: 's1', to: 's2', gate: 'auto', map: {} }, { from: 's2', to: 's1', gate: 'auto', map: {} }] }), /Not saved: .*loop/);
+  assert.throws(() => service.saveOperation({ ...base, name: '  ', links: [] }), /Give the operation a name/);
+
+  assert.equal(service.deleteOperation('outra'), true);
+  assert.equal(service.deleteOperation('revisao-e-testes'), true);
+  assert.deepEqual(service.operations(), []);
+  assert.throws(() => service.deleteOperation('../x'), /Unknown operation/);
+});
+
+test('operations in a project: linked, started with the initial form, run step by step through files', async () => {
+  const { validateSchema } = await import('../scripts/lib/schema.mjs');
+  const runSchema = JSON.parse(readFileSync(join(ROOT, 'schemas', 'execution-state.schema.json'), 'utf8'));
+  const started: { tool: string; prompt: string }[] = [];
+  const svc = createService(root, {
+    ...noLaunch,
+    launch: (tool, prompt) => { started.push({ tool, prompt }); return { opened: true, message: '', terminal: { id: `t${started.length}`, title: tool } }; },
+    detectTools: () => ({ claude: true, codex: true, 'cursor-agent': false, gemini: false, antigravity: false }) as never,
+  });
+  const op = svc.saveOperation({
+    name: 'Fluxo QA', description: '', lanes: [{ id: 'l1', name: 'Análise', color: '#7fb2e5', width: 300 }],
+    steps: [{ id: 's1', agent: 'library:requirements-analyst', x: 20, y: 60 }, { id: 's2', agent: 'library:test-designer', x: 320, y: 60 }],
+    links: [{ from: 's1', to: 's2', gate: 'approval', map: { 'Business rules': 'review-matrix.json' } }],
+  });
+  assert.throws(() => svc.operationPlan('acme', op.id), /not linked to the project/);
+  assert.deepEqual(svc.setProjectOperations('acme', [op.id, 'made-up']), [op.id]);
+  assert.deepEqual(svc.projectOperations('acme').map((o) => o.id), [op.id]);
+  const plan = svc.operationPlan('acme', op.id);
+  assert.deepEqual(plan.steps.map((s) => s.agent), ['requirements-analyst', 'test-designer']);
+  assert.ok('claude' in plan.mcpsByTool && plan.mcpsByTool.antigravity === null);
+
+  assert.throws(() => svc.startOperation('acme', op.id, { tools: { s1: 'claude' } }), /Choose an AI tool for every step/);
+  assert.throws(() => svc.startOperation('acme', op.id, { tools: { s1: 'claude', s2: 'gemini' } }), /not installed/);
+  assert.throws(() => svc.startOperation('acme', op.id, { tools: { s1: 'claude', s2: 'codex' }, answers: [{ step: 's1', input: 'User stories', files: ['inbox/nope.md'] }] }), /Not in the project inbox/);
+  const run = svc.startOperation('acme', op.id, {
+    tools: { s1: 'claude', s2: 'codex' }, context: 'Revisar o login',
+    answers: [{ step: 's1', input: 'User stories', text: 'US-1 login', files: ['inbox/us-1.md'] }, { step: 'x', input: 'ignored', text: 'x', files: [] }],
+  });
+  const dir = join(root, 'workspace', 'projects', 'acme', 'runs', run.id);
+  assert.match(run.id, /^\d{8}-\d{4}-op-fluxo-qa$/);
+  assert.deepEqual(run.steps.map((s) => [s.id, s.ai, s.lane]), [['s1', 'claude', 'Análise'], ['s2', 'codex', '']]);
+  assert.deepEqual(run.visits.map((v) => [v.slot, v.status]), [['s1', 'ready']]);
+  const request = readFileSync(join(dir, 'inputs', 'request.md'), 'utf8');
+  assert.match(request, /Revisar o login/);
+  assert.match(request, /### User stories\n\nUS-1 login\n\n- File: `workspace\/projects\/acme\/inbox\/us-1\.md`/);
+  assert.doesNotMatch(request, /ignored/);
+
+  // Step 1: started by the app, done when its handoff and every declared output are there.
+  assert.deepEqual(svc.advanceOperations('acme'), [{ run: run.id, step: 's1' }]);
+  const first = svc.startOperationStep('acme', run.id, 's1', 'Portuguese (pt-BR)');
+  assert.equal(started[0].tool, 'claude');
+  assert.match(first.prompt, /Act as the requirements-analyst agent: read agents\/quality\/requirements-analyst\.md/);
+  assert.match(first.prompt, /multi-agent operation "Fluxo QA"/);
+  assert.match(first.prompt, new RegExp(`write workspace/projects/acme/runs/${run.id}/handoff/s1\\.md`));
+  assert.match(first.prompt, new RegExp(`write the question in workspace/projects/acme/runs/${run.id}/waiting/s1\\.md`));
+  assert.doesNotMatch(first.prompt, /outcome:/, 'no results declared: no outcome asked');
+  assert.throws(() => svc.startOperationStep('acme', run.id, 's1', 'English'), /cannot start now/, 'never twice');
+  assert.equal(svc.operationRun('acme', run.id).visits[0].terminal, 't1');
+
+  // The agent stops to ask something: the run waits for the user, with the question.
+  writeFileSync(join(dir, 'waiting', 's1.md'), 'Qual ambiente devo considerar?');
+  svc.advanceOperations('acme');
+  let state = svc.operationRun('acme', run.id);
+  assert.equal(state.status, 'awaiting-input');
+  assert.equal(state.visits[0].question, 'Qual ambiente devo considerar?');
+  assert.deepEqual(state.pending.map((p) => p.description), ['Qual ambiente devo considerar?']);
+  rmSync(join(dir, 'waiting', 's1.md'));
+  svc.advanceOperations('acme');
+  assert.equal(svc.operationRun('acme', run.id).status, 'in-progress', 'answered: back to work');
+
+  mkdirSync(join(dir, 'outputs', 's1'), { recursive: true });
+  writeFileSync(join(dir, 'outputs', 's1', 'review-matrix.json'), '{}');
+  writeFileSync(join(dir, 'outputs', 's1', 'Matriz.xlsx'), 'x');
+  writeFileSync(join(dir, 'handoff', 's1.md'), 'Revisei.');
+  assert.deepEqual(svc.advanceOperations('acme'), []);
+  assert.deepEqual(svc.operationRun('acme', run.id).visits[0].missing, ['*.pdf']);
+  writeFileSync(join(dir, 'outputs', 's1', 'Relatório.pdf'), 'x');
+  assert.deepEqual(svc.advanceOperations('acme'), [], 'an approval arrow: nothing starts on its own');
+  state = svc.operationRun('acme', run.id);
+  assert.equal(state.status, 'awaiting-approval');
+  assert.deepEqual(state.visits.map((v) => [v.slot, v.status]), [['s1', 'done'], ['s2', 'awaiting-approval']]);
+  assert.ok(!svc.openRuns('acme').some((r) => r.id === run.id), 'not resumed as a single activity: Moki runs it');
+
+  // Paused: approving does not start it; resuming does.
+  assert.equal(svc.pauseOperation('acme', run.id, true).status, 'paused');
+  assert.equal(svc.approveOperationStep('acme', run.id), 's2');
+  assert.deepEqual(svc.advanceOperations('acme'), []);
+  svc.pauseOperation('acme', run.id, false);
+  assert.deepEqual(svc.advanceOperations('acme'), [{ run: run.id, step: 's2' }]);
+  const second = svc.startOperationStep('acme', run.id, 's2', 'English');
+  assert.equal(started[1].tool, 'codex');
+  assert.match(second.prompt, new RegExp(`delivered its files in workspace/projects/acme/runs/${run.id}/outputs/s1/`));
+  assert.match(second.prompt, /"Business rules" is review-matrix\.json/);
+  assert.match(second.prompt, /answered in the request: "User stories", "Acceptance criteria"/);
+
+  mkdirSync(join(dir, 'outputs', 's2', 'export'), { recursive: true });
+  for (const f of ['mapping.md', 'test-cases.json', 'export/Casos.xlsx']) writeFileSync(join(dir, 'outputs', 's2', f), 'x');
+  writeFileSync(join(dir, 'handoff', 's2.md'), 'Casos prontos.');
+  svc.advanceOperations('acme');
+  state = svc.operationRun('acme', run.id);
+  assert.equal(state.status, 'completed');
+  assert.ok(state.artifacts.includes(`workspace/projects/acme/runs/${run.id}/outputs/s2/export/Casos.xlsx`));
+  assert.deepEqual(state.approvals.map((a) => [a.step, a.decision]), [['s2', 'approved']]);
+  assert.deepEqual(validateSchema(runSchema, JSON.parse(readFileSync(join(dir, 'state.json'), 'utf8'))), [], 'a valid run for the framework');
+  assert.match(readFileSync(join(root, 'workspace', 'projects', 'acme', 'activity-log.md'), 'utf8'), new RegExp(`operation: Fluxo QA \\| ${run.id}`));
+
+  const other = svc.startOperation('acme', op.id, { tools: { s1: 'claude', s2: 'claude' } });
+  assert.equal(svc.cancelOperation('acme', other.id).status, 'cancelled');
+  assert.deepEqual(svc.advanceOperations('acme'), []);
+  assert.throws(() => svc.pauseOperation('acme', other.id, true), /has ended/);
+  assert.deepEqual(svc.operationRuns('acme').map((r) => r.status).sort(), ['cancelled', 'completed']);
+
+  svc.setProjectOperations('acme', []);
+  svc.deleteOperation(op.id);
+  rmSync(join(root, 'workspace', 'projects', 'acme', 'runs', run.id), { recursive: true });
+  rmSync(join(root, 'workspace', 'projects', 'acme', 'runs', other.id), { recursive: true });
+});
+
+test('operations branch on the result of an agent, loop back up to a limit, and ask the user when nothing fits', () => {
+  const svc = createService(root, {
+    ...noLaunch,
+    launch: () => ({ opened: true, message: '' }),
+    detectTools: () => ({ claude: true }) as never,
+  });
+  // A reviewer that ends "approved" or "rejected", and a fixer: rejected → fix → review again; approved → test design.
+  const reviewer = service.duplicateAgent('requirements-analyst');
+  service.saveAgentContract(reviewer.name, { inputs: ['User stories'], outputs: ['review.md'], outcomes: ['approved', 'rejected'], mcps: [], ai: '' });
+  const fixer = service.duplicateAgent('requirements-analyst');
+  service.saveAgentContract(fixer.name, { inputs: [], outputs: ['fixed.md'], mcps: [], ai: '' });
+  const r = `library:${reviewer.name}`;
+  const base = {
+    name: 'Revisa até aprovar', description: '', lanes: [],
+    steps: [{ id: 's1', agent: r, x: 0, y: 0 }, { id: 's2', agent: `library:${fixer.name}`, x: 300, y: 200 }, { id: 's3', agent: 'library:test-designer', x: 600, y: 0 }],
+  };
+  const links = [
+    { from: 's1', to: 's3', gate: 'auto', map: {}, when: 'approved' },
+    { from: 's1', to: 's2', gate: 'auto', map: {}, when: 'rejected' },
+    { from: 's2', to: 's1', gate: 'auto', map: {} },
+  ];
+  const fill = (m: { text: string; params: Record<string, string> }) => m.text.replace(/\{(\w+)\}/g, (_, k: string) => m.params[k]);
+  const check = (l: unknown[], extra = {}) => { const c = svc.checkOperation({ ...base, links: l, ...extra }); return { ...c, errors: c.errors.map(fill), warnings: c.warnings.map(fill) }; };
+  const ok = check(links);
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual(ok.order, ['s1', 's3', 's2']);
+  assert.equal(ok.start, 's1', 'the step no arrow leads to... or the one chosen');
+  assert.match(check([links[0]]).warnings.join(), /If [\w-]+ ends with "rejected", the operation ends there/);
+  assert.match(check([...links, { from: 's1', to: 's2', gate: 'auto', map: {}, when: 'approved' }]).errors.join(), /two arrows for the result "approved"/);
+  assert.match(check([{ ...links[0], when: 'maybe' }, links[1], links[2]]).errors.join(), /"maybe" is not a result of/);
+  assert.match(check([{ from: 's1', to: 's2', gate: 'auto', map: {} }, { from: 's1', to: 's3', gate: 'auto', map: {} }]).errors.join(), /without a result to choose between them/);
+  assert.match(check([{ from: 's2', to: 's1', gate: 'auto', map: {} }, { from: 's1', to: 's2', gate: 'auto', map: {} }]).errors.join(), /loop with no result to leave it/);
+  assert.match(check(links, { maxRounds: 0 }).errors.join(), /from 1 to 10 times/);
+
+  const op = svc.saveOperation({ ...base, links, maxRounds: 2 });
+  svc.setProjectOperations('acme', [op.id]);
+  const run = svc.startOperation('acme', op.id, { tools: { s1: 'claude', s2: 'claude', s3: 'claude' } });
+  const dir = join(root, 'workspace', 'projects', 'acme', 'runs', run.id);
+  const finish = (slot: string, file: string, handoff: string) => {
+    mkdirSync(join(dir, 'outputs', slot), { recursive: true });
+    writeFileSync(join(dir, 'outputs', slot, file), 'x');
+    writeFileSync(join(dir, 'handoff', `${slot}.md`), handoff);
+    return svc.advanceOperations('acme');
+  };
+  const slots = () => svc.operationRun('acme', run.id).visits.map((v) => `${v.slot}:${v.status}${v.outcome ? `:${v.outcome}` : ''}`);
+
+  const prompt = svc.startOperationStep('acme', run.id, 's1', 'English').prompt;
+  assert.match(prompt, /first line must be "outcome: <result>", the result being exactly one of: approved, rejected/);
+  assert.deepEqual(finish('s1', 'review.md', 'outcome: rejected\nFaltam regras.'), [{ run: run.id, step: 's2' }]);
+  svc.startOperationStep('acme', run.id, 's2', 'English');
+  assert.deepEqual(finish('s2', 'fixed.md', 'Ajustei.'), [{ run: run.id, step: 's1-2' }], 'back to the review: its second time');
+  const again = svc.startOperationStep('acme', run.id, 's1-2', 'English').prompt;
+  assert.match(again, /this step runs again: time 2/);
+  assert.match(again, new RegExp(`Your earlier work in this run: workspace/projects/acme/runs/${run.id}/outputs/s1/`));
+  assert.match(again, new RegExp(`delivered its files in workspace/projects/acme/runs/${run.id}/outputs/s2/`));
+
+  // Rejected again: the fixer would run a second time (maxRounds 2 allows it), then the review a third time (no: the limit).
+  finish('s1-2', 'review.md', '**Outcome:** Rejected');
+  svc.startOperationStep('acme', run.id, 's2-2', 'English');
+  assert.deepEqual(finish('s2-2', 'fixed.md', 'Ajustei de novo.'), []);
+  let state = svc.operationRun('acme', run.id);
+  assert.equal(state.status, 'awaiting-input');
+  assert.equal(state.decision?.kind, 'limit');
+  assert.deepEqual(slots(), ['s1:done:rejected', 's2:done', 's1-2:done:rejected', 's2-2:done']);
+  svc.chooseOperationPath('acme', run.id, 's1');
+  svc.startOperationStep('acme', run.id, 's1-3', 'English');
+
+  // No valid result: the user picks the path.
+  finish('s1-3', 'review.md', 'Acho que está bom.');
+  state = svc.operationRun('acme', run.id);
+  assert.equal(state.decision?.kind, 'path');
+  assert.deepEqual(state.decision?.options.map((o) => `${o.to}:${o.when}`), ['s3:approved', 's2:rejected']);
+  assert.throws(() => svc.chooseOperationPath('acme', run.id, 's9'), /Choose one of the steps offered/);
+  svc.chooseOperationPath('acme', run.id, 's3');
+  assert.deepEqual(svc.advanceOperations('acme'), [{ run: run.id, step: 's3' }]);
+  svc.startOperationStep('acme', run.id, 's3', 'English');
+  for (const f of ['mapping.md', 'test-cases.json']) { mkdirSync(join(dir, 'outputs', 's3'), { recursive: true }); writeFileSync(join(dir, 'outputs', 's3', f), 'x'); }
+  finish('s3', 'casos.xlsx', 'Feito.');
+  state = svc.operationRun('acme', run.id);
+  assert.equal(state.status, 'completed');
+  assert.deepEqual(state.approvals.map((a) => a.notes), [`went on to ${reviewer.name}`, 'went on to test-designer']);
+
+  // A result with no arrow ends the operation there.
+  const short = svc.saveOperation({ ...base, name: 'Só revisa', links: [links[0]] });
+  svc.setProjectOperations('acme', [op.id, short.id]);
+  const run2 = svc.startOperation('acme', short.id, { tools: { s1: 'claude', s3: 'claude' } });
+  const dir2 = join(root, 'workspace', 'projects', 'acme', 'runs', run2.id);
+  svc.startOperationStep('acme', run2.id, 's1', 'English');
+  mkdirSync(join(dir2, 'outputs', 's1'), { recursive: true });
+  writeFileSync(join(dir2, 'outputs', 's1', 'review.md'), 'x');
+  writeFileSync(join(dir2, 'handoff', 's1.md'), 'outcome: rejected');
+  svc.advanceOperations('acme');
+  assert.equal(svc.operationRun('acme', run2.id).status, 'completed');
+
+  svc.setProjectOperations('acme', []);
+  for (const o of [op.id, short.id]) svc.deleteOperation(o);
+  for (const d of [dir, dir2]) rmSync(d, { recursive: true });
+  for (const a of [reviewer.name, fixer.name]) service.deleteAgent(a);
 });
 
 test('agents per project: enabled list in project.json gates the launch', () => {

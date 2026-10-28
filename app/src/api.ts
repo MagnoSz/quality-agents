@@ -59,7 +59,45 @@ export interface RunState {
   artifacts?: string[];
 }
 
-export interface AgentInfo {
+// What an agent needs and delivers, the MCP servers it uses and its default AI tool (multi-agent operations chain agents through it).
+export interface AgentMcp { name: string; mode: 'read' | 'execute' | string }
+export interface AgentContract { inputs: string[]; outputs: string[]; outcomes?: string[]; mcps: AgentMcp[]; ai: string }
+export const emptyContract = (): AgentContract => ({ inputs: [], outputs: [], outcomes: [], mcps: [], ai: '' });
+
+// Multi-agent operations (scripts/lib/operations.ts): agents in one line, linked by arrows.
+export type Gate = 'auto' | 'approval';
+export interface OperationStep { id: string; agent: string; x: number; y: number }
+// when: the result of the step before that leads here ('' = always, or otherwise when other arrows hold results).
+export interface OperationLink { from: string; to: string; gate: Gate | string; map: Record<string, string>; when?: string }
+export interface CheckMessage { text: string; params: Record<string, string> } // English with {placeholders}, translated with t()
+export interface OperationCheck {
+  errors: CheckMessage[]; warnings: CheckMessage[]; start: string; order: string[];
+  initialInputs: { step: string; agent: string; input: string }[]; approvals: string[];
+}
+export interface OperationLane { id: string; name: string; color: string; width: number } // a coloured band of the board (visual only)
+export interface OperationDraft { id?: string; name: string; description: string; start?: string; maxRounds?: number; lanes: OperationLane[]; steps: OperationStep[]; links: OperationLink[] }
+export interface Operation extends OperationDraft { id: string; check: OperationCheck }
+export interface OperationAgent extends AgentContract { key: string; name: string; source: 'library' | 'global'; description: string; access: string }
+
+// An operation in a project: started from its plan, then run step by step (scripts/lib/operation-runs.ts).
+export interface OperationPlanStep { id: string; agent: string; description: string; ai: string; mcps: AgentMcp[]; gate: string; outputs: string[] }
+export interface OperationPlan { operation: Operation; steps: OperationPlanStep[]; mcpsByTool: Record<string, string[] | null>; inbox: string[] }
+export interface OperationAnswer { step: string; input: string; text: string; files: string[] }
+// A run: its steps (agents), and each time one ran (a visit: "s2", then "s2-2" when a loop brought it back).
+export interface OperationRunStep { id: string; agent: string; name: string; inputs: string[]; outputs: string[]; outcomes: string[]; executes: string[]; lane: string; ai: string }
+export type VisitStatus = 'awaiting-approval' | 'ready' | 'running' | 'done';
+export interface OperationVisit {
+  slot: string; step: string; round: number; from: string; gate: string; status: VisitStatus;
+  outcome?: string; question?: string; terminal?: string; startedAt?: string; finishedAt?: string; handoff?: boolean; missing?: string[];
+}
+export interface OperationDecision { kind: 'path' | 'limit'; from: string; outcome?: string; options: { to: string; when: string }[] }
+export interface OperationRun {
+  id: string; project: string; operation: { id: string; name: string }; status: string; currentStep: string;
+  createdAt: string; updatedAt: string; paused: boolean; ended: boolean; maxRounds: number;
+  steps: OperationRunStep[]; visits: OperationVisit[]; decision: OperationDecision | null; artifacts: string[];
+}
+
+export interface AgentInfo extends AgentContract {
   name: string; description: string; category: string; skills: string[]; access: string; version: string; status: string;
   basedOn: string; source: 'builtin' | 'custom'; path: string; usable: boolean;
 }
@@ -91,17 +129,17 @@ export interface SkillSearchPage { items: RegistrySkill[]; page: number; pages: 
 export interface InstallResult { name: string; files: number; folders: string[]; unverified: string[]; backup?: string }
 export type SkillScope = 'project' | 'global';
 export interface ScopeAgents { skills: string[]; builtin: { name: string; description: string }[]; agents: string[]; folder: string; agentsFolder: string }
-export interface ScopeAgentRequest { name: string; description: string; skills: string[]; scope: SkillScope }
+export interface ScopeAgentRequest { name: string; description: string; skills: string[]; scope: SkillScope; contract?: AgentContract }
 export interface ProjectItems {
   skillsFolder: string; agentsFolder: string;
   skills: { name: string; description: string }[];
-  agents: { name: string; description: string }[];
+  agents: { name: string; description: string; contract?: AgentContract }[];
 }
 export interface GlobalItems {
   skills: { name: string; description: string; folders: string[]; linkedBy: string[] }[];
-  agents: { name: string; description: string; file: string }[];
+  agents: { name: string; description: string; file: string; contract?: AgentContract }[];
 }
-export interface GlobalAgentDetail { name: string; description: string; file: string; text: string; html: string }
+export interface GlobalAgentDetail { name: string; description: string; file: string; text: string; html: string; contract?: AgentContract }
 
 interface Bridge {
   call(method: string, ...args: unknown[]): Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
@@ -113,6 +151,7 @@ interface Bridge {
   notesChanged(): void;
   onNotesChanged(callback: () => void): () => void;
   noteMax(): void;
+  onNotebookOpen?(callback: (target: { project: string | null; path: string | null; loose: string | null }) => void): () => void;
   showTerminal?(project: string, terminal: TerminalRef): void;
   openInMain?(project: string, path: string): void;
   onShowTerminal?(callback: (project: string, terminal: TerminalRef) => void): () => void;
@@ -149,6 +188,7 @@ export const api = {
   renameWorkspace: (id: string, name: string) => call<WorkspaceInfo>('renameWorkspace', id, name),
   forgetWorkspace: (id: string) => call<boolean>('forgetWorkspace', id),
   createProject: (name: string, starter: Starter, folder?: string, tags: string[] = []) => call<ProjectSummary & { backup?: string }>('createProject', name, starter, folder ?? null, tags),
+  deleteProject: (project: string, confirm: string) => call<boolean>('deleteProject', project, confirm),
   tags: () => call<Tag[]>('tags'),
   saveTag: (tag: { id?: string; name: string; color?: string; description?: string }) => call<Tag>('saveTag', tag),
   removeTag: (id: string) => call<boolean>('removeTag', id),
@@ -174,6 +214,9 @@ export const api = {
   openRuns: (project: string) => call<OpenRun[]>('openRuns', project),
   openFolder: (project: string, path = '') => call<boolean>('openFolder', project, path),
   openExternal: (project: string, path: string) => call<boolean>('openExternal', project, path),
+  createEntry: (project: string, parent: string, name: string, kind: 'file' | 'folder') => call<string>('createEntry', project, parent, name, kind),
+  revealPath: (project: string, path: string) => call<boolean>('revealPath', project, path),
+  copyPath: (project: string, path: string) => call<string>('copyPath', project, path),
   linkRepository: (project: string) => call<(ProjectSummary & { backup?: string }) | null>('linkRepository', project),
   openLinkedFolder: (project: string) => call<boolean>('openLinkedFolder', project),
   launch: (req: LaunchRequest) => call<LaunchResult>('launch', req),
@@ -183,6 +226,26 @@ export const api = {
   duplicateAgent: (name: string) => call<AgentInfo>('duplicateAgent', name),
   saveAgent: (name: string, text: string) => call<boolean>('saveAgent', name, text),
   deleteAgent: (name: string) => call<boolean>('deleteAgent', name),
+  saveAgentContract: (name: string, contract: AgentContract) => call<boolean>('saveAgentContract', name, contract),
+  knownMcps: (project?: string | null) => call<string[]>('knownMcps', project ?? null),
+  operationAgents: () => call<OperationAgent[]>('operationAgents'),
+  operations: () => call<Operation[]>('operations'),
+  checkOperation: (op: OperationDraft) => call<OperationCheck>('checkOperation', op),
+  suggestLink: (from: string, to: string) => call<Record<string, string>>('suggestLink', from, to),
+  saveOperation: (op: OperationDraft) => call<Operation>('saveOperation', op),
+  deleteOperation: (id: string) => call<boolean>('deleteOperation', id),
+  projectOperations: (project: string) => call<Operation[]>('projectOperations', project),
+  setProjectOperations: (project: string, ids: string[]) => call<string[]>('setProjectOperations', project, ids),
+  operationPlan: (project: string, id: string) => call<OperationPlan>('operationPlan', project, id),
+  startOperation: (project: string, id: string, req: { tools: Record<string, string>; answers: OperationAnswer[]; context: string }) => call<OperationRun>('startOperation', project, id, req),
+  operationRuns: (project: string) => call<OperationRun[]>('operationRuns', project),
+  operationRun: (project: string, run: string) => call<OperationRun>('operationRun', project, run),
+  advanceOperations: (project: string) => call<{ run: string; step: string }[]>('advanceOperations', project),
+  startOperationStep: (project: string, run: string, step: string, language: string) => call<LaunchResult>('startOperationStep', project, run, step, language),
+  approveOperationStep: (project: string, run: string) => call<string>('approveOperationStep', project, run),
+  chooseOperationPath: (project: string, run: string, to: string) => call<OperationRun>('chooseOperationPath', project, run, to),
+  pauseOperation: (project: string, run: string, paused: boolean) => call<OperationRun>('pauseOperation', project, run, paused),
+  cancelOperation: (project: string, run: string) => call<OperationRun>('cancelOperation', project, run),
   projectAgents: (project: string) => call<string[]>('projectAgents', project),
   setProjectAgents: (project: string, names: string[]) => call<string[]>('setProjectAgents', project, names),
   searchSkills: (query: string, category = '', page = 1) => call<SkillSearchPage>('searchSkills', query, category, page),
@@ -222,5 +285,5 @@ export function describeRun(id: string): { date: string; title: string } {
 
 export const statusLabel = (status: string): string => ({
   'in-progress': t('In progress'), 'awaiting-approval': t('Waiting for your approval'), 'awaiting-input': t('Waiting for input'),
-  blocked: t('Blocked'), completed: t('Completed'), cancelled: t('Cancelled'),
+  blocked: t('Blocked'), paused: t('Paused'), completed: t('Completed'), cancelled: t('Cancelled'),
 } as Record<string, string>)[status] ?? status;

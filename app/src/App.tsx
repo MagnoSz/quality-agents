@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, hasBridge, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo, type WorkspaceInfo } from './api';
 import { t, useLang } from './i18n';
-import { NoteDialog } from './components/NoteDialog';
+import { Notebook } from './components/Notebook';
 import { hiddenIds, setMenuWorkspace } from './side-menu';
 import { Ribbon } from './components/Ribbon';
 import { Home } from './screens/Home';
@@ -102,14 +102,7 @@ export function App() {
     const loose = noteParams.get('loose');
     return (
       <div className="note-float">
-        <NoteDialog
-          project={noteParams.get('project')}
-          path={noteParams.get('path')}
-          looseId={loose && loose !== 'new' ? loose : null}
-          projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-          floating
-          onClose={() => window.close()}
-        />
+        <Notebook project={noteParams.get('project')} path={noteParams.get('path')} loose={loose} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       </div>
     );
   }
@@ -135,7 +128,7 @@ export function App() {
     return (
       <div className="shell">
         <Ribbon settingsOn={settings !== null} onHome={home} onSettings={() => setSettings(settings ? null : 'agents')} searchOn={search} onSearch={toggleSearch} />
-        <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} settings={settings} onSettings={setSettings} project={null} onTerminal={openTerminal} workspace={workspace} onWorkspace={openWorkspace} search={search} onSearch={toggleSearch} onFound={openFound} />
+        <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} settings={settings} onSettings={setSettings} project={null} onTerminal={openTerminal} workspace={workspace} onWorkspace={openWorkspace} search={search} onSearch={toggleSearch} onFound={openFound} onDeleted={() => { void loadProjects(); }} />
       </div>
     );
   }

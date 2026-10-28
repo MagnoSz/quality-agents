@@ -1,5 +1,8 @@
 // Agents: a role + instructions + the skills it uses + the access it asks for,
-// organized by category. Built-in agents live in agents/<category>/<name>.md
+// organized by category. An agent may also declare what it needs and delivers
+// (inputs, output files), the results it can end with (outcomes: an operation
+// follows the arrow of the result), the MCP servers it uses (to read or to
+// execute) and its default AI tool: multi-agent operations chain agents through them. Built-in agents live in agents/<category>/<name>.md
 // (versioned framework); the user's own agents live in
 // workspace/library/agents/<category>/<name>.md (never versioned here).
 
@@ -10,7 +13,13 @@ import { parseFrontmatter } from './frontmatter.mjs';
 
 export const ACCESS_LEVELS = ['read-only', 'project-write', 'repository-write'] as const;
 export const AGENT_SECTIONS = ['Role', 'When to use', 'How to work', 'Boundaries'];
-const AGENT_KEYS = ['name', 'description', 'category', 'skills', 'access', 'metadata'];
+const AGENT_KEYS = ['name', 'description', 'category', 'skills', 'access', 'inputs', 'outputs', 'outcomes', 'mcps', 'ai', 'metadata'];
+// AI tools that can run an agent on their own, in a terminal (core.ts TOOLS); '' = the project's or the user's choice.
+export const AGENT_AIS = ['claude', 'codex', 'cursor-agent', 'gemini', 'antigravity'] as const;
+export const MCP_MODES = ['read', 'execute'] as const; // read: queries data; execute: changes something outside Moki
+const MCP_NAME = /^[A-Za-z0-9][\w.-]{0,63}$/;
+const OUTCOME = /^[\p{L}\p{N}][\p{L}\p{N} -]{0,39}$/u;
+const OUTPUT_FILE = /^[^/\\:"<>|?]{1,120}\.[A-Za-z0-9*]{1,10}$/; // a file name in the run's outputs folder; * matches any text
 const STATUS_PREFIX: Record<string, string> = { stable: '', draft: '', 'pending-migration': '[PENDING MIGRATION]', planned: '[PLANNED]' };
 
 export interface Agent {
@@ -19,6 +28,11 @@ export interface Agent {
   category: string;
   skills: string[];
   access: string;
+  inputs: string[]; // what it needs to start, in words (e.g. "User stories")
+  outputs: string[]; // files it delivers in the run's outputs folder (e.g. "test-cases.json", "*.xlsx")
+  outcomes: string[]; // the results it ends with (e.g. "approved", "rejected"); an operation can branch on them
+  mcps: AgentMcp[];
+  ai: string; // default AI tool (AGENT_AIS), or ''
   version: string;
   status: string;
   basedOn: string;
@@ -27,12 +41,17 @@ export interface Agent {
   body: string;
 }
 
+export interface AgentMcp { name: string; mode: string }
+export interface AgentContract { inputs: string[]; outputs: string[]; outcomes?: string[]; mcps: AgentMcp[]; ai: string }
+
 export interface Category { id: string; label: string; description: string; source: 'builtin' | 'custom' }
 
 export const builtinDir = (root = ROOT): string => join(root, 'agents');
 export const libraryDir = (root = ROOT): string => join(workspaceDir(root), 'library', 'agents');
 
 const list = (v: unknown): string[] => String(v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const mcpList = (v: unknown): AgentMcp[] => (v && typeof v === 'object' ? Object.entries(v as Record<string, unknown>) : [])
+  .map(([name, mode]) => ({ name, mode: String(mode ?? '') }));
 const titleCase = (slug: string): string => slug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 
 export function parseAgent(text: string, source: Agent['source'], path: string): { agent: Agent | null; errors: string[] } {
@@ -45,6 +64,11 @@ export function parseAgent(text: string, source: Agent['source'], path: string):
     category: String(data.category ?? ''),
     skills: list(data.skills),
     access: String(data.access ?? ''),
+    inputs: list(data.inputs),
+    outputs: list(data.outputs),
+    outcomes: list(data.outcomes),
+    mcps: mcpList(data.mcps),
+    ai: String(data.ai ?? ''),
     version: String(meta.version ?? ''),
     status: String(meta.status ?? ''),
     basedOn: String(meta.basedOn ?? ''),
@@ -73,9 +97,75 @@ export function validateAgent(agent: Agent, ctx: { skills: string[]; categories:
   else if (STATUS_PREFIX[agent.status] && !agent.description.startsWith(STATUS_PREFIX[agent.status])) {
     errors.push(`description of a "${agent.status}" agent must start with ${STATUS_PREFIX[agent.status]}`);
   }
+  errors.push(...validateContract(agent));
   const headings = [...agent.body.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
   for (const s of AGENT_SECTIONS) if (!headings.includes(s)) errors.push(`missing section "## ${s}"`);
   return errors;
+}
+
+// Inputs, outputs, MCP servers and AI tool: shared by library agents and agents created for a project or every project.
+export function validateContract(c: AgentContract & { access?: string }): string[] {
+  const errors: string[] = [];
+  const dupes = (items: string[]) => items.filter((x, i) => items.findIndex((y) => y.toLowerCase() === x.toLowerCase()) !== i);
+  for (const i of c.inputs) if (i.length > 80) errors.push(`input "${i.slice(0, 20)}…" is too long (max 80 characters)`);
+  const outcomes = c.outcomes ?? [];
+  if (outcomes.length > 8) errors.push('list at most 8 outcomes');
+  for (const o of outcomes) if (!OUTCOME.test(o)) errors.push(`outcome "${o}" must be a short word or two (letters, digits, spaces, hyphens; max 40)`);
+  for (const d of dupes(outcomes)) errors.push(`"${d}" is listed twice`);
+  for (const o of c.outputs) if (!OUTPUT_FILE.test(o)) errors.push(`output "${o}" must be a file name with an extension, without folders (e.g. "test-cases.json" or "*.xlsx")`);
+  for (const d of [...dupes(c.inputs), ...dupes(c.outputs)]) errors.push(`"${d}" is listed twice`);
+  for (const m of c.mcps) {
+    if (!MCP_NAME.test(m.name)) errors.push(`invalid MCP server name "${m.name}"`);
+    if (!(MCP_MODES as readonly string[]).includes(m.mode)) errors.push(`MCP "${m.name}": mode must be ${MCP_MODES.join(' or ')}`);
+  }
+  for (const d of dupes(c.mcps.map((m) => m.name))) errors.push(`MCP "${d}" is listed twice`);
+  if (c.ai && !(AGENT_AIS as readonly string[]).includes(c.ai)) errors.push(`ai must be one of ${AGENT_AIS.join(', ')} (or left out)`);
+  // Reading only means writing nothing: no files delivered, nothing changed through an MCP.
+  if (c.access === 'read-only' && c.outputs.length) errors.push('a read-only agent writes nothing, so it cannot list outputs');
+  if (c.access === 'read-only' && c.mcps.some((m) => m.mode === 'execute')) errors.push('a read-only agent cannot execute through an MCP (use read)');
+  return errors;
+}
+
+// The frontmatter lines of a contract (none for an empty one), in the order the files use.
+export function contractLines(c: AgentContract): string[] {
+  return [
+    ...(c.inputs.length ? [`inputs: ${c.inputs.join(', ')}`] : []),
+    ...(c.outputs.length ? [`outputs: ${c.outputs.join(', ')}`] : []),
+    ...(c.outcomes?.length ? [`outcomes: ${c.outcomes.join(', ')}`] : []),
+    ...(c.mcps.length ? ['mcps:', ...c.mcps.map((m) => `  ${m.name}: ${m.mode}`)] : []),
+    ...(c.ai ? [`ai: ${c.ai}`] : []),
+  ];
+}
+
+// Cleans a contract sent by the app: trimmed, empty items dropped. Commas separate items in the file, so they are refused inside one.
+export function cleanContract(raw: unknown): AgentContract {
+  const r = (raw ?? {}) as { inputs?: unknown; outputs?: unknown; outcomes?: unknown; mcps?: unknown; ai?: unknown };
+  const items = (v: unknown, what: string): string[] => (Array.isArray(v) ? v : []).map((x) => String(x ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean)
+    .map((x) => { if (x.includes(',')) throw new Error(`Use no commas in the ${what} "${x}".`); return x; });
+  const mcps = (Array.isArray(r.mcps) ? r.mcps : []).map((m) => ({ name: String((m as AgentMcp)?.name ?? '').trim(), mode: String((m as AgentMcp)?.mode ?? '') }))
+    .filter((m) => m.name);
+  return { inputs: items(r.inputs, 'input'), outputs: items(r.outputs, 'output'), outcomes: items(r.outcomes, 'outcome'), mcps, ai: String(r.ai ?? '').trim() };
+}
+
+// Puts a contract in an agent file, in place of the one there (before metadata, or at the end of the frontmatter).
+export function withContract(text: string, c: AgentContract): string {
+  const normalized = text.replace(/\r\n/g, '\n');
+  const end = normalized.indexOf('\n---', 4);
+  if (!normalized.startsWith('---\n') || end === -1) throw new Error('The file has no frontmatter.');
+  const lines = normalized.slice(4, end).split('\n');
+  const kept: string[] = [];
+  let skipping = false;
+  for (const line of lines) {
+    if (/^(inputs|outputs|outcomes|ai):/.test(line)) { skipping = false; continue; }
+    if (/^mcps:/.test(line)) { skipping = true; continue; }
+    if (skipping && /^ {2}\S/.test(line)) continue;
+    skipping = false;
+    kept.push(line);
+  }
+  const at = kept.findIndex((l) => /^metadata:/.test(l));
+  const added = contractLines(c);
+  const front = at === -1 ? [...kept, ...added] : [...kept.slice(0, at), ...added, ...kept.slice(at)];
+  return `---\n${front.join('\n')}${normalized.slice(end)}`;
 }
 
 function readAgents(dir: string, source: Agent['source'], root: string): Agent[] {

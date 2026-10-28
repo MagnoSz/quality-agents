@@ -13,7 +13,7 @@
     "tool": { "type": "string", "description": "AI tool that last updated the run (informational only)." },
     "createdAt": { "type": "string", "minLength": 10 },
     "updatedAt": { "type": "string", "minLength": 10 },
-    "status": { "type": "string", "enum": ["in-progress", "awaiting-approval", "awaiting-input", "blocked", "completed", "cancelled"] },
+    "status": { "type": "string", "enum": ["in-progress", "awaiting-approval", "awaiting-input", "blocked", "paused", "completed", "cancelled"] },
     "currentStep": { "type": "string" },
     "completedSteps": { "type": "array", "items": { "type": "string" } },
     "pending": {

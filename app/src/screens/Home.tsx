@@ -9,8 +9,10 @@ import { StartPrefs } from '../components/PrefsCorner';
 import { AddButton } from '../components/AddButton';
 import { TagPicker } from '../components/TagPicker';
 import { SearchPanel } from '../components/SearchPanel';
-import { IconCheck, IconChevron, IconEye, IconEyeOff, IconOpenProject, IconPin, IconX } from '../components/Icons';
-import { hiddenIds, hideProject, looseNotes, pinnedIds, recentNotes, showProject, togglePin } from '../side-menu';
+import { DeleteProjectDialog } from '../components/DeleteProjectDialog';
+import { IconCheck, IconChevron, IconExternal, IconEye, IconEyeOff, IconOpenProject, IconPin, IconStar, IconTrash, IconX } from '../components/Icons';
+import { NoteDialog } from '../components/NoteDialog';
+import { favoriteLooseIds, favoriteNotes, forgetProject, hiddenIds, hideProject, noteTitle, setFavorite, type NoteRef, looseNotes, pinnedIds, recentNotes, showProject, togglePin } from '../side-menu';
 import { Settings, type SettingsTab } from './Settings';
 
 interface Props {
@@ -30,13 +32,14 @@ interface Props {
   search?: boolean; // the search panel in place of the list
   onSearch?: () => void;
   onFound?: (project: string, path?: string) => void;
+  onDeleted?: () => void; // a project was deleted for good: reload the list
 }
 
 const onboarding = (status: string): string => ({
   'not-started': t('Context not started'), partial: t('Context in progress'), complete: t('Context complete'),
 } as Record<string, string>)[status] ?? status;
 
-export function Home({ projects, tools, version, onOpen, onCreate, settings, onSettings, onBack, backLabel, project, onTerminal, workspace, onWorkspace, search = false, onSearch, onFound }: Props) {
+export function Home({ projects, tools, version, onOpen, onCreate, settings, onSettings, onBack, backLabel, project, onTerminal, workspace, onWorkspace, search = false, onSearch, onFound, onDeleted }: Props) {
   const [switching, setSwitching] = useState<WorkspaceInfo[] | null>(null); // the workspace menu, open
   const openSwitcher = () => { api.workspaces().then((r) => setSwitching(r.list)).catch(() => setSwitching([])); };
   const switchTo = (w: WorkspaceInfo) => {
@@ -52,6 +55,14 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
   const [busy, setBusy] = useState(false);
   const [pins, setPins] = useState<string[]>(pinnedIds);
   const [hidden, setHidden] = useState<string[]>(hiddenIds);
+  const [deleting, setDeleting] = useState<ProjectSummary | null>(null);
+  // A note opened here, inside the app ({ loose: null }: a new loose note). The icon beside it opens the notebook window.
+  const [openNote, setOpenNote] = useState<NoteRef | { loose: null } | null>(null);
+  const notebookBtn = (ref: NoteRef, className = '') => (
+    <button type="button" className={`home-pin ${className}`} title={t('Open in the notebook')} aria-label={t('Open in the notebook')} onClick={() => { void api.openNoteWindow(ref); }}>
+      <IconExternal size={13} />
+    </button>
+  );
   const [catalog, setCatalog] = useState<Tag[]>([]);
   const [newTags, setNewTags] = useState<string[]>([]);
   useEffect(() => { api.tags().then(setCatalog).catch(() => setCatalog([])); }, []);
@@ -68,11 +79,26 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
     ...loose.map((n) => ({ kind: 'loose' as const, id: n.id, title: n.title, at: n.at })),
     ...notes.filter((n) => visible.some((p) => p.id === n.project)).map((n) => ({ kind: 'project' as const, ...n })),
   ].sort((a, b) => b.at - a.at);
+  // Favorite notes (the star): loose ones and those of the projects listed, as starred.
+  const favorites = useMemo(() => [
+    ...favoriteLooseIds().flatMap((id) => { const n = loose.find((x) => x.id === id); return n ? [{ kind: 'loose' as const, id, title: n.title }] : []; }),
+    ...favoriteNotes().filter((n) => visible.some((p) => p.id === n.project)).map((n) => ({ kind: 'project' as const, ...n, title: noteTitle(n.path) })),
+  ], [noteTick, loose, visible]); // eslint-disable-line react-hooks/exhaustive-deps
+  const unstar = (f: (typeof favorites)[number]) => {
+    setFavorite(f.kind === 'loose' ? { loose: f.id } : { project: f.project, path: f.path }, false);
+    setNoteTick((n) => n + 1);
+  };
 
   const hide = (p: ProjectSummary) => {
     if (!window.confirm(t('Hide {name} from Moki? The files stay on this computer. You can show it again under Hidden.', { name: p.name }))) return;
     setHidden(hideProject(p.id));
     setPins(pinnedIds());
+  };
+
+  const deleted = (id: string) => {
+    forgetProject(id);
+    setHidden(hiddenIds()); setPins(pinnedIds()); setNoteTick((n) => n + 1); setDeleting(null);
+    onDeleted?.();
   };
 
   const projectRow = (p: ProjectSummary, pinnedRow: boolean) => (
@@ -113,7 +139,7 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
 
   return (
     <div className={`home${settings ? ' is-settings' : ''}`}>
-      {!settings && <StartPrefs />}
+      {!settings && !openNote && <StartPrefs />}
       {!settings && search && onSearch && onFound && (
         <aside className="home-list home-side">
           <SearchPanel onOpenProject={(id) => onFound(id)} onOpenFile={onFound} onClose={onSearch} />
@@ -149,25 +175,49 @@ export function Home({ projects, tools, version, onOpen, onCreate, settings, onS
                       onClick={() => setHidden(showProject(p.id))}>
                       <IconEye size={13} />
                     </button>
+                    <button type="button" className="home-pin home-delete" title={t('Delete for good')} aria-label={t('Delete for good')}
+                      onClick={() => setDeleting(p)}>
+                      <IconTrash size={13} />
+                    </button>
                   </li>
                 ))}
               </ul>
             </details>
           )}
+          {favorites.length > 0 && <>
+            <hr className="home-split" />
+            <div className="home-list-head">{t('Favorites')}</div>
+            <ul className="home-favorites">
+              {favorites.map((f) => (
+                <li key={f.kind === 'loose' ? f.id : `${f.project}:${f.path}`} className="home-row">
+                  <button type="button" className="home-project" onClick={() => setOpenNote(f.kind === 'loose' ? { loose: f.id } : { project: f.project, path: f.path })}>
+                    <span className="home-project-name">{f.title}</span>
+                    {f.kind === 'project' && <span className="home-project-meta">{projects.find((p) => p.id === f.project)?.name}</span>}
+                    <IconChevron size={16} />
+                  </button>
+                  <button type="button" className="home-pin star-btn on" aria-pressed title={t('Remove from favorites')} aria-label={t('Remove from favorites')} onClick={() => unstar(f)}>
+                    <IconStar size={13} />
+                  </button>
+                  {notebookBtn(f.kind === 'loose' ? { loose: f.id } : { project: f.project, path: f.path }, 'home-hide')}
+                </li>
+              ))}
+            </ul>
+          </>}
           <hr className="home-split" />
           <div className="home-list-head with-action">
             <span>{t('Loose notes')}</span>
-            <AddButton size="sm" title={t('New note')} onClick={() => { void api.openNoteWindow({ loose: 'new' }); }} />
+            <AddButton size="sm" title={t('New note')} onClick={() => setOpenNote({ loose: null })} />
           </div>
           {notesShown.length === 0 && <p className="muted small home-empty">{t('No loose notes yet.')}</p>}
           <ul>
             {notesShown.map((n) => (
-              <li key={n.kind === 'loose' ? n.id : `${n.project}:${n.path}`}>
-                <button type="button" className="home-project" onClick={() => { void api.openNoteWindow(n.kind === 'loose' ? { loose: n.id } : { project: n.project, path: n.path }); }}>
+              <li key={n.kind === 'loose' ? n.id : `${n.project}:${n.path}`} className="home-row">
+                <button type="button" className="home-project" onClick={() => setOpenNote(n.kind === 'loose' ? { loose: n.id } : { project: n.project, path: n.path })}>
                   <span className="home-project-name">{n.title}</span>
                   {n.kind === 'project' && <span className="home-project-meta">{projects.find((p) => p.id === n.project)?.name}</span>}
                   <IconChevron size={16} />
                 </button>
+                {notebookBtn(n.kind === 'loose' ? { loose: n.id } : { project: n.project, path: n.path })}
               </li>
             ))}
           </ul>
@@ -198,9 +248,23 @@ ${workspace.path}`}>
           </div>
         )}
       </aside>}
+      {deleting && <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} onDeleted={() => deleted(deleting.id)} />}
 
       {settings ? (
         <Settings tab={settings} onTab={onSettings} onClose={() => onSettings(null)} onBack={onBack} backLabel={backLabel} project={project} projects={projects} tools={tools} onTerminal={onTerminal} />
+      ) : openNote ? (
+      <main className="home-main home-note">
+        <NoteDialog
+          key={'loose' in openNote ? `loose:${openNote.loose}` : `${openNote.project}:${openNote.path}`}
+          embedded
+          project={'path' in openNote ? openNote.project : null}
+          path={'path' in openNote ? openNote.path : null}
+          looseId={'loose' in openNote ? openNote.loose : null}
+          projects={visible.map((p) => ({ id: p.id, name: p.name }))}
+          onSaved={() => setNoteTick((n) => n + 1)}
+          onClose={() => { setOpenNote(null); setNoteTick((n) => n + 1); }}
+        />
+      </main>
       ) : (
       <main className="home-main">
         <img className="hero" src="./hero.png" alt="" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = './favicon.svg'; e.currentTarget.className = 'hero fallback'; }} />
