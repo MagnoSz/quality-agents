@@ -23,6 +23,12 @@ contextBridge.exposeInMainWorld('qa', {
     return () => { ipcRenderer.removeListener('qa:notes-changed', listener); };
   },
   noteMax: () => ipcRenderer.send('qa:note-max'),
+  // In a notebook window: another note of its group, to show as a tab.
+  onNotebookOpen: (callback: (target: { project: string | null; path: string | null; loose: string | null }) => void) => {
+    const listener = (_e: IpcRendererEvent, target: { project: string | null; path: string | null; loose: string | null }) => callback(target);
+    ipcRenderer.on('qa:notebook-open', listener);
+    return () => { ipcRenderer.removeListener('qa:notebook-open', listener); };
+  },
   // From a note window: show a terminal it started, or open a mentioned file, in the main window.
   showTerminal: (project: string, terminal: { id: string; title: string }) => ipcRenderer.send('qa:show-terminal', project, terminal?.id, terminal?.title),
   openInMain: (project: string, path: string) => ipcRenderer.send('qa:open-in-main', project, path),

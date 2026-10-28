@@ -3,15 +3,15 @@
 // the embedded terminals, and watches the open project folder so files written
 // by the AI tools appear live.
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, screen, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, screen, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { existsSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT } from '../scripts/lib/repo.mjs';
-import { TOOLS, isTool, listProjects, projectsDir } from '../scripts/lib/core.ts';
+import { TOOLS, isTool, listProjects, projectsDir, type ToolKey } from '../scripts/lib/core.ts';
 import { callService, createService } from './service.ts';
 import { launchInTerminal, launchTool, openFolder } from './launcher.ts';
-import { noteKey, noteQuery, parseNoteRequest, type NoteRequest } from './notes.ts';
+import { notebookKey, noteQuery, parseNoteRequest, type NoteRequest } from './notes.ts';
 import { setWorkspaceEnv } from './workspaces.ts';
 import { appChooser } from './open-with.ts';
 import { createTerminals, shellSpec } from './terminals.ts';
@@ -25,12 +25,18 @@ process.env.QA_RUN_TOOL = join(DIST, 'run-tool.mjs').replace(`app.asar${sep}`, `
 
 const terminals = createTerminals((channel, id, payload) => win?.webContents.send(channel, id, payload));
 
+// QA_FAKE_TOOLS (UI tests only): every AI tool looks installed and nothing is started.
+const fakeTools = process.env.QA_FAKE_TOOLS === '1';
+
 const service = createService(ROOT, {
   // Terminal tools open in a tab of the app; editors, or no node-pty, use the external launcher.
-  launch: (tool, prompt, root, plugins = []) => (terminals.available() && !TOOLS[tool].clipboard
-    ? launchInTerminal(tool, prompt, root, terminals.prepare, plugins) : launchTool(tool, prompt, root, plugins)),
+  launch: (tool, prompt, root, plugins = []) => (fakeTools ? { opened: true, message: 'fake' }
+    : terminals.available() && !TOOLS[tool].clipboard ? launchInTerminal(tool, prompt, root, terminals.prepare, plugins) : launchTool(tool, prompt, root, plugins)),
+  ...(fakeTools ? { detectTools: () => Object.fromEntries(Object.keys(TOOLS).map((k) => [k, true])) as Record<ToolKey, boolean> } : {}),
   openFolder,
   openPath: (file) => { void shell.openPath(file); },
+  reveal: (path) => shell.showItemInFolder(path),
+  copy: (text) => clipboard.writeText(text),
   appChooser,
   trash: (path) => shell.trashItem(path),
   pickFolder: async () => {
@@ -55,11 +61,17 @@ function trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   return Boolean(event.senderFrame?.url.startsWith('file://')) && (event.sender === win?.webContents || isNoteWindow(event.sender));
 }
 
-// A note is its own window, so it can be dragged past the main window onto the desktop.
+// The notebook: its own window, so it can be dragged past the main window onto the desktop. One per group:
+// the loose notes, or one project's notes. A note of a group whose notebook is open becomes a tab there.
 function openNoteWindow(target: NoteRequest): void {
-  const key = noteKey(target);
-  const existing = key ? noteWindows.get(key) : undefined;
-  if (existing && !existing.isDestroyed()) { existing.focus(); return; }
+  const key = notebookKey(target);
+  const existing = noteWindows.get(key);
+  if (existing && !existing.isDestroyed()) {
+    existing.webContents.send('qa:notebook-open', { project: target.project, path: target.path, loose: target.loose });
+    if (existing.isMinimized()) existing.restore();
+    existing.focus();
+    return;
+  }
   const width = 760;
   const height = 640;
   const anchor = win?.getBounds() ?? screen.getPrimaryDisplay().workArea;
@@ -85,10 +97,9 @@ function openNoteWindow(target: NoteRequest): void {
       spellcheck: true,
     },
   });
-  const id = key || `new:${Date.now()}:${note.id}`;
-  noteWindows.set(id, note);
+  noteWindows.set(key, note);
   note.once('ready-to-show', () => note.show());
-  note.on('closed', () => noteWindows.delete(id));
+  note.on('closed', () => { if (noteWindows.get(key) === note) noteWindows.delete(key); });
   void note.loadFile(join(UI, 'index.html'), { query: noteQuery(target) });
   note.webContents.on('will-navigate', (e) => e.preventDefault());
   note.webContents.setWindowOpenHandler(({ url }) => {
@@ -226,8 +237,9 @@ if (!app.requestSingleInstanceLock()) {
       if (trusted(event) && typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url);
     });
 
+    // From the main window, or from the loose notebook when a note is sent to a project.
     ipcMain.handle('qa:note-window', (event, raw: unknown) => {
-      if (event.sender !== win?.webContents || !trusted(event)) return false;
+      if (!trusted(event)) return false;
       const target = parseNoteRequest(raw, ROOT);
       if (!target) return false;
       openNoteWindow(target);

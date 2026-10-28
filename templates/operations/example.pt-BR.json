@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "exemplo-da-historia-as-evidencias",
+  "name": "Exemplo: da história às evidências",
+  "description": "Um exemplo para você ver como uma operação funciona: revisa a história, desenha os testes e, depois que você executar os testes, monta as evidências. Altere ou exclua à vontade.",
+  "start": "s1",
+  "maxRounds": 3,
+  "lanes": [
+    { "id": "l1", "name": "Análise", "color": "#7fb2e5", "width": 300 },
+    { "id": "l2", "name": "Testes", "color": "#8fbf7f", "width": 300 },
+    { "id": "l3", "name": "Evidências", "color": "#c79be0", "width": 320 }
+  ],
+  "steps": [
+    { "id": "s1", "agent": "library:requirements-analyst", "x": 45, "y": 80 },
+    { "id": "s2", "agent": "library:test-designer", "x": 345, "y": 80 },
+    { "id": "s3", "agent": "library:evidence-builder", "x": 645, "y": 80 }
+  ],
+  "links": [
+    { "from": "s1", "to": "s2", "gate": "approval", "map": { "Business rules": "review-matrix.json" }, "when": "" },
+    { "from": "s2", "to": "s3", "gate": "approval", "map": { "Source item": "test-cases.json" }, "when": "" }
+  ]
+}

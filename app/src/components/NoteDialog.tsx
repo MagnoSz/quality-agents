@@ -1,22 +1,25 @@
-// A project note (Markdown in notes/), opened and edited in a popup that can be
-// dragged by its header, with a formatting bar and a reading view like .md tabs.
-// path null = a new note: it asks for a title, which becomes the file name.
+// A note: a project note (Markdown in notes/) or a loose one, in the main area of
+// the app, in a popup or in a notebook tab, with a formatting bar and a reading view.
+// It saves on its own while typing and when it is left, like Notepad. path null = a
+// new note: its file is created once something is written (named after the title,
+// or the first line).
 //
 // Tools: bold, italic, strikethrough, titles, bulleted / numbered / check lists (Enter
 // continues them), quote, code, link (Ctrl+K), table, divider, images (paste, drop or
-// the button; stored inside the note), @ to mention a file of the project, a draft kept
-// while typing, and "Use with the AI" to start an activity with the note as input.
+// the button; stored inside the note), / for the same tools by typing (like Notion),
+// @ to mention a file of the project, and "Use with the AI" to start an activity with
+// the note as input.
 
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type ReactNode, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { api, type ActivityInfo, type Tag, type ToolInfo, type TreeNode } from '../api';
 import { conversationLanguage, t } from '../i18n';
 import { recall, remember } from '../prefs';
-import { looseNotes, noteTitle, removeLooseNote, saveLooseNote, touchNote } from '../side-menu';
+import { isFavorite, looseNotes, noteTitle, removeLooseNote, saveLooseNote, setFavorite, touchNote, type NoteRef } from '../side-menu';
 import { ActivityCatalog } from './ActivityCatalog';
 import { CatIcon } from './CatIcon';
 import { ACTIVITY_CAT } from '../icons/cats';
 import { FileIcon } from '../icons';
-import { IconChevron, IconCode, IconEdit, IconEye, IconLink, IconPlay, IconTerminal, IconX } from './Icons';
+import { IconChevron, IconCode, IconEdit, IconExternal, IconEye, IconLink, IconPlay, IconStar, IconTerminal, IconX } from './Icons';
 import { ToolCatalog } from './ToolCatalog';
 import { TagPicker } from './TagPicker';
 
@@ -26,22 +29,19 @@ interface Props {
   looseId?: string | null;
   projects?: { id: string; name: string }[];
   floating?: boolean; // its own window: the header drags the window, past the main app
+  embedded?: boolean; // fills the main area of the app window (no backdrop, nothing to drag)
   onClose: () => void;
+  onSaved?: (saved: NoteRef) => void; // after each save: where the note is now (a project note, for a loose one sent there)
+  active?: boolean; // in a notebook: only the shown tab takes the keys
 }
-
-interface Draft { title: string; text: string; at: number }
 
 const QUICK = ['terminal', 'editor'];
 const IMAGE_MAX = 1200; // px, longest side, before the image goes into the note
-const draftKey = (project: string | null, path: string | null, looseId: string | null) =>
-  project ? `qa-note-draft:${project}:${path ?? 'new'}` : `qa-note-draft:loose:${looseId ?? 'new'}`;
-const readDraft = (key: string): Draft | null => {
-  try { const d = JSON.parse(recall(key) ?? 'null') as Draft | null; return d && typeof d.text === 'string' ? d : null; } catch { return null; }
-};
-const dropDraft = (key: string) => { try { window.localStorage.removeItem(key); } catch { /* optional */ } };
 const words = (text: string) => (text.replace(/!\[[^\]]*\]\(data:[^)]*\)/g, ' ').match(/[\p{L}\p{N}]+/gu) ?? []).length;
 const clock = (at: number) => new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 const toolName = (tool: ToolInfo) => t(tool.label).replace(/ \(.*\)$/, '');
+const TABLE_ICON = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="M3.5 10h17M3.5 14.5h17M9.5 10v9M15 10v9" /></svg>;
+const IMAGE_ICON = <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M20.5 16l-5-5-9 8.5" /></svg>;
 
 // Every file of the project tree, for @ mentions.
 const flatten = (nodes: TreeNode[]): string[] => nodes.flatMap((n) => (n.type === 'dir' ? flatten(n.children ?? []) : [n.path]));
@@ -66,20 +66,23 @@ function imageToDataUrl(file: File): Promise<string> {
   });
 }
 
-export function NoteDialog({ project, path, looseId = null, projects = [], floating = false, onClose }: Props) {
+export function NoteDialog({ project, path, looseId = null, projects = [], floating = false, embedded = false, onClose, onSaved, active = true }: Props) {
   const [title, setTitle] = useState('');
   const [savedTitle, setSavedTitle] = useState('');
   const [destination, setDestination] = useState(''); // '' keeps the note loose
   const [text, setText] = useState('');
   const [saved, setSaved] = useState('');
   const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(0);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [html, setHtml] = useState('');
   const [pos, setPos] = useState({ x: 0, y: 0 }); // offset from the centered position
   const [loaded, setLoaded] = useState(!path && !looseId);
-  const [draft, setDraft] = useState<Draft | null>(null); // an older unsaved draft found when opening
-  const [draftAt, setDraftAt] = useState(0); // when the current draft was kept
+  // Where the note is saved: a new note gets its file (or loose id) on its first save.
+  const [curPath, setCurPath] = useState(path);
+  const [curLoose, setCurLoose] = useState(looseId);
   const [files, setFiles] = useState<string[]>([]); // project files, for @
   const [mention, setMention] = useState<{ start: number; query: string; index: number } | null>(null);
   const [ai, setAi] = useState(false);
@@ -96,10 +99,15 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
   const picker = useRef<HTMLInputElement>(null);
   const loose = project == null;
   const target = project ?? (destination || null); // the project the note belongs to (or is going to)
-  const key = draftKey(project, path, looseId);
-  const dirty = loose
-    ? text !== saved || title !== savedTitle || destination !== ''
-    : text !== saved || (!path && Boolean(title.trim()));
+  const dirty = loose ? text !== saved || title !== savedTitle : text !== saved;
+  // The star: a saved note only (a new one has nothing to point to yet).
+  const ref: NoteRef | null = project && curPath ? { project, path: curPath } : loose && curLoose ? { loose: curLoose } : null;
+  const [favorite, setFav] = useState(() => (ref ? isFavorite(ref) : false));
+  const toggleFavorite = () => {
+    if (!ref) return;
+    setFav(setFavorite(ref, !favorite));
+    window.qa?.notesChanged();
+  };
 
   useEffect(() => {
     if (!path || !project) return;
@@ -117,33 +125,63 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     setTitle(note.title); setSavedTitle(note.title); setText(note.text); setSaved(note.text); setLoaded(true);
   }, [loose, looseId]);
 
-  // A draft left from last time (closed without saving) is offered once the note is loaded.
+  // ---------- saving: on its own, like Notepad ----------
+  // Saves run one after another, from the latest values (refs), so a new note is created only once.
+  const latest = useRef({ text, title, dirty, loaded, curPath, curLoose });
+  latest.current = { ...latest.current, text, title, dirty, loaded };
+  const queue = useRef<Promise<NoteRef | null>>(Promise.resolve(null));
+  // A note without a title is named after its first line.
+  const nameOf = (body: string, head: string) => head.trim()
+    || body.split('\n').map((l) => l.replace(/^[#>*\-\d.\s[\]xX]+/, '').trim()).find(Boolean)?.slice(0, 40) || t('Untitled note');
+  const persist = (): Promise<NoteRef | null> => {
+    const run = queue.current.catch(() => null).then(async (): Promise<NoteRef | null> => {
+      const now = latest.current;
+      if (!now.loaded || !now.dirty) return null;
+      let done: NoteRef;
+      if (project == null) {
+        if (!now.text.trim() && !now.title.trim()) return null;
+        const note = saveLooseNote({ id: now.curLoose, title: nameOf(now.text, now.title), text: now.text });
+        latest.current.curLoose = note.id;
+        setCurLoose(note.id);
+        done = { loose: note.id };
+      } else if (now.curPath) {
+        await api.writeFile(project, now.curPath, now.text);
+        done = { project, path: now.curPath };
+      } else {
+        if (!now.text.trim()) return null; // a new note is created once something is written in it
+        const created = await api.createNote(project, nameOf(now.text, now.title), now.text);
+        latest.current.curPath = created;
+        setCurPath(created);
+        touchNote(project, created, noteTitle(created));
+        done = { project, path: created };
+      }
+      latest.current.dirty = false;
+      setSaved(now.text); setSavedTitle(now.title); setSavedAt(Date.now()); setError('');
+      window.qa?.notesChanged();
+      onSaved?.(done);
+      return done;
+    });
+    queue.current = run;
+    setSaving(true);
+    run.catch((e: Error) => setError(e.message)).finally(() => { if (queue.current === run) setSaving(false); });
+    return run;
+  };
   useEffect(() => {
-    if (!loaded) return;
-    const d = readDraft(key);
-    if (d && (d.text !== saved || (d.title && d.title !== savedTitle))) setDraft(d); else if (d) dropDraft(key);
-  }, [loaded, key]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Keeps a draft while typing, so closing the window does not lose the text.
-  useEffect(() => {
-    if (!loaded || draft) return;
-    const timer = setTimeout(() => {
-      if (!dirty) { dropDraft(key); setDraftAt(0); return; }
-      const at = Date.now();
-      remember(key, JSON.stringify({ title, text, at }));
-      setDraftAt(at);
-    }, 600);
+    if (!loaded || !dirty) return;
+    const timer = setTimeout(() => { void persist(); }, 700);
     return () => clearTimeout(timer);
-  }, [text, title, dirty, loaded, draft, key]);
+  }, [text, title, loaded, dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Leaving the note (closing it, another note or tab) saves what is left.
+  useEffect(() => () => { if (latest.current.dirty) void persist(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!path || !project) return;
+    if (!curPath || !project) return;
     api.tags().then(setTagCatalog).catch(() => setTagCatalog([]));
-    api.fileTags(project).then((all) => setTags(all[path] ?? [])).catch(() => setTags([]));
-  }, [project, path]);
+    api.fileTags(project).then((all) => setTags(all[curPath] ?? [])).catch(() => setTags([]));
+  }, [project, curPath]);
   const changeTags = (ids: string[]) => {
-    if (!path || !project) return;
-    api.setFileTags(project, path, ids).then(setTags).catch((e: Error) => setError(e.message));
+    if (!curPath || !project) return;
+    api.setFileTags(project, curPath, ids).then(setTags).catch((e: Error) => setError(e.message));
   };
 
   useEffect(() => { if (mode === 'preview') api.renderMarkdown(text).then(setHtml).catch((e: Error) => setError(e.message)); }, [mode, text]);
@@ -159,30 +197,34 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     api.integrations().then(setTools).catch(() => setTools([]));
   }, [ai]);
 
-  const close = () => {
-    if (dirty && !window.confirm(t('Discard the unsaved changes in this note?'))) return;
-    dropDraft(key);
-    onClose();
-  };
-  const savedAndClose = () => { dropDraft(key); window.qa?.notesChanged(); onClose(); };
+  // Closing saves first; if saving fails, the note stays open with the error.
+  const close = () => { persist().then(() => onClose()).catch(() => { /* the error is shown */ }); };
 
-  const save = () => {
-    setSaving(true); setError('');
-    if (project == null) {
-      if (!title.trim()) { setError(t('Give the note a title.')); setSaving(false); return; }
-      if (!destination) {
-        try { saveLooseNote({ id: looseId, title, text }); savedAndClose(); } catch (e) { setError(e instanceof Error ? t(e.message) : String(e)); setSaving(false); }
-        return;
-      }
-      api.createNote(destination, title, text)
-        .then((savedPath) => { if (looseId) removeLooseNote(looseId); touchNote(destination, savedPath, title); savedAndClose(); })
-        .catch((e: Error) => { setError(e.message); setSaving(false); });
-      return;
-    }
-    const done = (savedPath: string) => { touchNote(project, savedPath, path ? noteTitle(path) : title); savedAndClose(); };
-    (path ? api.writeFile(project, path, text).then(() => path) : api.createNote(project, title, text))
-      .then(done)
-      .catch((e: Error) => { setError(e.message); setSaving(false); });
+  // From inside the app to the notebook window, saved first.
+  const toNotebook = () => {
+    persist().then((done) => {
+      const at = done ?? ref;
+      if (!at) return;
+      void api.openNoteWindow('loose' in at ? { loose: at.loose } : at);
+      onClose();
+    }).catch(() => { /* the error is shown */ });
+  };
+
+  // A loose note sent to a project: it becomes a note of that project and leaves the loose notes.
+  const send = () => {
+    if (!destination) return;
+    setSending(true); setError('');
+    api.createNote(destination, nameOf(text, title), text)
+      .then((savedPath) => {
+        if (favorite) setFavorite({ project: destination, path: savedPath }, true); // the star goes with the note
+        if (latest.current.curLoose) removeLooseNote(latest.current.curLoose);
+        latest.current.dirty = false; // nothing left to save as a loose note
+        touchNote(destination, savedPath, title);
+        window.qa?.notesChanged();
+        onSaved?.({ project: destination, path: savedPath }); // a notebook moves it to that project's notebook
+        if (!floating) onClose();
+      })
+      .catch((e: Error) => { setError(e.message); setSending(false); });
   };
 
   // ---------- editing helpers (through the browser, so Ctrl+Z undoes them) ----------
@@ -201,24 +243,26 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     replace(s, el.selectionEnd, value, select ? s + select[0] : s + value.length, select ? s + select[1] : s + value.length);
   };
 
+  // The helpers read the editor itself, not `text`: a / command runs right after removing what was typed.
   // **bold**, *italic*, `code`: wraps the selection, or removes the marks when already there.
   const wrap = (mark: string) => {
     const el = editor.current;
     if (!el) return;
-    const { selectionStart: s, selectionEnd: e } = el;
+    const { selectionStart: s, selectionEnd: e, value } = el;
     const n = mark.length;
-    if (text.slice(s - n, s) === mark && text.slice(e, e + n) === mark) replace(s - n, e + n, text.slice(s, e), s - n, e - n);
-    else replace(s, e, mark + text.slice(s, e) + mark, s + n, e + n);
+    if (value.slice(s - n, s) === mark && value.slice(e, e + n) === mark) replace(s - n, e + n, value.slice(s, e), s - n, e - n);
+    else replace(s, e, mark + value.slice(s, e) + mark, s + n, e + n);
   };
 
   // Applies fn to every line the selection touches (titles, lists, quotes).
   const lines = (fn: (line: string, i: number, all: string[]) => string) => {
     const el = editor.current;
     if (!el) return;
-    const from = text.lastIndexOf('\n', el.selectionStart - 1) + 1;
-    const end = text.indexOf('\n', el.selectionEnd);
-    const to = end === -1 ? text.length : end;
-    const all = text.slice(from, to).split('\n');
+    const { value } = el;
+    const from = value.lastIndexOf('\n', el.selectionStart - 1) + 1;
+    const end = value.indexOf('\n', el.selectionEnd);
+    const to = end === -1 ? value.length : end;
+    const all = value.slice(from, to).split('\n');
     const block = all.map((l, i) => fn(l, i, all)).join('\n');
     replace(from, to, block, from, from + block.length);
   };
@@ -236,7 +280,7 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     const el = editor.current;
     if (!el) return;
     const { selectionStart: s, selectionEnd: e } = el;
-    const sel = text.slice(s, e);
+    const sel = el.value.slice(s, e);
     if (sel.includes('\n')) replace(s, e, `\`\`\`\n${sel}\n\`\`\``, s + 4, s + 4 + sel.length);
     else wrap('`');
   };
@@ -244,12 +288,12 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     const el = editor.current;
     if (!el) return;
     const { selectionStart: s, selectionEnd: e } = el;
-    const label = text.slice(s, e);
+    const label = el.value.slice(s, e);
     const url = 'https://';
     if (label) replace(s, e, `[${label}](${url})`, s + label.length + 3, s + label.length + 3 + url.length);
     else { const word = t('link text'); replace(s, e, `[${word}](${url})`, s + 1, s + 1 + word.length); }
   };
-  const lineStart = () => { const el = editor.current; return !el || el.selectionStart === 0 || text[el.selectionStart - 1] === '\n'; };
+  const lineStart = () => { const el = editor.current; return !el || el.selectionStart === 0 || el.value[el.selectionStart - 1] === '\n'; };
   const table = () => {
     const cols = [t('Column 1'), t('Column 2'), t('Column 3')];
     const block = `${lineStart() ? '' : '\n'}| ${cols.join(' | ')} |\n| --- | --- | --- |\n|  |  |  |\n`;
@@ -257,6 +301,7 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     insert(block, [first, first + cols[0].length]);
   };
   const divider = () => insert(`${lineStart() ? '' : '\n'}\n---\n\n`);
+  const codeBlock = () => insert(`${lineStart() ? '' : '\n'}\`\`\`\n\n\`\`\`\n`, [lineStart() ? 4 : 5, lineStart() ? 4 : 5]);
 
   // ---------- images ----------
   const addImages = async (list: File[]) => {
@@ -301,8 +346,59 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
     setMention(null);
   };
 
-  // Enter continues a list; Enter on an empty item ends it. Arrows / Enter / Tab drive the @ list.
+  // ---------- / commands (like Notion): the formatting bar, typed ----------
+  // line: formats the current line (the caret goes to its end afterwards).
+  const commands: { id: string; label: string; glyph: ReactNode; words: string; run: () => void; line?: boolean }[] = [
+    { id: 'checklist', label: t('Checklist'), glyph: <span className="note-check-glyph" aria-hidden="true">✓</span>, words: 'checkbox todo task tarefa caixa', run: checks, line: true },
+    { id: 'h1', label: t('Large title'), glyph: 'H1', words: 'heading title titulo', run: () => heading(1), line: true },
+    { id: 'h2', label: t('Medium title'), glyph: 'H2', words: 'heading title titulo', run: () => heading(2), line: true },
+    { id: 'h3', label: t('Small title'), glyph: 'H3', words: 'heading title titulo', run: () => heading(3), line: true },
+    { id: 'list', label: t('List'), glyph: '•', words: 'bullet lista marcadores', run: bullets, line: true },
+    { id: 'numbered', label: t('Numbered list'), glyph: '1.', words: 'number ordered numerada', run: numbers, line: true },
+    { id: 'quote', label: t('Quote'), glyph: '❝', words: 'citacao', run: quote, line: true },
+    { id: 'code', label: t('Code block'), glyph: <IconCode size={15} />, words: 'codigo', run: codeBlock },
+    { id: 'table', label: t('Table'), glyph: TABLE_ICON, words: 'tabela', run: table },
+    { id: 'divider', label: t('Divider'), glyph: '—', words: 'line separator linha divisor', run: divider },
+    { id: 'link', label: t('Link'), glyph: <IconLink size={15} />, words: 'url', run: link },
+    { id: 'image', label: t('Image'), glyph: IMAGE_ICON, words: 'picture foto imagem', run: () => picker.current?.click() },
+    { id: 'mention', label: t('Mention a project file'), glyph: '@', words: 'file arquivo mencionar', run: () => insert('@') },
+  ];
+  const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const [slash, setSlash] = useState<{ start: number; query: string; index: number } | null>(null);
+  const slashMatches = slash ? commands.filter((c) => fold(`${c.label} ${c.id} ${c.words}`).includes(fold(slash.query))) : [];
+  // A / at the start of a line or after a space opens the list; what follows it filters the list.
+  const findSlash = (value: string, caret: number) => {
+    const m = value.slice(0, caret).match(/(^|\s)\/([\p{L}\p{N}]*)$/u);
+    setSlash(m ? { start: caret - m[2].length - 1, query: m[2], index: 0 } : null);
+  };
+  const pickSlash = (command: { run: () => void; line?: boolean }) => {
+    const el = editor.current;
+    if (!el || !slash) return;
+    replace(slash.start, el.selectionStart, '', slash.start, slash.start); // the typed /command goes away
+    setSlash(null);
+    // After React keeps the removal (a second edit in the same event is undone). Line formats leave the line
+    // selected, as the bar does; typed, the caret goes to its end so writing continues.
+    setTimeout(() => {
+      command.run();
+      if (command.line && editor.current) editor.current.setSelectionRange(editor.current.selectionEnd, editor.current.selectionEnd);
+    }, 0);
+
+  };
+  const openSlash = () => {
+    const el = editor.current;
+    const before = el ? el.value[el.selectionStart - 1] : undefined;
+    insert(!before || /\s/.test(before) ? '/' : ' /');
+  };
+
+  // Enter continues a list; Enter on an empty item ends it. Arrows / Enter / Tab drive the @ and / lists.
   const onEditorKey = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (slash) {
+      const n = slashMatches.length;
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setSlash(null); return; }
+      if (n && e.key === 'ArrowDown') { e.preventDefault(); setSlash({ ...slash, index: (slash.index + 1) % n }); return; }
+      if (n && e.key === 'ArrowUp') { e.preventDefault(); setSlash({ ...slash, index: (slash.index - 1 + n) % n }); return; }
+      if (n && (e.key === 'Enter' || e.key === 'Tab')) { e.preventDefault(); pickSlash(slashMatches[slash.index]); return; }
+    }
     if (mention && matches.length) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMention({ ...mention, index: (mention.index + 1) % matches.length }); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setMention({ ...mention, index: (mention.index - 1 + matches.length) % matches.length }); return; }
@@ -357,9 +453,10 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
       // A saved project note goes as its path (any length); otherwise its text, on one line.
       let note: string;
       const base = `workspace/projects/${target}/`;
-      if (project && path) {
-        if (text !== saved) { await api.writeFile(project, path, text); setSaved(text); dropDraft(key); }
-        note = t('Use my note {file} as input (read it first; the paths in it are relative to {base}).', { file: `${base}${path}`, base });
+      const done = project ? await persist() : null;
+      const file = done && 'path' in done ? done.path : curPath;
+      if (project && file) {
+        note = t('Use my note {file} as input (read it first; the paths in it are relative to {base}).', { file: `${base}${file}`, base });
       } else {
         const body = text.replace(/!\[[^\]]*\]\(data:[^)]*\)/g, '[image]').replace(/\s+/g, ' ').trim();
         note = `${t('My note:')} ${title.trim() ? `${title.trim()} — ` : ''}${body}`.slice(0, 1990);
@@ -376,10 +473,11 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!active) return; // a hidden notebook tab
       if (e.key === 'Escape') { if (catalog) return; close(); return; }
       if (!(e.ctrlKey || e.metaKey)) return;
       const k = e.key.toLowerCase();
-      if (k === 's') { e.preventDefault(); if (!saving && dirty) save(); }
+      if (k === 's') { e.preventDefault(); void persist().catch(() => { /* the error is shown */ }); }
       if (k === 'e') { e.preventDefault(); setMode((m) => (m === 'edit' ? 'preview' : 'edit')); }
       if (mode === 'edit' && k === 'b') { e.preventDefault(); wrap('**'); }
       if (mode === 'edit' && k === 'i') { e.preventDefault(); wrap('*'); }
@@ -391,7 +489,7 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
 
   // Inside the main window the dialog slides. As its own window, the header drags that window.
   const startDrag = (e: ReactMouseEvent) => {
-    if (floating) return;
+    if (floating || embedded) return;
     if ((e.target as HTMLElement).closest('button')) return;
     e.preventDefault();
     const start = { x: e.clientX - pos.x, y: e.clientY - pos.y };
@@ -409,12 +507,27 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
   );
 
   const dialog = (
-      <div className="modal note-dialog" role="dialog" aria-modal="true" aria-labelledby="note-title" style={floating ? undefined : { transform: `translate(${pos.x}px, ${pos.y}px)` }}>
-        <header className="modal-head" onMouseDown={startDrag} onDoubleClick={() => { if (floating) window.qa?.noteMax(); }} title={t('Drag to move')}>
-          <h2 id="note-title">{path ? path.split('/').pop()?.replace(/\.md$/, '') : (title.trim() || t('New note'))}</h2>
+      <div className={`modal note-dialog${embedded ? ' note-embedded' : ''}`} role="dialog" aria-modal={!embedded} aria-labelledby="note-title"
+        style={floating || embedded ? undefined : { transform: `translate(${pos.x}px, ${pos.y}px)` }}>
+        <header className="modal-head" onMouseDown={startDrag} onDoubleClick={() => { if (floating) window.qa?.noteMax(); }} title={embedded ? undefined : t('Drag to move')}>
+          <h2 id="note-title">{curPath ? curPath.split('/').pop()?.replace(/\.md$/, '') : (title.trim() || t('New note'))}</h2>
+          <span className="statusbar-spacer" />
+          {ref && !floating && (
+            <button type="button" className="icon-btn" onClick={toNotebook} title={t('Open in the notebook')} aria-label={t('Open in the notebook')}>
+              <IconExternal size={17} />
+            </button>
+          )}
+          {ref && (
+            <button type="button" className={`icon-btn star-btn${favorite ? ' on' : ''}`} onClick={toggleFavorite} aria-pressed={favorite}
+              title={favorite ? t('Remove from favorites') : t('Add to favorites')} aria-label={favorite ? t('Remove from favorites') : t('Add to favorites')}>
+              <IconStar size={18} />
+            </button>
+          )}
           <button type="button" className="icon-btn" onClick={close} title={t('Close (Esc)')}><IconX size={18} /></button>
         </header>
         <div className="note-tools" role="toolbar" aria-label={t('Formatting')}>
+          {tool_('/', t('Commands (type /)'), openSlash, { fontWeight: 700 })}
+          <span className="sep" />
           {tool_('B', t('Bold (Ctrl+B)'), () => wrap('**'), { fontWeight: 700 })}
           {tool_('I', t('Italic (Ctrl+I)'), () => wrap('*'), { fontStyle: 'italic' })}
           {tool_('S', t('Strikethrough'), () => wrap('~~'), { textDecoration: 'line-through' })}
@@ -430,9 +543,9 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
           <span className="sep" />
           {tool_(<IconCode size={15} />, t('Code'), code)}
           {tool_(<IconLink size={15} />, t('Link (Ctrl+K)'), link)}
-          {tool_(<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="M3.5 10h17M3.5 14.5h17M9.5 10v9M15 10v9" /></svg>, t('Table'), table)}
+          {tool_(TABLE_ICON, t('Table'), table)}
           {tool_('—', t('Divider'), divider)}
-          {tool_(<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><circle cx="9" cy="10" r="1.6" /><path d="M20.5 16l-5-5-9 8.5" /></svg>, t('Image (paste or drop it too)'), () => picker.current?.click())}
+          {tool_(IMAGE_ICON, t('Image (paste or drop it too)'), () => picker.current?.click())}
           {tool_('@', t('Mention a project file'), () => insert('@'))}
           <span className="statusbar-spacer" />
           <button type="button" className={`icon-btn note-ai-toggle${ai ? ' on' : ''}`} onClick={() => setAi((v) => !v)} aria-expanded={ai} title={t('Use this note with the AI')}>
@@ -469,22 +582,13 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
 
         <div className="modal-body">
           {error && <div className="result warn" role="status"><p className="result-title">{error}</p></div>}
-          {draft && (
-            <div className="result note-draft" role="status">
-              <p className="result-title">{t('There is an unsaved draft of this note from {time}.', { time: clock(draft.at) })}</p>
-              <div className="row-actions">
-                <button type="button" className="btn btn-sm" onClick={() => { setText(draft.text); if (draft.title) setTitle(draft.title); setDraft(null); }}>{t('Restore the draft')}</button>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => { dropDraft(key); setDraft(null); }}>{t('Discard it')}</button>
-              </div>
-            </div>
-          )}
-          {(loose || !path) && (
+          {(loose || !curPath) && (
             <label className="field">
               <span className="label">{t('Title')}</span>
               <input value={title} maxLength={60} autoFocus onChange={(e) => setTitle(e.target.value)} placeholder={t('e.g. Test ideas')} />
             </label>
           )}
-          {project && path && (
+          {project && curPath && (
             <div className="field inline">
               <span className="label">{t('Tags')}</span>
               <TagPicker catalog={tagCatalog} value={tags} onChange={changeTags} onCatalog={setTagCatalog} compact />
@@ -493,19 +597,35 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
           {loose && projects.length > 0 && (
             <label className="field">
               <span className="label">{t('Send to a project')}</span>
-              <select value={destination} onChange={(e) => setDestination(e.target.value)}>
-                <option value="">{t('Keep as a loose note')}</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <span className="row-actions">
+                <select value={destination} onChange={(e) => setDestination(e.target.value)}>
+                  <option value="">{t('Keep as a loose note')}</option>
+                  {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {destination && <button type="button" className="btn" onClick={send} disabled={sending}>{sending ? t('Sending…') : t('Send')}</button>}
+              </span>
             </label>
           )}
           {mode === 'edit' ? (
             <div className="note-editor-wrap">
-              <textarea ref={editor} className="note-editor" spellCheck autoFocus={Boolean(path)} value={text}
-                onChange={(e) => { setText(e.target.value); findMention(e.target.value, e.target.selectionStart); }}
-                onKeyDown={onEditorKey} onClick={(e) => findMention(text, e.currentTarget.selectionStart)} onBlur={() => setTimeout(() => setMention(null), 150)}
+              <textarea ref={editor} className="note-editor" spellCheck autoFocus={Boolean(path) && !loose} value={text}
+                onChange={(e) => { setText(e.target.value); findMention(e.target.value, e.target.selectionStart); findSlash(e.target.value, e.target.selectionStart); }}
+                onKeyDown={onEditorKey}
+                onClick={(e) => { findMention(text, e.currentTarget.selectionStart); findSlash(text, e.currentTarget.selectionStart); }}
+                onBlur={() => setTimeout(() => { setMention(null); setSlash(null); }, 150)}
                 onPaste={onPaste} onDrop={onDrop}
-                placeholder={t('Write your note (Markdown). Type @ to mention a project file; paste or drop images.')} />
+                placeholder={t('Write your note (Markdown). Type / for commands and @ to mention a project file; paste or drop images.')} />
+              {slash && (
+                <div className="note-mention" role="listbox" aria-label={t('Commands')}>
+                  {!slashMatches.length ? <p className="muted small">{t('No command matches "{q}".', { q: slash.query })}</p>
+                    : slashMatches.map((c, i) => (
+                      <button key={c.id} type="button" role="option" aria-selected={i === slash.index} className={i === slash.index ? 'on' : ''}
+                        onMouseDown={(e) => { e.preventDefault(); pickSlash(c); }}>
+                        <span className="note-slash-glyph" aria-hidden="true">{c.glyph}</span><span className="note-mention-name">{c.label}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
               {mention && (
                 <div className="note-mention" role="listbox" aria-label={t('Project files')}>
                   {!target ? <p className="muted small">{t('Send the note to a project to mention its files.')}</p>
@@ -526,11 +646,11 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
         <footer className="modal-foot">
           <span className="note-status">
             {t('{n} words', { n: words(text) })}
-            {draftAt > 0 && dirty && <> · {t('Draft kept at {time}', { time: clock(draftAt) })}</>}
           </span>
           <span className="statusbar-spacer" />
-          <button type="button" className="btn btn-ghost" onClick={close}>{t('Cancel')}</button>
-          <button type="button" className="btn" onClick={save} disabled={saving || !dirty}>{saving ? t('Saving…') : t('Save')}</button>
+          <span className="note-status" role="status">
+            {saving || dirty ? t('Saving…') : savedAt ? t('Saved at {time}', { time: clock(savedAt) }) : ref ? t('Saved') : ''}
+          </span>
         </footer>
         {catalog === 'activity' && (
           <ActivityCatalog activities={activities} selected={activity?.id ?? ''} onPick={setActivityId} onClose={() => setCatalog(null)}
@@ -541,6 +661,6 @@ export function NoteDialog({ project, path, looseId = null, projects = [], float
         )}
       </div>
   );
-  if (floating) return dialog;
+  if (floating || embedded) return dialog;
   return <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>{dialog}</div>;
 }

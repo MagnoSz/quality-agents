@@ -1,6 +1,7 @@
-// Notes opened on their own: a window of the desktop app (desktop/main.ts) or an
-// editor tab of the VS Code extension (ide/vscode/host.ts). Which requests are
-// valid, which note a window shows, and the page parameters the UI reads (app/src/App.tsx).
+// Notes opened on their own: a window of the desktop app (desktop/main.ts, a
+// notebook with tabs, one per group) or an editor tab of the VS Code extension
+// (ide/vscode/host.ts, one per note). Which requests are valid, which window or
+// tab shows a note, and the page parameters the UI reads (app/src/App.tsx).
 
 import { listProjects } from '../scripts/lib/core.ts';
 
@@ -25,6 +26,9 @@ export function parseNoteRequest(raw: unknown, root: string): NoteRequest | null
 // The same note opens in the same window; '' for a new note, which always gets its own.
 export const noteKey = (n: NoteRequest): string =>
   n.loose && n.loose !== 'new' ? `loose:${n.loose}` : n.project && n.path ? `file:${n.project}:${n.path}` : '';
+
+// The desktop app's notebook: one window per group (the loose notes, or one project's notes), notes as its tabs.
+export const notebookKey = (n: NoteRequest): string => (n.project ? `project:${n.project}` : 'loose');
 
 export function noteQuery(n: NoteRequest): Record<string, string> {
   const query: Record<string, string> = { view: 'note' };

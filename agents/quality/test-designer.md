@@ -4,8 +4,10 @@ description: Designs manual tests - maps scenarios with ISTQB techniques applied
 category: quality
 skills: test-design, project-context
 access: project-write
+inputs: User stories, Business rules, Acceptance criteria
+outputs: mapping.md, test-cases.json, *.xlsx
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   status: draft
 ---
 

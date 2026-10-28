@@ -21,8 +21,15 @@ function keysInApp(): Set<string> {
   return keys;
 }
 
+// Messages the main process sends for the app to translate (operation check: err('…') / warn('…')).
+function serviceMessages(): string[] {
+  const source = readFileSync(join(ROOT, 'scripts', 'lib', 'operations.ts'), 'utf8');
+  return [...source.matchAll(/\b(?:err|warn)\((['"])((?:\\.|(?!\1).)*)\1/g)].map((m) => m[2].replace(/\\(['"\\])/g, '$1'));
+}
+
 test('every text of the app has a pt-BR translation', () => {
   const dynamic = [
+    ...serviceMessages(),
     ...Object.values(ACTIVITIES).flatMap((a) => [a.label, 'hint' in a ? a.hint : '']),
     ...LANGUAGES,
   ].filter((k): k is string => Boolean(k));

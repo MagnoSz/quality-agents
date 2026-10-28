@@ -4,8 +4,9 @@ description: Pre-analyzes an error from the QA's description and the log - valid
 category: quality
 skills: failure-analysis, project-context
 access: project-write
+inputs: Item description, Moment of the failure, Evidence date and time, Log
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   status: draft
 ---
 

@@ -25,7 +25,7 @@ Create a run with `npm run new-run -- --project <project-id> --skill <name> --sl
 Required fields: `schemaVersion`, `id`, `project`, `skill` or `workflow`, `createdAt`, `updatedAt`, `status`, `currentStep`, `completedSteps`, `pending`, `approvals`, `inputs`, `results`, `artifacts`.
 
 - `project` must equal the project folder the run lives in.
-- `status`: `in-progress` | `awaiting-approval` | `awaiting-input` | `blocked` | `completed` | `cancelled`.
+- `status`: `in-progress` | `awaiting-approval` | `awaiting-input` | `blocked` | `paused` | `completed` | `cancelled`. `paused` is set by the user (a multi-agent operation started from the desktop app): nothing new starts until it is resumed.
 - `inputs`: every input actually used, with path and a short description. Never list a document you did not read.
 - `artifacts`: paths of every file produced, relative to the framework root (starting with `workspace/projects/<project-id>/`) or to a target repository (`<target-repo>/...`).
 - `pending`: open questions and missing information, each with an id.

@@ -5,7 +5,7 @@
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   ACTIVITIES, LANGUAGES, TOOLS, agentFiles, contextChoice, fileTags, listTags, removeTag, saveTag, setFileTags, setProjectTags, agentMarkdown, buildPrompt, copyToInbox, createProject, detectTools, installedAgents, installedSkills, isActivity, isTool, isUsable, linkedFolder, listProjects,
   listRuns, listSkills, openRuns, projectAgentsDir, projectRepository, projectSkillsDir, projectSummary, projectsDir, skillFolders, skillStatus, slugify, windowsSafePrompt, PROJECT_PLUGINS, STARTERS, type ProjectSummary, type Starter, type ToolKey,
@@ -16,13 +16,15 @@ import { setWorkspaceDir, workspaceDir, workspaceLabel } from '../scripts/lib/re
 import { searchWorkspace } from './search.ts';
 import { activeWorkspace, addWorkspaceFolder, createWorkspace, forgetWorkspace, listWorkspaces, renameWorkspace, setActiveWorkspace, type WorkspaceInfo } from './workspaces.ts';
 import { readableInputs, docxToMarkdown } from '../scripts/lib/docx.ts';
+import { checkOperation, cleanOperation, formatMessage, listOperations, removeOperation, seedExample, suggestOutput, writeOperation, type OperationAgent } from '../scripts/lib/operations.ts';
+import { advance, approve, cancel, createOperationRun, decide, isOperationRun, markStarted, missingOutputs, readRun, setPaused, stepPrompt, type RunRequest } from '../scripts/lib/operation-runs.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
 import { STYLE_FILE, normalizeStyle } from '../scripts/lib/doc-style.mjs';
 import { xlsxSheets } from '../scripts/xlsx.mjs';
 import { cleanPrompt, type LaunchResult } from './launcher.ts';
 import { isEditable, isOpenable, openWithType, PathError, resolveInside } from './fs-guard.ts';
 import type { AppChooser } from './open-with.ts';
-import { duplicateAgent, isUsableAgent, libraryDir, listAgents, listCategories, parseAgent, validateAgent, type Agent } from '../scripts/lib/agents.ts';
+import { AGENT_AIS, cleanContract, duplicateAgent, isUsableAgent, libraryDir, listAgents, listCategories, parseAgent, validateAgent, validateContract, withContract, type Agent, type AgentContract } from '../scripts/lib/agents.ts';
 
 export class ServiceError extends Error {}
 
@@ -30,12 +32,15 @@ export interface Deps {
   launch: (tool: ToolKey, prompt: string, root: string, plugins?: string[]) => LaunchResult; // plugins: the project's own (project.json)
   openFolder: (folder: string) => void;
   openPath: (file: string) => void;
+  reveal?: (path: string) => void; // shows a file or folder selected in the system file manager
+  copy?: (text: string) => void; // system clipboard (the window has no clipboard permission)
   appChooser?: AppChooser; // "Open with" for Excel and Word files (desktop/open-with.ts); tests pass a fake
   pickFolder?: () => Promise<string | null>; // native folder dialog; the UI never sends paths
   home?: string; // user folder for skills and agents for all projects (tests point it elsewhere)
   fetch?: typeof fetch;
   trash?: (path: string) => Promise<void>; // removing skills/agents moves them to the trash (tests delete)
   onWorkspace?: (dir: string) => void; // the active workspace changed (the app passes it to the tools it starts)
+  detectTools?: () => Record<ToolKey, boolean>; // AI tools installed (tests fake it)
 }
 
 export interface TreeNode {
@@ -77,7 +82,7 @@ export interface LaunchRequest {
 export interface AgentInfo extends Omit<Agent, 'body'> { usable: boolean }
 
 // "Create agent" in Skills & agents: a Claude Code subagent closed to the skills chosen for it.
-export interface ScopeAgentRequest { name: string; description: string; skills: string[]; scope: string }
+export interface ScopeAgentRequest { name: string; description: string; skills: string[]; scope: string; contract?: AgentContract }
 
 // The AI's recommendation for a blank project, reviewed in "Set up project".
 export interface Plan {
@@ -343,8 +348,59 @@ export function createService(root: string, deps: Deps) {
   }
 
   // MCP servers the AI tools see in the project's repository (the linked folder, or the framework root where they start).
-  function mcpServers(project: string): TreeNode[] {
-    const repo = projectRepository(project, root) || root;
+  // Inputs, outputs, MCP servers and AI tool written in an agent file; undefined when it has none (or cannot be read).
+  function contractOf(file: string): AgentContract | undefined {
+    let agent: Agent | null = null;
+    try { agent = parseAgent(readFileSync(file, 'utf8'), 'custom', file).agent; } catch { /* unreadable */ }
+    if (!agent || !(agent.inputs.length || agent.outputs.length || agent.outcomes.length || agent.mcps.length || agent.ai)) return undefined;
+    return { inputs: agent.inputs, outputs: agent.outputs, ...(agent.outcomes.length ? { outcomes: agent.outcomes } : {}), mcps: agent.mcps, ai: agent.ai };
+  }
+  const withContractOf = (file: string): { contract?: AgentContract } => { const contract = contractOf(file); return contract ? { contract } : {}; };
+
+  const linkedOperations = (project: string): string[] => {
+    const data = JSON.parse(readFileSync(join(projectDir(project), 'project.json'), 'utf8')) as { operations?: unknown };
+    return Array.isArray(data.operations) ? data.operations.map(String) : [];
+  };
+  const linkedOperation = (project: string, id: unknown) => {
+    const op = listOperations(root).find((o) => o.id === id);
+    if (!op || !linkedOperations(project).includes(op.id)) throw new ServiceError('This operation is not linked to the project.');
+    return op;
+  };
+  const runDir = (project: string, runId: unknown): string => {
+    const id = String(runId ?? '');
+    if (!listRuns(project, root).some((r) => r.id === id && isOperationRun(r))) throw new ServiceError('Unknown operation run.');
+    return join(projectDir(project), 'runs', id);
+  };
+  // The file an agent's step reads: a library agent by its path in the framework, an agent for every project by its full path.
+  const agentFile = (a: OperationAgent): string => (a.source === 'library'
+    ? listAgents(root).find((x) => x.name === a.name)?.path ?? ''
+    : posix(join(globalAgentsDir, `${a.name}.md`)));
+  // MCP servers each AI tool sees for this project (null: Moki cannot tell for that tool).
+  const mcpsByTool = (project: string): Record<string, string[] | null> => {
+    const by: Record<string, string[] | null> = Object.fromEntries(AGENT_AIS.map((t) => [t, [] as string[]]));
+    by.antigravity = null;
+    const owner: Record<string, string> = {
+      '.mcp.json': 'claude', 'Claude Code (local)': 'claude', 'Claude Code (user)': 'claude',
+      '.codex/config.toml': 'codex', '.cursor/mcp.json': 'cursor-agent', '.gemini/settings.json': 'gemini',
+    };
+    for (const n of mcpServers(project)) { const tool = owner[n.mcp ?? '']; if (tool && by[tool]) by[tool]?.push(n.name); }
+    return by;
+  };
+
+  function operationAgents(): OperationAgent[] {
+    const library = listAgents(root).filter(isUsableAgent).map((a): OperationAgent => ({
+      key: `library:${a.name}`, name: a.name, source: 'library', description: a.description, access: a.access, inputs: a.inputs, outputs: a.outputs, outcomes: a.outcomes, mcps: a.mcps, ai: a.ai,
+    }));
+    const global = agentFiles(globalAgentsDir).map((name): OperationAgent => {
+      const file = join(globalAgentsDir, `${name}.md`);
+      const c = { outcomes: [] as string[], ...(contractOf(file) ?? { inputs: [], outputs: [], mcps: [], ai: '' }) };
+      return { key: `global:${name}`, name, source: 'global', description: describe(file), access: '', ...c };
+    });
+    return [...library, ...global];
+  }
+
+  function mcpServers(project: string | null): TreeNode[] {
+    const repo = (project && projectRepository(project, root)) || root;
     const json = (file: string): Record<string, unknown> => { try { return JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { return {}; } };
     const claude = json(join(home, '.claude.json')) as { mcpServers?: unknown; projects?: Record<string, { mcpServers?: unknown }> };
     const sources: [string, unknown][] = [
@@ -469,6 +525,13 @@ export function createService(root: string, deps: Deps) {
       return linkFolder(id, linked);
     },
 
+    // Deletes the project folder for good (no trash), only after the word "delete" is typed. A linked folder is never touched.
+    deleteProject: (project: string, confirm: unknown) => {
+      if (confirm !== 'delete') throw new ServiceError('Type delete to confirm.');
+      failing(() => rmSync(projectDir(project), { recursive: true, force: true }));
+      return true;
+    },
+
     // "Link an existing folder" (start screen): the folder chosen in the native dialog, and a project name from it.
     pickFolder: async () => {
       if (!deps.pickFolder) throw new ServiceError('Choosing a folder is not available here.');
@@ -526,7 +589,7 @@ export function createService(root: string, deps: Deps) {
     }),
 
     integrations: () => {
-      const available = detectTools();
+      const available = (deps.detectTools ?? detectTools)();
       return (Object.keys(TOOLS) as ToolKey[]).map((k) => ({
         id: k, label: TOOLS[k].label, hint: TOOLS[k].hint ?? '', command: TOOLS[k].command ?? '',
         kind: TOOLS[k].chat ? 'chat' : TOOLS[k].print ? 'print' : TOOLS[k].clipboard ? 'editor' : 'terminal',
@@ -583,6 +646,140 @@ export function createService(root: string, deps: Deps) {
       return rel;
     },
 
+    // ---------------------------------------------------------- multi-agent operations
+
+    // The agents an operation can use: usable library agents and the agents installed for every project.
+    operationAgents: (): OperationAgent[] => operationAgents(),
+    // language: the app's, for the example operation created the first time (see seedExample).
+    operations: (language?: unknown) => {
+      failing(() => seedExample(root, String(language ?? 'en')));
+      return listOperations(root).map((op) => ({ ...op, check: checkOperation(op, operationAgents()) }));
+    },
+    operation: (id: unknown) => {
+      const op = listOperations(root).find((o) => o.id === id);
+      if (!op) throw new ServiceError('Unknown operation.');
+      return { ...op, check: checkOperation(op, operationAgents()) };
+    },
+    checkOperation: (raw: unknown) => checkOperation(cleanOperation(raw), operationAgents()),
+    // A new arrow: which output of the first agent answers each input of the next one (by shared words).
+    suggestLink: (from: unknown, to: unknown) => {
+      const agents = operationAgents();
+      const a = agents.find((x) => x.key === from);
+      const b = agents.find((x) => x.key === to);
+      if (!a || !b) return {};
+      return Object.fromEntries(b.inputs.map((input) => [input, suggestOutput(input, a.outputs)]).filter(([, o]) => o));
+    },
+    // A new operation (no id) is named after its title; an existing one keeps its id when renamed.
+    saveOperation: (raw: unknown) => {
+      const op = cleanOperation(raw);
+      const all = listOperations(root);
+      if (op.id) {
+        if (!all.some((o) => o.id === op.id)) throw new ServiceError('Unknown operation.');
+      } else {
+        const base = slugify(op.name) || 'operation';
+        op.id = base;
+        for (let i = 2; all.some((o) => o.id === op.id); i++) op.id = `${base}-${i}`;
+      }
+      if (all.some((o) => o.id !== op.id && o.name.toLowerCase() === op.name.toLowerCase())) throw new ServiceError(`There is already an operation named "${op.name}".`);
+      const check = checkOperation(op, operationAgents());
+      if (check.errors.length) throw new ServiceError(`Not saved: ${check.errors.map(formatMessage).join(' ')}`);
+      failing(() => writeOperation(op, root));
+      return { ...op, check };
+    },
+    // ---- in a project: linked in project.json ("operations"), started from the side panel, run step by step
+
+    projectOperations: (project: string) => {
+      const linked = linkedOperations(project);
+      return listOperations(root).filter((o) => linked.includes(o.id)).map((op) => ({ ...op, check: checkOperation(op, operationAgents()) }));
+    },
+    setProjectOperations: (project: string, ids: unknown) => {
+      const file = join(projectDir(project), 'project.json');
+      const known = new Set(listOperations(root).map((o) => o.id));
+      const list = Array.isArray(ids) ? [...new Set(ids.map(String))].filter((id) => known.has(id)) : [];
+      const data = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+      writeFileSync(file, `${JSON.stringify({ ...data, operations: list }, null, 2)}\n`, 'utf8');
+      return list;
+    },
+    // What the start screen needs: the steps in order with their agent, default AI and MCP servers, and the MCP servers each AI tool has.
+    operationPlan: (project: string, id: unknown) => {
+      const op = linkedOperation(project, id);
+      const agents = operationAgents();
+      const check = checkOperation(op, agents);
+      const steps = check.order.map((sid) => {
+        const step = op.steps.find((x) => x.id === sid);
+        const agent = agents.find((a) => a.key === step?.agent);
+        const link = op.links.find((l) => l.to === sid);
+        return { id: sid, agent: agent?.name ?? '', description: agent?.description ?? '', ai: agent?.ai ?? '', mcps: agent?.mcps ?? [], gate: link?.gate ?? '', outputs: agent?.outputs ?? [] };
+      });
+      return { operation: { ...op, check }, steps, mcpsByTool: mcpsByTool(project), inbox: inboxFiles(projectDir(project)).map((f) => f.name) };
+    },
+    startOperation: (project: string, id: unknown, raw: unknown) => {
+      const op = linkedOperation(project, id);
+      const agents = operationAgents();
+      const check = checkOperation(op, agents);
+      if (check.errors.length) throw new ServiceError(`This operation cannot start: ${check.errors.map(formatMessage).join(' ')}`);
+      if (!check.order.length) throw new ServiceError('This operation has no steps.');
+      const r = (raw ?? {}) as { tools?: unknown; answers?: unknown; context?: unknown };
+      const installed = (deps.detectTools ?? detectTools)();
+      const tools: Record<string, string> = {};
+      for (const sid of check.order) {
+        const tool = String((r.tools as Record<string, unknown> | undefined)?.[sid] ?? '');
+        if (!(AGENT_AIS as readonly string[]).includes(tool)) throw new ServiceError('Choose an AI tool for every step.');
+        if (!installed[tool as ToolKey]) throw new ServiceError(`${TOOLS[tool as ToolKey].label} is not installed on this computer.`);
+        tools[sid] = tool;
+      }
+      const inbox = new Set(inboxFiles(projectDir(project)).map((f) => `inbox/${f.name}`));
+      const wanted = new Set(check.initialInputs.map((i) => `${i.step}:${i.input}`));
+      const answers: RunRequest['answers'] = (Array.isArray(r.answers) ? r.answers : []).map((a) => {
+        const x = (a ?? {}) as { step?: unknown; input?: unknown; text?: unknown; files?: unknown };
+        const files = Array.isArray(x.files) ? x.files.map(String) : [];
+        const stray = files.filter((f) => !inbox.has(f));
+        if (stray.length) throw new ServiceError(`Not in the project inbox: ${stray.join(', ')}`);
+        return { step: String(x.step ?? ''), input: String(x.input ?? ''), text: cleanPrompt(String(x.text ?? '')).slice(0, 20_000), files };
+      }).filter((a) => wanted.has(`${a.step}:${a.input}`));
+      const context = cleanPrompt(String(r.context ?? '')).slice(0, 20_000);
+      const withFiles = agents.map((a) => ({ ...a, file: agentFile(a) }));
+      return failing(() => createOperationRun(projectDir(project), project, op, withFiles, check.order, { tools, answers, context }));
+    },
+    operationRuns: (project: string) => listRuns(project, root).filter(isOperationRun).map((run) => run),
+    operationRun: (project: string, runId: unknown) => {
+      const dir = runDir(project, runId);
+      const run = readRun(dir);
+      return { ...run, visits: run.visits.map((v) => ({ ...v, handoff: existsSync(join(dir, 'handoff', `${v.slot}.md`)), missing: v.status === 'running' ? missingOutputs(dir, run, v) : [] })) };
+    },
+    // Looks at every open operation of the project; returns the steps to start now.
+    advanceOperations: (project: string) => {
+      projectDir(project);
+      return listRuns(project, root).filter((r) => isOperationRun(r) && !['completed', 'cancelled'].includes(r.status)).flatMap((r) => {
+        const step = failing(() => advance(runDir(project, r.id), project));
+        return step ? [{ run: r.id, step }] : [];
+      });
+    },
+    // slot: the visit to start ("s2", or "s2-2" when a loop brought the step back).
+    startOperationStep: (project: string, runId: unknown, slot: unknown, language: unknown) => {
+      const dir = runDir(project, runId);
+      const run = readRun(dir);
+      const v = run.visits[run.visits.length - 1];
+      if (!v || v.slot !== slot || v.status !== 'ready' || run.paused || run.decision || run.status === 'cancelled') throw new ServiceError('This step cannot start now.');
+      const lang = LANGUAGES.includes(String(language)) ? String(language) : 'English';
+      const prompt = stepPrompt(run, v.slot, workspaceLabel(root), lang);
+      const step = run.steps.find((x) => x.id === v.step);
+      const result = deps.launch(step?.ai as ToolKey, windowsSafePrompt(prompt, project, root), root, projectSummary(project, root).plugins); // the project's app plugins, as for any request
+      if (result.opened) failing(() => markStarted(dir, v.slot, result.terminal?.id));
+      return { ...result, prompt };
+    },
+    approveOperationStep: (project: string, runId: unknown) => failing(() => approve(runDir(project, runId))),
+    // The user's choice when no arrow fits the result, or a loop reached its limit: a step to go to, or '' to end the operation.
+    chooseOperationPath: (project: string, runId: unknown, to: unknown) => failing(() => decide(runDir(project, runId), String(to ?? ''))),
+    pauseOperation: (project: string, runId: unknown, paused: unknown) => failing(() => setPaused(runDir(project, runId), paused === true)),
+    cancelOperation: (project: string, runId: unknown) => failing(() => cancel(runDir(project, runId))),
+
+    deleteOperation: (id: unknown) => {
+      if (!listOperations(root).some((o) => o.id === id)) throw new ServiceError('Unknown operation.');
+      failing(() => removeOperation(String(id), root));
+      return true;
+    },
+
     // ---------------------------------------------------------- agents
 
     categories: () => listCategories(root),
@@ -598,6 +795,29 @@ export function createService(root: string, deps: Deps) {
       findAgent(name);
       const copy = duplicateAgent(name, root);
       return { ...copy, usable: isUsableAgent(copy) };
+    },
+
+    // Inputs, outputs, MCP servers and AI tool of one of the user's own agents, from the agent library form.
+    saveAgentContract: (name: string, raw: unknown) => {
+      const agent = findAgent(name);
+      if (agent.source !== 'custom') throw new ServiceError('Built-in agents cannot be edited. Duplicate it to customize.');
+      const contract = failing(() => cleanContract(raw));
+      const invalid = validateContract({ ...contract, access: agent.access }); // before writing: a bad name would break the file
+      if (invalid.length) throw new ServiceError(`Not saved: ${invalid.join('; ')}`);
+      const text = failing(() => withContract(readFileSync(customFile(agent), 'utf8'), contract));
+      const { agent: parsed, errors } = parseAgent(text, 'custom', agent.path);
+      const problems = parsed
+        ? [...errors, ...validateAgent(parsed, { skills: listSkills(root).map((s) => s.name), categories: [], fileName: agent.name, folder: agent.category })]
+        : errors;
+      if (problems.length) throw new ServiceError(`Not saved: ${problems.join('; ')}`);
+      writeFileSync(customFile(agent), text, 'utf8');
+      return true;
+    },
+
+    // MCP servers configured where the AI tools start (a project's linked folder, or the framework root), for the agent forms.
+    knownMcps: (project?: unknown) => {
+      const id = typeof project === 'string' && listProjects(root).includes(project) ? project : null;
+      return [...new Set(mcpServers(id).map((n) => n.name))].sort((a, b) => a.localeCompare(b));
     },
 
     // Only the user's own agents can be edited; the text is validated like a built-in agent.
@@ -671,6 +891,46 @@ export function createService(root: string, deps: Deps) {
       if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new ServiceError('Folder not found.');
       deps.openFolder(dir);
       return true;
+    },
+
+    // A new empty Markdown/text file or folder inside a project folder (the tree menu). Activities (runs/) keep their own structure.
+    // A file name without an extension gets .md. Returns the new path.
+    createEntry: (project: string, parent: unknown, name: unknown, kind: unknown) => {
+      const dir = projectDir(project);
+      const rel = String(parent ?? '').replace(/\/+$/, '');
+      if (rel === 'runs' || rel.startsWith('runs/')) throw new ServiceError('Activities keep their own structure. Create it in another folder.');
+      if (rel === 'notes') mkdirSync(inside(dir, 'notes'), { recursive: true }); // listed before the first note exists
+      const folder = inside(dir, rel);
+      if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new ServiceError('Folder not found.');
+      let entry = String(name ?? '').trim();
+      if (!entry || entry.length > 120 || /[<>:"/\\|?*\u0000-\u001f]/.test(entry) || entry.startsWith('.') || /[. ]$/.test(entry)
+        || /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i.test(entry)) {
+        throw new ServiceError('Use a name without / \\ : * ? " < > |, not starting or ending with a dot.');
+      }
+      if (kind === 'file') {
+        if (!extname(entry)) entry += '.md';
+        if (!isEditable(entry)) throw new ServiceError('Only Markdown (.md) and text (.txt) files can be created here.');
+      } else if (kind !== 'folder') throw new ServiceError('Unknown kind.');
+      const path = rel ? `${rel}/${entry}` : entry;
+      const target = inside(dir, path);
+      if (existsSync(target)) throw new ServiceError('A file or folder with this name already exists here.');
+      if (kind === 'file') writeFileSync(target, '', { encoding: 'utf8', flag: 'wx' }); else mkdirSync(target);
+      return path;
+    },
+
+    // Where a file or folder of the project is on this computer: shown selected in the file manager, or its full path (to copy).
+    revealPath: (project: string, rel: unknown) => {
+      const path = inside(projectDir(project), rel);
+      if (!existsSync(path)) throw new ServiceError('File not found.');
+      if (deps.reveal) deps.reveal(path); else deps.openFolder(statSync(path).isDirectory() ? path : dirname(path));
+      return true;
+    },
+    copyPath: (project: string, rel: unknown) => {
+      const path = inside(projectDir(project), rel);
+      if (!existsSync(path)) throw new ServiceError('File not found.');
+      if (!deps.copy) throw new ServiceError('Copying is not available here.');
+      deps.copy(path);
+      return path;
     },
 
     // "Choose my folder": links a folder of this machine (chosen in the native dialog) to the project.
@@ -810,12 +1070,15 @@ export function createService(root: string, deps: Deps) {
         if (builtin.includes(n)) return { name: n, path: repo ? `${posix(root)}/skills/${n}/SKILL.md` : `skills/${n}/SKILL.md`, builtin: true };
         throw new ServiceError(`"${n}" is not installed in ${f.label}. Install it first in Find skills.`);
       });
+      const contract = failing(() => cleanContract(req?.contract));
+      const invalid = validateContract(contract);
+      if (invalid.length) throw new ServiceError(`Not created: ${invalid.join('; ')}`);
       if (existsSync(join(f.agents, `${name}.md`))) throw new ServiceError(`An agent named "${name}" already exists here.`); // name is a slug
       const backup = repo ? backupAiConfig(backupsDir(project), repo, 'claude', ['.claude']) : undefined;
       mkdirSync(f.agents, { recursive: true });
       const file = inside(f.agents, `${name}.md`);
       const framework = skills.some((s) => 'builtin' in s) ? { root: repo ? posix(root) : '.', project, workspace: workspaceLabel(root) === 'workspace' ? undefined : workspaceLabel(root) } : undefined;
-      writeFileSync(file, agentMarkdown({ name, description, skills: skills.map(({ name: n, path }) => ({ name: n, path })), framework }), 'utf8');
+      writeFileSync(file, agentMarkdown({ name, description, skills: skills.map(({ name: n, path }) => ({ name: n, path })), framework, contract }), 'utf8');
       return { name, file, backup };
     },
 
@@ -827,7 +1090,7 @@ export function createService(root: string, deps: Deps) {
       return {
         skillsFolder: s.label, agentsFolder: a.label,
         skills: skillFolders(s.dir).map((name) => ({ name, description: describe(join(s.dir, name, 'SKILL.md')) })),
-        agents: agentFiles(a.dir).map((name) => ({ name, description: describe(join(a.dir, `${name}.md`)) })),
+        agents: agentFiles(a.dir).map((name) => ({ name, description: describe(join(a.dir, `${name}.md`)), ...withContractOf(join(a.dir, `${name}.md`)) })),
       };
     },
 
@@ -854,7 +1117,7 @@ export function createService(root: string, deps: Deps) {
           const folders = globalSkill(name);
           return { name, description: describe(join(folders[0], 'SKILL.md')), folders, linkedBy: projects.filter((p) => p.linkedSkills.includes(name)).map((p) => p.name) };
         }),
-        agents: agentFiles(globalAgentsDir).map((name) => ({ name, description: describe(join(globalAgentsDir, `${name}.md`)), file: join(globalAgentsDir, `${name}.md`) })),
+        agents: agentFiles(globalAgentsDir).map((name) => ({ name, description: describe(join(globalAgentsDir, `${name}.md`)), file: join(globalAgentsDir, `${name}.md`), ...withContractOf(join(globalAgentsDir, `${name}.md`)) })),
       };
     },
 
@@ -894,7 +1157,7 @@ export function createService(root: string, deps: Deps) {
       const file = globalAgent(name);
       const text = readFileSync(file, 'utf8');
       const { body } = parseFrontmatter(text) as { body: string };
-      return { name: String(name), description: describe(file), file, text, html: markdownToHtml(body ?? text) };
+      return { name: String(name), description: describe(file), file, text, html: markdownToHtml(body ?? text), ...withContractOf(file) };
     },
 
     saveGlobalAgent: (name: unknown, text: unknown) => {

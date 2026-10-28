@@ -132,6 +132,9 @@ export const IconSkill = ({ size }: IconProps) => (
 export const IconAgent = ({ size }: IconProps) => (
   <svg {...base(size)}><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4.5"/><circle cx="12" cy="3.5" r="1"/><path d="M9 13.5v1M15 13.5v1"/><path d="M2 13v3M22 13v3"/></svg>
 );
+export const IconStar = ({ size }: IconProps) => (
+  <svg {...base(size)}><path className="star-shape" d="M12 3.5l2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" /></svg>
+);
 export const IconPin = ({ size }: IconProps) => (
   <svg {...base(size)}><path className="pin-head" d="M10 3.5h4v5.2l2.8 3.3H7.2L10 8.7z" /><path d="M8.8 3.5h6.4M12 12v8.3" /></svg>
 );

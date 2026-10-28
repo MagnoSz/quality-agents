@@ -4,12 +4,13 @@
 // project or for every project are listed under those headings.
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { api, type AgentDetail, type AgentInfo, type Category, type ProjectSummary } from '../api';
+import { api, type AgentContract, type AgentDetail, type AgentInfo, type Category, type ProjectSummary, type ToolInfo } from '../api';
+import { AgentContractFields } from '../components/AgentContractFields';
 import { t } from '../i18n';
 import { IconCopy, IconEdit, IconEye, IconFolder, IconHome, IconTrash, IconX } from '../components/Icons';
 import { AddButton } from '../components/AddButton';
 
-interface ScopeAgent { name: string; description: string }
+interface ScopeAgent { name: string; description: string; contract?: AgentContract }
 type Sel = { kind: 'library' | 'project' | 'global'; name: string };
 
 interface Props {
@@ -47,6 +48,14 @@ export function Library({ onBack, backLabel, embedded = false, onCreate, creatin
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Inputs, outputs, MCP servers and AI of one of your agents, edited apart from its text.
+  const [contract, setContract] = useState<AgentContract | null>(null);
+  const [mcps, setMcps] = useState<string[]>([]);
+  const [tools, setTools] = useState<ToolInfo[]>([]);
+  useEffect(() => {
+    api.knownMcps(project?.id).then(setMcps).catch(() => setMcps([]));
+    api.integrations().then(setTools).catch(() => setTools([]));
+  }, [project?.id]);
 
   const load = useCallback(async (select?: string) => {
     const [list, cats] = await Promise.all([api.agents(), api.categories()]);
@@ -75,10 +84,13 @@ export function Library({ onBack, backLabel, embedded = false, onCreate, creatin
   useEffect(() => {
     setEditing(false);
     if (!libraryName) { setDetail(null); return; }
+    setContract(null);
     api.agent(libraryName).then((d) => { setDetail(d); setDraft(d.text); }).catch((e: Error) => setError(e.message));
   }, [libraryName]);
 
-  const dirty = editing && detail !== null && draft !== detail.text;
+  const shown: AgentContract | null = detail ? { inputs: detail.inputs, outputs: detail.outputs, outcomes: detail.outcomes ?? [], mcps: detail.mcps, ai: detail.ai } : null;
+  const contractDirty = contract !== null && JSON.stringify(contract) !== JSON.stringify(shown);
+  const dirty = (editing && detail !== null && draft !== detail.text) || contractDirty;
   const choose = (next: Sel) => {
     if (dirty && !window.confirm(t('Discard unsaved changes?'))) return;
     setError('');
@@ -103,6 +115,13 @@ export function Library({ onBack, backLabel, embedded = false, onCreate, creatin
     const fresh = await api.agent(detail.name);
     setDetail(fresh); setDraft(fresh.text); setEditing(false);
     await load(detail.name);
+  });
+
+  const saveContract = () => run(async () => {
+    if (!detail || !contract) return;
+    await api.saveAgentContract(detail.name, contract);
+    const fresh = await api.agent(detail.name);
+    setDetail(fresh); setDraft(fresh.text); setContract(null);
   });
 
   const remove = () => run(async () => {
@@ -196,6 +215,7 @@ export function Library({ onBack, backLabel, embedded = false, onCreate, creatin
                 </div>
               </header>
               <p className="muted small">{sel.kind === 'project' ? t('Installed for this project.') : t('Installed for all projects.')}</p>
+              {scopeAgent.contract && <AgentContractFields value={scopeAgent.contract} tools={tools} />}
             </div>
           ) : !detail ? <div className="welcome"><p className="muted">{t('No agents found.')}</p></div> : (
           <div className="library-detail">
@@ -209,7 +229,7 @@ export function Library({ onBack, backLabel, embedded = false, onCreate, creatin
                 {onCreate && (
                   <AddButton title={t('Create agent')} pressed={creating} onClick={onCreate} />
                 )}
-                {detail.source === 'custom' && !editing && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}><IconEdit size={15} /> {t('Edit')}</button>}
+                {detail.source === 'custom' && !editing && <button type="button" className="btn btn-ghost btn-sm" disabled={contractDirty} onClick={() => setEditing(true)}><IconEdit size={15} /> {t('Edit')}</button>}
                 {detail.source === 'custom' && editing && <>
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setDraft(detail.text); setEditing(false); }}><IconEye size={15} /> {t('Cancel')}</button>
                   <button type="button" className="btn btn-sm" disabled={busy || !dirty} onClick={() => { void save(); }}>{busy ? t('Saving…') : t('Save')}</button>
@@ -226,6 +246,20 @@ export function Library({ onBack, backLabel, embedded = false, onCreate, creatin
               <div><dt>{t('Origin')}</dt><dd>{detail.source === 'builtin' ? t('Built-in (read-only)') : detail.basedOn ? t('Yours, based on {agent}', { agent: detail.basedOn }) : t('Yours')}</dd></div>
               <div><dt>{t('Skills')}</dt><dd className="chips">{detail.skills.map((s) => <span key={s} className="chip">{s}</span>)}</dd></div>
             </dl>
+
+            {shown && (detail.source === 'custom' && !editing
+              ? (
+                <>
+                  <AgentContractFields value={contract ?? shown} onChange={setContract} mcps={mcps} tools={tools} access={detail.access} />
+                  {contractDirty && (
+                    <div className="row-actions contract-actions">
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setContract(null)}>{t('Cancel')}</button>
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={() => { void saveContract(); }}>{busy ? t('Saving…') : t('Save')}</button>
+                    </div>
+                  )}
+                </>
+              )
+              : !editing && <AgentContractFields value={shown} tools={tools} access={detail.access} />)}
 
             {editing
               ? <textarea className="editor library-editor" value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
