@@ -8,11 +8,11 @@ import '@xterm/xterm/css/xterm.css';
 import { api } from '../api';
 import { t } from '../i18n';
 
-interface Props { id: string; active: boolean; onExit: (code: number) => void }
+interface Props { id: string; project: string; active: boolean; onExit: (code: number) => void }
 
 const css = (name: string): string => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-export function TerminalView({ id, active, onExit }: Props) {
+export function TerminalView({ id, project, active, onExit }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const view = useRef<{ term: Terminal; fit: FitAddon } | null>(null);
   const exitRef = useRef(onExit);
@@ -42,7 +42,7 @@ export function TerminalView({ id, active, onExit }: Props) {
     });
     const input = term.onData((data) => bridge.input(id, data));
     const resize = term.onResize(({ cols, rows }) => bridge.resize(id, cols, rows));
-    void bridge.start(id, term.cols, term.rows).then((error) => { if (error) { term.write(`\x1b[31m${error}\x1b[0m\r\n`); exitRef.current(-1); } });
+    void bridge.start(id, term.cols, term.rows, project).then((error) => { if (error) { term.write(`\x1b[31m${error}\x1b[0m\r\n`); exitRef.current(-1); } });
 
     // Follow the size of the tab; a hidden tab has no size, so it is skipped.
     const observer = new ResizeObserver(() => { if (box.current?.offsetParent) fit.fit(); });

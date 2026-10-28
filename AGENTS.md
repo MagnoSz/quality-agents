@@ -31,6 +31,10 @@ Canonical definitions are in `skills/<name>/SKILL.md` (tools load the generated 
 | `documentation` | planned | Propose updates to the official scenario base | — | not available |
 | `automation` | pending-migration | Automation engineering: build, implement (FLX scenarios) and evolve automation projects in a target repository | — | not available until its reference materials are migrated |
 | `smoke-test` | planned | Targeted pre-validation of an improvement | — | not available |
+| `moki-architecture` | draft | Framework (no project): how Moki works — layers, flows, business rules, invariants | A question about the framework | — |
+| `moki-change` | draft | Framework (no project): plan, review or make a change to Moki — impact, proposal with code, approval, implementation, checks | The change request or an approved proposal | `moki-architecture` |
+| `cadcraft`, `deckcraft`, `designcraft`, `effectcraft`, `figcraft`, `filmcraft`, `gridcraft`, `lightcraft`, `pdfcraft`, `photocraft`, `soundcraft`, `vectorcraft`, `wordcraft` | draft | One per tool of the Craft App Suite listed by ArtCraft Launcher (`github.com/storytold/craft-launcher`), source in `github.com/storytold/<tool>`: facts, build, CLI, MCP, checks, logs, verified in the repos; QA work on a tool uses project id = skill name | A request about that tool | — |
+| `craft-launcher` | draft | ArtCraft Launcher itself: suite catalog, install locations, updates and self-update, build, checks, logs, verified in the repo | A request about the launcher | — |
 
 Status meaning: **draft** = usable, procedure complete, not yet validated in two AI tools; **pending-migration** = defined but waiting for source/reference material — do not execute; **planned** = do not execute, tell the user it is not available. Each skill can run alone (after project identification) except where it depends on another's output.
 
@@ -47,8 +51,14 @@ An **agent** is a role with instructions that uses one or more skills and asks f
 | `evidence-builder` | quality | draft | evidence-collection, evidence-sheet, evidence-document, project-context | project-write |
 | `automation-engineer` | quality | pending-migration | automation, project-context | repository-write |
 | `quality-agents-expert` | framework | draft | project-context (reference only) | repository-write |
+| `moki-consultant` | framework | draft | moki-architecture, moki-change | read-only |
+| `moki-executor` | framework | draft | moki-architecture, moki-change | repository-write |
+| `artcraft-router` | artcraft | draft | craft-launcher and the 13 Craft tool skills | read-only |
+| `craft-launcher-specialist` | artcraft | draft | craft-launcher | read-only |
+| `office-apps-specialist` | artcraft | draft | wordcraft, gridcraft, deckcraft | read-only |
+| `adobe-apps-specialist` | artcraft | draft | photocraft, lightcraft, vectorcraft, filmcraft, effectcraft, designcraft, pdfcraft | read-only |
 
-Access levels: **read-only** (reads the project, writes nothing), **project-write** (writes only inside `workspace/projects/<project-id>/`), **repository-write** (may also change a linked code repository, after an approved plan).
+Access levels: **read-only** (reads the project or the framework, writes nothing), **project-write** (writes only inside `workspace/projects/<project-id>/`), **repository-write** (may also change a linked code repository, after an approved plan).
 
 ## How to handle a request
 
@@ -103,3 +113,5 @@ Exception: an authorized change to a **target repository** (e.g. automation code
 ## For contributors (editing this framework)
 
 Edit `skills/` and `core/` only; then `npm run build` (regenerates `.agents/skills/` and `.claude/skills/`) and `npm run check`. Standard: [docs/skill-standard.md](docs/skill-standard.md).
+
+Changes to Moki itself follow the `moki-change` skill (with `moki-architecture`): impact analysis, a proposal with code and impact, approval, then implementation and checks. Act as `moki-consultant` (read-only, ends at the proposal) to analyze or plan, and as `moki-executor` to implement an approved plan.

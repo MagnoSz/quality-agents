@@ -10,6 +10,7 @@ export interface TermSpec { file: string; args: string[]; cwd: string; env?: Nod
 
 // The part of node-pty used here (it is an optional dependency, so its types may be absent).
 interface IPty {
+  pid: number;
   onData(listener: (data: string) => void): unknown;
   onExit(listener: (e: { exitCode: number }) => void): unknown;
   write(data: string): void;
@@ -38,10 +39,12 @@ export const shellSpec = (cwd: string): TermSpec => process.platform === 'win32'
 export function createTerminals(send: (channel: 'qa:term-data' | 'qa:term-exit', id: string, payload: string | number) => void) {
   const prepared = new Map<string, TermSpec>();
   const running = new Map<string, IPty>();
+  const projectOf = new Map<string, string>(); // project whose tab runs the terminal, for the status bar
   let next = 0;
 
   const kill = (id: string): void => {
     prepared.delete(id);
+    projectOf.delete(id);
     const proc = running.get(id);
     running.delete(id);
     try { proc?.kill(); } catch { /* already gone */ }
@@ -57,7 +60,7 @@ export function createTerminals(send: (channel: 'qa:term-data' | 'qa:term-exit',
     },
 
     // Starts a prepared terminal with the size of its tab. Returns an error message or ''.
-    start(id: string, cols: number, rows: number): string {
+    start(id: string, cols: number, rows: number, project = ''): string {
       const spec = prepared.get(id);
       const p = loadPty();
       if (!spec || !p) return 'This terminal can no longer be started.';
@@ -65,8 +68,9 @@ export function createTerminals(send: (channel: 'qa:term-data' | 'qa:term-exit',
       try {
         const proc = p.spawn(spec.file, spec.args, { name: 'xterm-256color', cols, rows, cwd: spec.cwd, env: spec.env ?? process.env });
         running.set(id, proc);
+        projectOf.set(id, project);
         proc.onData((data) => send('qa:term-data', id, data));
-        proc.onExit(({ exitCode }) => { if (running.get(id) === proc) running.delete(id); send('qa:term-exit', id, exitCode); });
+        proc.onExit(({ exitCode }) => { if (running.get(id) === proc) { running.delete(id); projectOf.delete(id); } send('qa:term-exit', id, exitCode); });
         return '';
       } catch (e) {
         return `Could not start ${spec.file}: ${e instanceof Error ? e.message : String(e)}`;
@@ -76,6 +80,7 @@ export function createTerminals(send: (channel: 'qa:term-data' | 'qa:term-exit',
     write: (id: string, data: string): void => { running.get(id)?.write(data); },
     resize: (id: string, cols: number, rows: number): void => { try { running.get(id)?.resize(cols, rows); } catch { /* exited */ } },
     kill,
+    list: (): { id: string; pid: number; project: string }[] => [...running].map(([id, proc]) => ({ id, pid: proc.pid, project: projectOf.get(id) ?? '' })),
     killAll: (): void => { for (const id of [...prepared.keys(), ...running.keys()]) kill(id); },
   };
 }

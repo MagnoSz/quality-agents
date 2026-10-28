@@ -1,0 +1,18 @@
+{
+  "name": "moki",
+  "displayName": "Moki",
+  "description": "QA skills for AI tools inside VS Code: projects, runs, evidence and the AI tools of the Moki framework.",
+  "version": "0.2.2",
+  "publisher": "orsi88",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/Orsi88/moki" },
+  "icon": "dist/ui/icon.png",
+  "engines": { "vscode": "^1.96.0" },
+  "categories": ["Testing", "AI"],
+  "type": "module",
+  "main": "./dist/extension.cjs",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [{ "command": "moki.open", "title": "Open Moki", "category": "Moki" }]
+  }
+}

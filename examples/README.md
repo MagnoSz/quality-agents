@@ -12,6 +12,8 @@ Synthetic material for exercising the skills. Everything here is fictional ("Acm
 | [evidence-sheet](evidence-sheet/README.md) | `evidence-sheet` | en (model in pt-BR) |
 | [evidence-document](evidence-document/README.md) | `evidence-document` | en |
 | [qa-orchestrator](qa-orchestrator/README.md) | `qa-orchestrator` | en |
+| [moki-architecture](moki-architecture/README.md) | `moki-architecture` | en (acts on this repository, no project) |
+| [moki-change](moki-change/README.md) | `moki-change` | en (acts on this repository, no project) |
 
 ## How to run an example
 

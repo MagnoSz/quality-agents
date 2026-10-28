@@ -4,12 +4,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, cpSync, symlinkSync, exi
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, sep } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createService, ServiceError, type FileContent, type TreeNode } from '../desktop/service.ts';
+import { callService, createService, ServiceError, type FileContent, type TreeNode } from '../desktop/service.ts';
 import { PathError, resolveInside, isEditable, isOpenable } from '../desktop/fs-guard.ts';
 import { launchInTerminal, pluginArgs, scriptFor, windowsStartArgs, type LaunchResult } from '../desktop/launcher.ts';
 import type { TermSpec } from '../desktop/terminals.ts';
+import { parseGioMime } from '../desktop/open-with.ts';
 import { docxToMarkdown, readableInputs } from '../scripts/lib/docx.ts';
-import { syncFramework } from '../desktop/framework.ts';
+import { frameworkTarget, syncFramework } from '../desktop/framework.ts';
+import { noteKey, noteQuery, parseNoteRequest } from '../desktop/notes.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
 import { formatNumber } from '../scripts/lib/numfmt.mjs';
 import { zip } from '../scripts/lib/zip.mjs';
@@ -19,7 +21,7 @@ import { createProject, slugify, windowsSafePrompt, type ToolKey } from '../scri
 // Fixture: a framework root with a few skills, the project template and one project.
 const root = mkdtempSync(join(tmpdir(), 'qa-desktop-'));
 const RUN = '20261020-0900-failure-analysis-x';
-const launched: { tool: ToolKey; prompt: string }[] = [];
+const launched: { tool: ToolKey; prompt: string; plugins?: string[] }[] = [];
 const folders: string[] = [];
 const opened: string[] = [];
 let service: ReturnType<typeof createService>;
@@ -47,6 +49,7 @@ before(() => {
   writeFileSync(join(project, 'runs', RUN, 'state.json'), JSON.stringify({ status: 'awaiting-approval', currentStep: 'interview', skill: 'failure-analysis' }));
   writeFileSync(join(project, 'runs', RUN, 'outputs', 'report.md'), '# Report\n\nSee [the story](../../../inbox/us-1.md).');
   writeFileSync(join(project, 'inbox', 'us-1.md'), '# US-1');
+  writeFileSync(join(project, 'inbox', 'report.pdf'), '%PDF-1.4');
   writeFileSync(join(project, 'inbox', 'us-2.docx'), makeDocx());
   writeFileSync(join(project, 'inbox', 'cases.xlsx'), zip([
     ['xl/workbook.xml', '<workbook><sheets><sheet name="Cases" r:id="rId1"/><sheet name="Empty" state="hidden" r:id="rId2"/></sheets></workbook>'],
@@ -64,7 +67,7 @@ before(() => {
   writeFileSync(join(project, 'inbox', 'tool.exe'), 'MZ');
   writeFileSync(join(root, 'secret.txt'), 'outside');
   service = createService(root, {
-    launch: (tool, prompt): LaunchResult => { launched.push({ tool, prompt }); return { opened: true, message: 'fake' }; },
+    launch: (tool, prompt, _root, plugins): LaunchResult => { launched.push({ tool, prompt, plugins }); return { opened: true, message: 'fake' }; },
     openFolder: (f) => { folders.push(f); },
     openPath: (f) => { opened.push(f); },
   });
@@ -108,6 +111,7 @@ test('readFile renders each kind of file', () => {
       widths: [64, 140, 63, 64, 64, 64, 64, 64], hiddenRows: [1], hiddenCols: [2], align: { '0:0': { h: 'center', v: 'middle', wrap: true } }, rows: [['Id'], [], ['', 'Renova&ção\r', { n: '42' }, 'TRUE', '00123', { n: '24/10/2026' }, { n: formatNumber(0.875, '0.00%') }, '=SUM(C3:C3)']] }, // the app uses the system locale
     { name: 'Empty', hidden: true, drawing: false, merges: [], truncated: false, widths: [], hiddenRows: [], hiddenCols: [], align: {}, rows: [] },
   ]);
+  assert.deepEqual(service.readFile('acme', 'inbox/report.pdf'), { kind: 'pdf', path: 'inbox/report.pdf', data: Buffer.from('%PDF-1.4').toString('base64') });
   const exe = service.readFile('acme', 'inbox/tool.exe') as Extract<FileContent, { kind: 'binary' }>;
   assert.equal(exe.kind, 'binary');
   assert.equal(exe.openable, false);
@@ -173,6 +177,31 @@ test('open folder / open with default program are confined and filtered', () => 
   service.openExternal('acme', 'inbox/us-1.md');
   assert.equal(opened.length, 1);
   assert.throws(() => service.openExternal('acme', 'inbox/tool.exe'), /not opened from the app/);
+});
+
+test('"open with" lists the system programs and opens only with one of them', async () => {
+  const opened: string[] = [];
+  const calc = { id: 'calc.desktop', name: 'Calc', isDefault: true };
+  const svc = createService(root, {
+    launch: () => ({ opened: true, message: '' }), openFolder: () => {}, openPath: () => {},
+    appChooser: { dialog: false, apps: async () => [calc], open: async (_file, app) => { opened.push(app); } },
+  });
+  writeFileSync(join(root, 'workspace', 'projects', 'acme', 'inbox', 'sheet.xlsx'), 'x');
+  assert.deepEqual(await svc.openWithApps('acme', 'inbox/sheet.xlsx'), { dialog: false, apps: [calc] });
+  assert.equal(await svc.openWith('acme', 'inbox/sheet.xlsx', 'calc.desktop'), true);
+  assert.deepEqual(opened, ['calc.desktop']);
+  await assert.rejects(svc.openWith('acme', 'inbox/sheet.xlsx', '/usr/bin/sh'), /not offered/);
+  await assert.rejects(svc.openWith('acme', 'inbox/sheet.xlsx', ''), /not offered/, 'no system dialog here');
+  await assert.rejects(svc.openWithApps('acme', 'inbox/us-1.md'), /only for Excel and Word/);
+  await assert.rejects(svc.openWithApps('acme', '../../sheet.xlsx'), ServiceError);
+  await assert.rejects(service.openWithApps('acme', 'inbox/sheet.xlsx'), /not available/, 'no chooser given');
+  assert.deepEqual(opened, ['calc.desktop']);
+});
+
+test('gio mime output: the default program, then the recommended ones', () => {
+  const out = 'Default application for “application/vnd.ms-excel”: calc.desktop\nRegistered applications:\n\tcalc.desktop\n\torg.gnome.Nautilus.desktop\nRecommended applications:\n\tgrid.desktop\n\tcalc.desktop\n';
+  assert.deepEqual(parseGioMime(out), { def: 'calc.desktop', ids: ['calc.desktop', 'grid.desktop'] });
+  assert.deepEqual(parseGioMime('No default applications for “x”\nNo registered applications\nNo recommended applications\n'), { def: '', ids: [] });
 });
 
 test('run details and open activities', () => {
@@ -297,6 +326,17 @@ test('agents per project: enabled list in project.json gates the launch', () => 
   assert.match(r.prompt, /Act as the requirements-analyst agent: read agents\/quality\/requirements-analyst\.md and follow it\./);
   assert.doesNotMatch(service.launch(base).prompt, /Act as/);
   service.setProjectAgents('acme', all);
+});
+
+test('plugins per project: caveman is saved in project.json and reaches only that project\'s launches', () => {
+  assert.deepEqual(service.projects().find((p) => p.id === 'acme')?.plugins, []);
+  assert.throws(() => service.setProjectPlugins('acme', ['ponytail']), /Unknown plugin/);
+  assert.deepEqual(service.setProjectPlugins('acme', ['caveman', 'caveman']).plugins, ['caveman']);
+  service.launch({ project: 'acme', activity: 'open', tool: 'claude', files: [], language: 'English', note: '' });
+  assert.deepEqual(launched.at(-1)?.plugins, ['caveman']);
+  assert.deepEqual(service.setProjectPlugins('acme', []).plugins, []);
+  service.launch({ project: 'acme', activity: 'open', tool: 'claude', files: [], language: 'English', note: '' });
+  assert.deepEqual(launched.at(-1)?.plugins, []);
 });
 
 test('linked folder: linking records it and backs up its AI settings inside it', async () => {
@@ -426,7 +466,7 @@ test('skill registry: paged search, verified install per project or global, prom
   await assert.rejects(svc.installSkill('acme', 'good/lint', 'project'), /already installed/);
   await svc.installSkill('acme', 'good/lint', 'global');
   assert.ok(existsSync(join(home, '.claude', 'skills', 'lint', 'SKILL.md')) && existsSync(join(home, '.agents', 'skills', 'lint', 'SKILL.md')));
-  assert.deepEqual(svc.installedSkills('acme'), { project: ['lint'], global: ['lint'] });
+  assert.deepEqual(svc.installedSkills('acme'), { project: ['lint'], global: ['lint'], artcraft: [] });
 
   assert.match(svc.launch(openAcme).prompt, /Skills installed for this project \(read workspace\/projects\/acme\/skills\/<name>\/SKILL\.md when one fits the task\): lint\./);
   rmSync(join(project, 'skills'), { recursive: true, force: true });
@@ -577,6 +617,17 @@ test('set up: description and global skills linked by reference; requests name t
   rmSync(home, { recursive: true, force: true });
 });
 
+test('set up: ArtCraft skills of the framework can be linked; requests name them from the framework root', () => {
+  const svc = createService(root, { launch: () => ({ opened: true, message: '' }), openFolder: () => {}, openPath: () => {}, home: join(root, 'home-artcraft') });
+  cpSync(join(ROOT, 'skills', 'wordcraft'), join(root, 'skills', 'wordcraft'), { recursive: true });
+  assert.deepEqual(svc.installedSkills('acme').artcraft, ['wordcraft'], 'only installed, usable skills of the artcraft agents');
+  assert.throws(() => svc.setupProject('acme', { description: '', linkedSkills: ['failure-analysis'] }), /Not installed for all projects: failure-analysis/);
+  svc.setupProject('acme', { description: '', linkedSkills: ['wordcraft'] });
+  assert.match(svc.launch({ project: 'acme', activity: 'setup', tool: 'print', files: [], language: 'English', note: '' }).prompt, /Global skills linked to this project \(read the SKILL\.md when one fits the task\): wordcraft \(skills\/wordcraft\/SKILL\.md\)\./);
+  svc.setupProject('acme', { description: '', linkedSkills: [] });
+  rmSync(join(root, 'skills', 'wordcraft'), { recursive: true, force: true });
+});
+
 test('blank project: no QA context files; the AI plan is filtered and approved from Set up', () => {
   const home = join(root, 'home-plan');
   const svc = createService(root, { launch: () => ({ opened: true, message: '' }), openFolder: () => {}, openPath: () => {}, home });
@@ -695,6 +746,10 @@ test('app plugins load only in app sessions: Claude by folder, Codex as one line
     assert.match(value, /^developer_instructions=Ponytail .*SKILL\.md.* rtk /);
     assert.doesNotMatch(value, /["\n%]/); // survives launcher scripts and cmd.exe quoting
     assert.deepEqual(pluginArgs('gemini', '/home/u/qa'), []);
+    // caveman only when the project turned it on
+    assert.deepEqual(pluginArgs('claude', '/home/u/qa', ['caveman']).slice(-2), ['--plugin-dir', join(dir, 'caveman')]);
+    assert.doesNotMatch(value, /caveman/i);
+    assert.match(pluginArgs('codex', '/home/u/qa', ['caveman'])[1], /Caveman .*caveman.*SKILL\.md/);
     rmSync(join(bin, 'rtk'));
     process.env.PATH = (path ?? '').split(':').filter((d) => !existsSync(join(d, 'rtk'))).join(':');
     assert.deepEqual(pluginArgs('claude', '/home/u/qa'), ['--plugin-dir', join(dir, 'ponytail')]);
@@ -843,6 +898,52 @@ test('installer framework sync refreshes framework files and never touches works
     rmSync(bundled, { recursive: true, force: true });
     rmSync(target, { recursive: true, force: true });
   }
+});
+
+test('installed copies keep the framework in QA_ROOT, the legacy folder or <Documents>/Moki', () => {
+  const docs = mkdtempSync(join(tmpdir(), 'qa-docs-'));
+  const saved = process.env.QA_ROOT;
+  try {
+    delete process.env.QA_ROOT;
+    assert.equal(frameworkTarget(docs), join(docs, 'Moki'));
+    mkdirSync(join(docs, 'Quality Agents'));
+    assert.equal(frameworkTarget(docs), join(docs, 'Quality Agents'));
+    process.env.QA_ROOT = join(docs, 'custom');
+    assert.equal(frameworkTarget(docs), join(docs, 'custom'));
+  } finally {
+    if (saved === undefined) delete process.env.QA_ROOT; else process.env.QA_ROOT = saved;
+    rmSync(docs, { recursive: true, force: true });
+  }
+});
+
+test('UI requests run only service methods and return their errors as messages', async () => {
+  const listed = await callService(service, 'projects', []);
+  assert.ok(listed.ok);
+  assert.ok((listed.value as { id: string }[]).some((p) => p.id === 'acme'));
+  for (const method of ['nope', 'constructor', '__proto__', 'toString', 42, null]) {
+    assert.deepEqual(await callService(service, method, []), { ok: false, error: 'Unknown action.' }, String(method));
+  }
+  const failed = await callService(service, 'run', ['nope', RUN]);
+  assert.ok(!failed.ok && failed.error && failed.error !== 'Unknown action.');
+});
+
+test('note windows: only notes/<file>.md of a listed project or a loose note id, one window per note', () => {
+  const id = '0f8fad5b-d9cb-469f-a165-70867728950e';
+  const file = parseNoteRequest({ project: 'acme', path: 'notes/a.md', theme: 'light' }, root);
+  assert.ok(file);
+  assert.deepEqual(file, { project: 'acme', path: 'notes/a.md', loose: null, theme: 'light' });
+  assert.equal(noteKey(file), 'file:acme:notes/a.md');
+  assert.deepEqual(noteQuery(file), { view: 'note', project: 'acme', path: 'notes/a.md' });
+  const loose = parseNoteRequest({ loose: id }, root);
+  assert.ok(loose);
+  assert.equal(noteKey(loose), `loose:${id}`);
+  assert.deepEqual(noteQuery(loose), { view: 'note', loose: id });
+  const fresh = parseNoteRequest({ loose: 'new' }, root);
+  assert.ok(fresh);
+  assert.equal(noteKey(fresh), '', 'a new note always gets its own window');
+  const bad = [null, 'x', {}, { path: 'notes/a.md' }, { project: 'nope', path: 'notes/a.md' }, { project: 'acme', path: '../secret.md' },
+    { project: 'acme', path: 'notes/../../x.md' }, { project: 'acme', path: 'inbox/us-1.md' }, { project: 'acme', loose: id }, { loose: 'abc' }];
+  for (const raw of bad) assert.equal(parseNoteRequest(raw, root), null, JSON.stringify(raw));
 });
 
 test('fs-guard sandbox and file type rules', () => {

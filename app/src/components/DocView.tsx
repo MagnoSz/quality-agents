@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type MouseEvent } from 'react';
-import { api, type FileContent } from '../api';
+import { api, type FileContent, type OpenWithApps } from '../api';
 import { t } from '../i18n';
-import { IconEdit, IconExternal, IconEye } from './Icons';
+import { IconEdit, IconExternal, IconEye, IconMore } from './Icons';
 import { FileIcon } from '../icons';
 
 interface Props {
@@ -15,7 +15,12 @@ interface Props {
   onSave: () => void;
   onOpenExternal: () => void;
   onLink: (href: string) => void;
+  // "Open with": the programs the system offers, and the one kept in Moki for this type (null = the system's default).
+  openWith?: { kept: { id: string; name: string } | null; apps: () => Promise<OpenWithApps | null>; open: (app: OpenWithApps['apps'][number] | null, keep: boolean) => void; reset: () => void };
 }
+
+// Excel and Word files get "Open with" (OPEN_WITH_TYPES in desktop/fs-guard.ts).
+const OPEN_WITH = /\.(xlsx|xls|docx|doc)$/i;
 
 const colName = (i: number): string => (i >= 26 ? colName(Math.floor(i / 26) - 1) : '') + String.fromCharCode(65 + (i % 26));
 
@@ -96,13 +101,35 @@ function SheetView({ sheets }: { sheets: Sheet[] }) {
   );
 }
 
+// Chromium's own PDF viewer (pages, zoom, search, print), in a frame with no access to the app.
+function PdfView({ data, title }: { data: string; title: string }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const next = URL.createObjectURL(new Blob([Uint8Array.from(atob(data), (c) => c.charCodeAt(0))], { type: 'application/pdf' }));
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [data]);
+  return url ? <iframe className="pdf-view" src={url} title={title} /> : null;
+}
+
 const formatSize = (n: number) => (n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
-export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, onSave, onOpenExternal, onLink }: Props) {
+export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, onSave, onOpenExternal, onLink, openWith }: Props) {
   const editable = (content.kind === 'markdown' || content.kind === 'text') && content.editable;
   const crumbs = content.path.split('/');
   const savedHtml = content.kind === 'markdown' ? content.html : '';
   const [html, setHtml] = useState(savedHtml);
+  const [menu, setMenu] = useState<(OpenWithApps & { right: number; top: number }) | null>(null);
+  const [keep, setKeep] = useState(false);
+  const kept = openWith?.kept ?? null;
+  const ext = content.path.slice(content.path.lastIndexOf('.')).toLowerCase();
+  const openTitle = kept ? t('Open with {tool}', { tool: kept.name }) : t('Open with the default program');
+
+  const showOpenWith = (e: MouseEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    void openWith?.apps().then((list) => { if (list) { setKeep(false); setMenu({ ...list, right: window.innerWidth - r.right, top: r.bottom + 4 }); } });
+  };
+  const choose = (app: OpenWithApps['apps'][number] | null) => { setMenu(null); openWith?.open(app, keep); };
 
   // The formatted view follows the text on screen, including edits not saved yet.
   useEffect(() => {
@@ -138,7 +165,10 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
           {editable && (dirty || saving) && (
             <button type="button" className="btn btn-sm" onClick={onSave} disabled={saving}>{saving ? t('Saving…') : t('Save')}</button>
           )}
-          <button type="button" className="icon-btn" onClick={onOpenExternal} title={t('Open with the default program')}><IconExternal size={17} /></button>
+          <button type="button" className="icon-btn" onClick={onOpenExternal} title={openTitle}><IconExternal size={17} /></button>
+          {openWith && OPEN_WITH.test(content.path) && (
+            <button type="button" className="icon-btn" onClick={showOpenWith} title={t('Open with…')} aria-label={t('Open with…')} aria-haspopup="menu"><IconMore size={17} /></button>
+          )}
         </div>
       </div>
 
@@ -160,6 +190,7 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
           </>
         )}
         {content.kind === 'xlsx' && <SheetView key={content.path} sheets={content.sheets} />}
+        {content.kind === 'pdf' && <PdfView data={content.data} title={content.path} />}
         {content.kind === 'image' && <div className="image-view"><img src={content.dataUrl} alt={content.path} /></div>}
         {content.kind === 'binary' && (
           <div className="binary-view">
@@ -167,11 +198,32 @@ export function DocView({ content, mode, draft, dirty, saving, onDraft, onMode, 
             <strong>{crumbs[crumbs.length - 1]}</strong>
             <span className="muted small">{formatSize(content.size)}{content.reason ? ` · ${content.reason}` : ''}</span>
             {content.openable
-              ? <button type="button" className="btn" onClick={onOpenExternal}><IconExternal size={16} /> {t('Open with the default program')}</button>
+              ? <button type="button" className="btn" onClick={onOpenExternal}><IconExternal size={16} /> {openTitle}</button>
               : <span className="muted small">{t('This type of file is not opened from Moki.')}</span>}
           </div>
         )}
       </div>
+
+      {menu && (
+        <div className="menu-backdrop" onMouseDown={() => setMenu(null)}>
+          <ul className="term-menu" role="menu" style={{ right: menu.right, top: menu.top }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Escape') setMenu(null); }}>
+            {menu.apps.map((app, i) => (
+              <li key={app.id}>
+                <button type="button" role="menuitem" autoFocus={i === 0} onClick={() => choose(app)}>
+                  {app.name}
+                  {kept?.id === app.id ? <span className="muted small">{t('default in Moki')}</span> : app.isDefault && <span className="muted small">{t('system default')}</span>}
+                </button>
+              </li>
+            ))}
+            {menu.dialog && <li><button type="button" role="menuitem" autoFocus onClick={() => choose(null)}>{t('Choose another program…')}</button></li>}
+            {!menu.dialog && !menu.apps.length && <li className="menu-note muted">{t('No programs for this file were found on this computer.')}</li>}
+            {kept && <li><button type="button" role="menuitem" onClick={() => { setMenu(null); openWith?.reset(); }}>{t('Back to the system default')}</button></li>}
+            {menu.apps.length > 0 && (
+              <li className="menu-note"><label><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} /> {t('Always open {ext} files with the chosen program', { ext })}</label></li>
+            )}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

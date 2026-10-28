@@ -27,3 +27,10 @@ export function syncFramework(bundled: string, target: string, buildId: string):
   writeFileSync(marker, `${buildId}\n`);
   return true;
 }
+
+// Where an installed copy keeps the framework: QA_ROOT, the folder of installs made
+// before the rename, or <Documents>/Moki. The desktop app and the VS Code extension share it.
+export function frameworkTarget(documents: string): string {
+  const legacy = join(documents, 'Quality Agents');
+  return process.env.QA_ROOT || (existsSync(legacy) ? legacy : join(documents, 'Moki'));
+}

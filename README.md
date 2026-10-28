@@ -59,7 +59,7 @@ Switch workspaces at the bottom of the project list, or go back to the list with
 
 The create form still says "one project per system you test". A blank project and a linked folder use the same form.
 
-**Inside a project.** A tree of the project: context, inbox, activities, notes. Drop files onto the window and they are copied into the inbox — up to 40 files, 200 MB each. Folders are skipped. Markdown is formatted; **Ctrl+E** edits, **Ctrl+S** saves, **Ctrl+W** closes. Word files are turned into text so any AI can read them. Excel and PDF open in their own program. Files the AI saves show up in the tree as they land.
+**Inside a project.** A tree of the project: context, inbox, activities, notes. Drop files onto the window and they are copied into the inbox — up to 40 files, 200 MB each. Folders are skipped. Markdown is formatted; **Ctrl+E** edits, **Ctrl+S** saves, **Ctrl+W** closes. Word files are turned into text so any AI can read them. Excel files show their values and PDFs open in the built-in viewer; the button next to them opens either in its own program. Files the AI saves show up in the tree as they land.
 
 **Open in your AI tool** (the play button):
 
@@ -191,6 +191,7 @@ npm run qa
 | `qa --terminal` | The same preparation in a terminal menu, if you prefer that to the window. |
 | `npm run new-project -- <id> "<Name>" [--blank]` | Create a project folder. `--blank` leaves the QA context files out. |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Build an installer on that system. Output in `release/`. |
+| `npm run vscode:package` | Build the VS Code extension (`release/moki-<version>.vsix`). To try it first: `npm run vscode:build`, then `code --extensionDevelopmentPath="$PWD/ide/vscode"`. See [ide/vscode/README.md](ide/vscode/README.md). |
 | `npm run check` and `npm test` | Validate the repository and run its tests. |
 
 `qa --terminal` is in English and still asks *Which project (system under test)?*. Any project id works.
@@ -210,11 +211,14 @@ Do not edit `.agents/skills/` or `.claude/skills/` by hand; `npm run build` rewr
 
 How the window is built: [docs/desktop-app.md](docs/desktop-app.md). How a skill is shaped: [docs/skill-standard.md](docs/skill-standard.md).
 
+To understand or plan a change, ask the `moki-consultant` agent: it only reads, and answers with a proposal that shows the code and its impact. To implement it after your approval, use `moki-executor`, which also runs the checks. Both follow the `moki-architecture` and `moki-change` skills ([docs/agents.md](docs/agents.md#framework-agents)).
+
 | Path | What it is |
 |---|---|
 | `AGENTS.md` | What an AI tool reads when this folder is opened: rules and the skill catalog |
 | `skills/`, `agents/`, `core/` | Skills, built-in agents, shared policies — edit here |
 | `app/`, `desktop/` | The window |
+| `ide/vscode/` | The VS Code extension: the same window inside VS Code |
 | `workspace/`, `workspaces/` | Local workspaces and projects — never versioned |
 
 ## License
