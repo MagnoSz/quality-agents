@@ -6,5 +6,9 @@
   "framework": {
     "label": "Framework",
     "description": "Maintaining Moki itself: skills, scripts, desktop app and checks."
+  },
+  "artcraft": {
+    "label": "ArtCraft",
+    "description": "The Craft App Suite of ArtCraft Launcher (github.com/storytold/craft-launcher): one reference skill per tool and the agent that picks the tool a request is about."
   }
 }

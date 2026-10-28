@@ -8,7 +8,7 @@ import { homedir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   ACTIVITIES, LANGUAGES, TOOLS, agentFiles, contextChoice, fileTags, listTags, removeTag, saveTag, setFileTags, setProjectTags, agentMarkdown, buildPrompt, copyToInbox, createProject, detectTools, installedAgents, installedSkills, isActivity, isTool, isUsable, linkedFolder, listProjects,
-  listRuns, listSkills, openRuns, projectAgentsDir, projectRepository, projectSkillsDir, projectSummary, projectsDir, skillFolders, skillStatus, slugify, windowsSafePrompt, STARTERS, type ProjectSummary, type Starter, type ToolKey,
+  listRuns, listSkills, openRuns, projectAgentsDir, projectRepository, projectSkillsDir, projectSummary, projectsDir, skillFolders, skillStatus, slugify, windowsSafePrompt, PROJECT_PLUGINS, STARTERS, type ProjectSummary, type Starter, type ToolKey,
 } from '../scripts/lib/core.ts';
 import { CATEGORIES, MAX_PAGE, installSkill, searchSkills } from './skill-registry.ts';
 import { parseFrontmatter } from '../scripts/lib/frontmatter.mjs';
@@ -22,17 +22,19 @@ import { markdownToHtml } from '../scripts/lib/markdown.mjs';
 import { STYLE_FILE, normalizeStyle } from '../scripts/lib/doc-style.mjs';
 import { xlsxSheets } from '../scripts/xlsx.mjs';
 import { cleanPrompt, type LaunchResult } from './launcher.ts';
-import { isEditable, isOpenable, PathError, resolveInside } from './fs-guard.ts';
+import { isEditable, isOpenable, openWithType, PathError, resolveInside } from './fs-guard.ts';
+import type { AppChooser } from './open-with.ts';
 import { AGENT_AIS, cleanContract, duplicateAgent, isUsableAgent, libraryDir, listAgents, listCategories, parseAgent, validateAgent, validateContract, withContract, type Agent, type AgentContract } from '../scripts/lib/agents.ts';
 
 export class ServiceError extends Error {}
 
 export interface Deps {
-  launch: (tool: ToolKey, prompt: string, root: string) => LaunchResult;
+  launch: (tool: ToolKey, prompt: string, root: string, plugins?: string[]) => LaunchResult; // plugins: the project's own (project.json)
   openFolder: (folder: string) => void;
   openPath: (file: string) => void;
   reveal?: (path: string) => void; // shows a file or folder selected in the system file manager
   copy?: (text: string) => void; // system clipboard (the window has no clipboard permission)
+  appChooser?: AppChooser; // "Open with" for Excel and Word files (desktop/open-with.ts); tests pass a fake
   pickFolder?: () => Promise<string | null>; // native folder dialog; the UI never sends paths
   home?: string; // user folder for skills and agents for all projects (tests point it elsewhere)
   fetch?: typeof fetch;
@@ -69,6 +71,7 @@ export type FileContent =
   | { kind: 'docx'; path: string; html: string }
   | { kind: 'xlsx'; path: string; sheets: Sheet[] }
   | { kind: 'image'; path: string; dataUrl: string }
+  | { kind: 'pdf'; path: string; data: string } // base64
   | { kind: 'binary'; path: string; size: number; openable: boolean; reason?: string };
 
 export interface LaunchRequest {
@@ -131,6 +134,15 @@ export function createService(root: string, deps: Deps) {
       if (e instanceof PathError) throw new ServiceError(e.message);
       throw e;
     }
+  };
+
+  // An Excel or Word file of the project, and the system's "Open with".
+  const openWithTarget = (project: string, rel: unknown): [AppChooser, string] => {
+    const file = inside(projectDir(project), rel);
+    if (!existsSync(file) || !statSync(file).isFile()) throw new ServiceError('File not found.');
+    if (!openWithType(file)) throw new ServiceError('"Open with" is only for Excel and Word files.');
+    if (!deps.appChooser) throw new ServiceError('"Open with" is not available here.');
+    return [deps.appChooser, file];
   };
 
   const findAgent = (name: unknown): Agent => {
@@ -205,6 +217,11 @@ export function createService(root: string, deps: Deps) {
   const globalSkillDirs = [join(home, '.claude', 'skills'), join(home, '.agents', 'skills')];
   const globalAgentsDir = join(home, '.claude', 'agents');
 
+  // Moki's own ArtCraft skills (the ones the built-in artcraft agents use) can be linked to a project like global skills.
+  const artcraftSkills = () => [...new Set(listAgents(root).filter((a) => a.source === 'builtin' && a.category === 'artcraft').flatMap((a) => a.skills))]
+    .filter((n) => isUsable(n, root)).sort();
+  const linkableSkills = () => new Set([...globalSkillDirs.flatMap(skillFolders), ...artcraftSkills()]);
+
   // Agent names accepted for a project: usable agents of the library only.
   const checkAgents = (names: unknown): string[] => {
     const usable = new Set(listAgents(root).filter(isUsableAgent).map((a) => a.name));
@@ -222,7 +239,7 @@ export function createService(root: string, deps: Deps) {
     if (!data || typeof data !== 'object') return null;
     const d = data as Record<string, unknown>;
     const strings = (v: unknown): string[] => (Array.isArray(v) ? [...new Set(v.filter((s): s is string => typeof s === 'string').map((s) => s.trim()).filter(Boolean))] : []);
-    const global = new Set(globalSkillDirs.flatMap(skillFolders));
+    const global = linkableSkills();
     const usable = new Set(listAgents(root).filter(isUsableAgent).map((a) => a.name));
     const files = (Array.isArray(d.contextFiles) ? d.contextFiles : []) as { path?: unknown; contains?: unknown }[];
     return {
@@ -254,10 +271,12 @@ export function createService(root: string, deps: Deps) {
     return join(globalAgentsDir, `${String(name)}.md`);
   };
 
-  // Global skills the project links by name (project.json linkedSkills); skills no longer installed are left out.
+  // Global and ArtCraft skills the project links by name (project.json linkedSkills); skills no longer installed are left out.
+  // ArtCraft skills are named relative to the framework root, where AI tools start.
   const linkedGlobalSkills = (project: string) => projectSummary(project, root).linkedSkills.flatMap((name) => {
     const base = globalSkillDirs.find((dir) => skillFolders(dir).includes(name));
-    return base ? [{ name, path: join(base, name, 'SKILL.md') }] : [];
+    if (base) return [{ name, path: join(base, name, 'SKILL.md') }];
+    return artcraftSkills().includes(name) ? [{ name, path: `skills/${name}/SKILL.md` }] : [];
   });
 
   // Skill and agent folders of each install scope. `label` is how agents name the skills folder:
@@ -436,6 +455,10 @@ export function createService(root: string, deps: Deps) {
         return { kind: 'binary', path, size, openable: true, reason: `Could not read this ${what}.` };
       }
     }
+    if (ext === '.pdf') {
+      if (size > OFFICE_LIMIT) return { kind: 'binary', path, size, openable: true, reason: 'PDF too large to preview.' };
+      return { kind: 'pdf', path, data: readFileSync(file).toString('base64') };
+    }
     if (IMAGE_TYPES[ext]) {
       if (size > IMAGE_LIMIT) return { kind: 'binary', path, size, openable: true, reason: 'Image too large to preview.' };
       return { kind: 'image', path, dataUrl: `data:${IMAGE_TYPES[ext]};base64,${readFileSync(file).toString('base64')}` };
@@ -534,6 +557,16 @@ export function createService(root: string, deps: Deps) {
     setProjectTags: (project: string, ids: unknown) => {
       projectDir(project);
       setProjectTags(project, ids, root);
+      return projectSummary(project, root);
+    },
+    // Turns the optional app plugins on or off for this project only.
+    setProjectPlugins: (project: string, names: unknown) => {
+      const file = join(projectDir(project), 'project.json');
+      const list = Array.isArray(names) ? [...new Set(names.map(String))] : [];
+      const unknown = list.filter((n) => !PROJECT_PLUGINS.includes(n));
+      if (unknown.length) throw new ServiceError(`Unknown plugin: ${unknown.join(', ')}`);
+      const data = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+      writeFileSync(file, `${JSON.stringify({ ...data, plugins: list.sort() }, null, 2)}\n`);
       return projectSummary(project, root);
     },
     fileTags: (project: string) => { projectDir(project); return fileTags(project, root); },
@@ -731,7 +764,7 @@ export function createService(root: string, deps: Deps) {
       const lang = LANGUAGES.includes(String(language)) ? String(language) : 'English';
       const prompt = stepPrompt(run, v.slot, workspaceLabel(root), lang);
       const step = run.steps.find((x) => x.id === v.step);
-      const result = deps.launch(step?.ai as ToolKey, windowsSafePrompt(prompt, project, root), root);
+      const result = deps.launch(step?.ai as ToolKey, windowsSafePrompt(prompt, project, root), root, projectSummary(project, root).plugins); // the project's app plugins, as for any request
       if (result.opened) failing(() => markStarted(dir, v.slot, result.terminal?.id));
       return { ...result, prompt };
     },
@@ -927,6 +960,20 @@ export function createService(root: string, deps: Deps) {
       return true;
     },
 
+    // "Open with" (Excel and Word): the programs the system offers; the one chosen must be among them.
+    openWithApps: async (project: string, rel: string) => {
+      const [chooser, file] = openWithTarget(project, rel);
+      return { dialog: chooser.dialog, apps: await chooser.apps(file) };
+    },
+
+    openWith: async (project: string, rel: string, app: unknown) => {
+      const [chooser, file] = openWithTarget(project, rel);
+      const known = app === '' ? chooser.dialog : typeof app === 'string' && (await chooser.apps(file)).some((a) => a.id === app);
+      if (!known) throw new ServiceError('This program is not offered for this file.');
+      await chooser.open(file, app as string);
+      return true;
+    },
+
     // ---------------------------------------------------------- installed skills and agents (Skills & agents dialog)
 
     // Skill registry (SkillMD). Free text and/or one category from the fixed list.
@@ -941,7 +988,7 @@ export function createService(root: string, deps: Deps) {
 
     installedSkills: (project: string) => {
       projectDir(project);
-      return { project: installedSkills(project, root), global: [...new Set(globalSkillDirs.flatMap(skillFolders))] };
+      return { project: installedSkills(project, root), global: [...new Set(globalSkillDirs.flatMap(skillFolders))], artcraft: artcraftSkills() };
     },
 
     // For a linked folder, its current .claude is copied to backups/claude-<date>/.claude once the download is verified, before anything is written.
@@ -974,7 +1021,7 @@ export function createService(root: string, deps: Deps) {
         'Do not invent project rules or data: what my description does not say becomes an open question in the proposal.',
         `When done, summarize the proposal and ask what to adjust. Talk to me in ${language}.`,
       ].join(' ');
-      return { ...deps.launch(tool, TOOLS[tool].clipboard ? sent : windowsSafePrompt(sent, project, root), root), prompt: sent };
+      return { ...deps.launch(tool, TOOLS[tool].clipboard ? sent : windowsSafePrompt(sent, project, root), root, projectSummary(project, root).plugins), prompt: sent };
     },
 
     skillProposals: (project: string) => {
@@ -1074,15 +1121,15 @@ export function createService(root: string, deps: Deps) {
       };
     },
 
-    // "Set up the project": its goal, the global skills it uses (by reference, nothing is copied) and,
-    // when given, its agents. Only skills installed globally can be linked. When the AI left a plan.json,
+    // "Set up the project": its goal, the global and ArtCraft skills it uses (by reference, nothing is copied) and,
+    // when given, its agents. Only skills installed globally or Moki's ArtCraft skills can be linked. When the AI left a plan.json,
     // contextFiles approves it with the files the user kept.
     setupProject: (project: string, req: { description?: unknown; linkedSkills?: unknown; agents?: unknown; contextFiles?: unknown }) => {
       const file = join(projectDir(project), 'project.json');
       const description = cleanPrompt(String(req?.description ?? '')).slice(0, 2000);
       const wanted = Array.isArray(req?.linkedSkills) ? [...new Set(req.linkedSkills.map(String))] : [];
-      const global = new Set(globalSkillDirs.flatMap(skillFolders));
-      const missing = wanted.filter((n) => !global.has(n));
+      const linkable = linkableSkills();
+      const missing = wanted.filter((n) => !linkable.has(n));
       if (missing.length) throw new ServiceError(`Not installed for all projects: ${missing.join(', ')}`);
       const agents = req?.agents === undefined ? undefined : checkAgents(req.agents);
       const data = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
@@ -1203,7 +1250,7 @@ export function createService(root: string, deps: Deps) {
       const prompt = buildPrompt({ project, activity, files: readableInputs(files, root), note, run, language, agent, repository: projectRepository(project, root), shared, excluded, workspace: workspaceLabel(root),
         skills: installedSkills(project, root), agents: installedAgents(project, root),
         description: cleanPrompt(projectSummary(project, root).description).slice(0, 2000), globalSkills: linkedGlobalSkills(project),
-        available: activity === 'plan' ? { skills: [...new Set(globalSkillDirs.flatMap(skillFolders))].sort(), agents: listAgents(root).filter(isUsableAgent).map((a) => a.name) } : undefined });
+        available: activity === 'plan' ? { skills: [...linkableSkills()].sort(), agents: listAgents(root).filter(isUsableAgent).map((a) => a.name) } : undefined });
       const t = TOOLS[tool];
       if (t.print || t.chat) {
         const upload = t.chat ? [
@@ -1215,9 +1262,22 @@ export function createService(root: string, deps: Deps) {
         return { opened: false, prompt, upload, bundleReady: existsSync(join(root, 'dist', 'chat', 'quality-agents-all.md')) };
       }
       const sent = t.clipboard ? prompt : windowsSafePrompt(prompt, project, root);
-      return { ...deps.launch(tool, sent, root), prompt };
+      return { ...deps.launch(tool, sent, root, projectSummary(project, root).plugins), prompt };
     },
   };
 }
 
 export type Service = ReturnType<typeof createService>;
+
+export type CallResult = { ok: true; value: unknown } | { ok: false; error: string };
+
+// One request from the UI (desktop qa:call, VS Code webview message): only names of service methods run.
+export async function callService(service: Service, method: unknown, args: unknown): Promise<CallResult> {
+  if (typeof method !== 'string' || !Object.hasOwn(service, method)) return { ok: false, error: 'Unknown action.' };
+  try {
+    const fn = service[method as keyof Service] as (...a: unknown[]) => unknown;
+    return { ok: true, value: await fn(...(Array.isArray(args) ? args : [])) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}

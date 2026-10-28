@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, hasBridge, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo, type WorkspaceInfo } from './api';
+import { api, hasBridge, pageParams, type ProjectSummary, type Starter, type TerminalRef, type ToolInfo, type WorkspaceInfo } from './api';
 import { t, useLang } from './i18n';
 import { Notebook } from './components/Notebook';
 import { hiddenIds, setMenuWorkspace } from './side-menu';
 import { Ribbon } from './components/Ribbon';
+import { UsageStatus } from './components/UsageStatus';
 import { Home } from './screens/Home';
 import { Workspace, linkedNotice } from './screens/Workspace';
 import { WorkspacePicker } from './screens/WorkspacePicker';
 import type { SettingsTab } from './screens/Settings';
 
-const noteParams = new URLSearchParams(window.location.search);
+const noteParams = pageParams();
 const isNoteWindow = noteParams.get('view') === 'note';
 
 const LAST_PROJECT = 'qa-last-project';
@@ -61,7 +62,7 @@ export function App() {
         setProjects(list);
         setTools(toolList);
         setMenuWorkspace(spaces.active);
-        const params = new URLSearchParams(window.location.search);
+        const params = pageParams();
         if (params.get('view') === 'note') { setReady(true); return; }
         const requested = params.get('project');
         // A project asked for at start (checks, shortcuts) opens in the workspace opened last; otherwise the picker comes first.
@@ -129,6 +130,7 @@ export function App() {
       <div className="shell">
         <Ribbon settingsOn={settings !== null} onHome={home} onSettings={() => setSettings(settings ? null : 'agents')} searchOn={search} onSearch={toggleSearch} />
         <Home projects={projects} tools={tools} version={version} onOpen={open} onCreate={create} settings={settings} onSettings={setSettings} project={null} onTerminal={openTerminal} workspace={workspace} onWorkspace={openWorkspace} search={search} onSearch={toggleSearch} onFound={openFound} onDeleted={() => { void loadProjects(); }} />
+        <footer className="statusbar"><span className="statusbar-spacer" /><UsageStatus names={Object.fromEntries(projects.map((p) => [p.id, p.name]))} /></footer>
       </div>
     );
   }

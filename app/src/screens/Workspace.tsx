@@ -16,6 +16,7 @@ import { OperationRunView } from '../components/OperationRunView';
 import { SidePanel } from '../components/SidePanel';
 import { SetupDialog } from '../components/SetupDialog';
 import { TerminalView } from '../components/TerminalView';
+import { UsageStatus } from '../components/UsageStatus';
 import { TagPicker } from '../components/TagPicker';
 import { SearchPanel } from '../components/SearchPanel';
 import { IconCopy, IconExternal, IconEyeOff, IconFile, IconFolder, IconGraph, IconMore, IconPlay, IconStar, IconTerminal, IconX } from '../components/Icons';
@@ -144,6 +145,26 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
   }, [project.id]);
 
   const update = (path: string, patch: Partial<Tab>) => setTabs((all) => all.map((t) => (t.path === path ? { ...t, ...patch } : t)));
+
+  // "Open with": the program kept for a file type (by extension) is a preference of this computer; the system's default never changes.
+  const [kept, setKept] = useState<Record<string, { id: string; name: string }>>(() => { try { return JSON.parse(recall('qa-open-with') ?? '{}'); } catch { return {}; } });
+  const keep = (ext: string, app: { id: string; name: string } | null) => {
+    const next = { ...kept };
+    if (app) next[ext] = { id: app.id, name: app.name }; else delete next[ext];
+    remember('qa-open-with', JSON.stringify(next));
+    setKept(next);
+  };
+  const extOf = (path: string) => path.slice(path.lastIndexOf('.')).toLowerCase();
+  const openExternal = (path: string) => {
+    const system = () => { api.openExternal(project.id, path).catch((e: Error) => setError(e.message)); };
+    const app = kept[extOf(path)];
+    if (!app) { system(); return; }
+    api.openWith(project.id, path, app.id).catch(() => {
+      keep(extOf(path), null);
+      setNotice(t('{name} is no longer offered for this file, so it opened with the default program.', { name: app.name }));
+      system();
+    });
+  };
 
   const save = useCallback((path: string) => {
     const tab = tabsRef.current.find((t) => t.path === path);
@@ -460,7 +481,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         {notice && <div className="error-bar info-bar" role="status">{notice}<button type="button" className="icon-btn" onClick={() => setNotice('')}><IconX size={14} /></button></div>}
         {error && <div className="error-bar">{error}<button type="button" className="icon-btn" onClick={() => setError('')}><IconX size={14} /></button></div>}
         {terms.map((t) => (
-          <TerminalView key={t.id} id={t.id} active={t.id === activeTerm} onExit={() => setTerms((all) => all.map((x) => (x.id === t.id ? { ...x, running: false } : x)))} />
+          <TerminalView key={t.id} id={t.id} project={project.id} active={t.id === activeTerm} onExit={() => setTerms((all) => all.map((x) => (x.id === t.id ? { ...x, running: false } : x)))} />
         ))}
         {graphFocus ? (
           <div className="welcome">
@@ -483,8 +504,17 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
             onDraft={(draft) => update(tab.path, { draft })}
             onMode={(mode) => update(tab.path, { mode })}
             onSave={() => save(tab.path)}
-            onOpenExternal={() => { api.openExternal(project.id, tab.path).catch((e: Error) => setError(e.message)); }}
+            onOpenExternal={() => openExternal(tab.path)}
             onLink={onLink}
+            openWith={{
+              kept: kept[extOf(tab.path)] ?? null,
+              apps: () => api.openWithApps(project.id, tab.path).catch((e: Error) => { setError(e.message); return null; }),
+              open: (app, always) => {
+                if (app && always) keep(extOf(tab.path), app);
+                api.openWith(project.id, tab.path, app?.id ?? '').catch((e: Error) => setError(e.message));
+              },
+              reset: () => keep(extOf(tab.path), null),
+            }}
           />
         </>) : (
           <div className="welcome">
@@ -511,6 +541,7 @@ export function Workspace({ project, tools, onHome, settings, onSettings, onProj
         {tab && isDirty(tab) && <span className="warn-text">{t('unsaved')}</span>}
         <span className="statusbar-spacer" />
         {words !== null && <span className="muted">{t('{n} words', { n: words })}</span>}
+        <UsageStatus names={{ [project.id]: project.name }} terminals={terms} onTerminal={(id) => { setGraphFocus(false); setActiveTerm(id); }} />
       </footer>
 
       {termMenu && (

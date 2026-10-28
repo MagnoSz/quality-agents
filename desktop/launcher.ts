@@ -17,7 +17,7 @@ import type { TermSpec } from './terminals.ts';
 
 export interface LaunchResult { opened: boolean; message: string; copied?: boolean; terminal?: { id: string; title: string } }
 
-export type Launcher = (tool: ToolKey, prompt: string, root: string) => LaunchResult;
+export type Launcher = (tool: ToolKey, prompt: string, root: string, plugins?: string[]) => LaunchResult;
 export type FolderOpener = (folder: string) => void;
 
 // Inside the desktop app, main.ts points QA_RUN_TOOL to the bundled run-tool and
@@ -41,7 +41,7 @@ export function windowsStartArgs(nodePath: string, runTool: string, requestFile:
   return `/d /s /c "start ${q(title)} ${q(nodePath)} ${q(runTool)} ${q(requestFile)}"`;
 }
 
-function detached(cmd: string, args: string[], options: { shell?: boolean; windowsVerbatimArguments?: boolean; env?: NodeJS.ProcessEnv } = {}): void {
+export function detached(cmd: string, args: string[], options: { shell?: boolean; windowsVerbatimArguments?: boolean; env?: NodeJS.ProcessEnv } = {}): void {
   const child = spawn(cmd, args, { detached: true, stdio: 'ignore', ...options });
   child.on('error', () => { /* reported by the caller's availability check */ });
   child.unref();
@@ -50,14 +50,17 @@ function detached(cmd: string, args: string[], options: { shell?: boolean; windo
 // Plugins only for the sessions the app opens (adapters/app-plugins/README.md); each is
 // skipped when what it needs is missing. Codex has no per-session plugins, so it gets
 // one line of developer instructions (one line: launcher scripts drop line breaks).
-export function pluginArgs(tool: ToolKey, root: string): string[] {
-  const ponytail = tool === 'codex' || Boolean(which('node')); // the Claude hooks run on Node
+// `plugins` are the ones the project turned on (project.json plugins: caveman).
+export function pluginArgs(tool: ToolKey, root: string, plugins: string[] = []): string[] {
+  const node = tool === 'codex' || Boolean(which('node')); // the Claude hooks run on Node
   const rtk = Boolean(which('rtk'));
+  const caveman = node && plugins.includes('caveman');
   const dir = join(root, 'adapters', 'app-plugins');
-  if (tool === 'claude') return [...(ponytail ? ['ponytail'] : []), ...(rtk ? ['rtk'] : [])].flatMap((p) => ['--plugin-dir', join(dir, p)]);
+  if (tool === 'claude') return [...(node ? ['ponytail'] : []), ...(rtk ? ['rtk'] : []), ...(caveman ? ['caveman'] : [])].flatMap((p) => ['--plugin-dir', join(dir, p)]);
   if (tool !== 'codex') return [];
   const lines = [`Ponytail mode is active (level full): before writing, changing or reviewing code, read ${join(dir, 'ponytail', 'skills', 'ponytail', 'SKILL.md')} and follow it.`];
   if (rtk) lines.push('Run shell commands through rtk to shrink their output (rtk git status, rtk grep, rtk ls...); rtk proxy CMD runs one unfiltered.');
+  if (caveman) lines.push(`Caveman mode is active: before every reply, read ${join(dir, 'caveman', 'skills', 'caveman', 'SKILL.md')} and follow it.`);
   return ['-c', `developer_instructions=${lines.join(' ')}`];
 }
 
@@ -65,7 +68,7 @@ const LINUX_TERMINALS: [string, string[]][] = [
   ['x-terminal-emulator', ['-e']], ['gnome-terminal', ['--']], ['konsole', ['-e']], ['xfce4-terminal', ['-x']], ['xterm', ['-e']],
 ];
 
-export const launchTool: Launcher = (tool, prompt, root) => {
+export const launchTool: Launcher = (tool, prompt, root, plugins = []) => {
   const t = TOOLS[tool];
   if (!t.command || !t.args) throw new Error(`${t.label} is not started from the app.`);
   if (!which(t.command)) return { opened: false, message: `${t.label} is not installed on this computer (command "${t.command}" not found).` };
@@ -85,7 +88,7 @@ export const launchTool: Launcher = (tool, prompt, root) => {
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const title = `Moki - ${t.label}`;
-  const args = [...pluginArgs(tool, root), ...t.args(cleanPrompt(prompt))];
+  const args = [...pluginArgs(tool, root, plugins), ...t.args(cleanPrompt(prompt))];
 
   if (process.platform === 'win32') {
     const file = requestFile(tool, args, root, title);
@@ -122,11 +125,11 @@ function requestFile(tool: ToolKey, args: string[], root: string, title: string)
 // Starts a terminal tool in a terminal tab of the app, with the request or, for an
 // empty prompt, just the tool. `prepare` registers the command with
 // desktop/terminals.ts; the tab starts it once it knows its size.
-export function launchInTerminal(tool: ToolKey, prompt: string, root: string, prepare: (spec: TermSpec) => string): LaunchResult {
+export function launchInTerminal(tool: ToolKey, prompt: string, root: string, prepare: (spec: TermSpec) => string, plugins: string[] = []): LaunchResult {
   const t = TOOLS[tool];
   if (!t.command || !t.args || t.clipboard) throw new Error(`${t.label} does not run in a terminal.`);
   if (!which(t.command)) return { opened: false, message: `${t.label} is not installed on this computer (command "${t.command}" not found).` };
-  const args = [...pluginArgs(tool, root), ...(prompt ? t.args(cleanPrompt(prompt)) : [])];
+  const args = [...pluginArgs(tool, root, plugins), ...(prompt ? t.args(cleanPrompt(prompt)) : [])];
   const id = prepare(process.platform === 'win32'
     ? { file: which('node') ?? process.execPath, args: [runToolPath(), requestFile(tool, args, root, t.label)], cwd: root, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }
     : { file: t.command, args, cwd: root });

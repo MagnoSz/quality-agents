@@ -59,7 +59,7 @@ Troque de workspace no rodapé da lista de projetos, ou volte para a lista com *
 
 O formulário de criar ainda diz "um projeto por sistema que você testa". Um projeto em branco e uma pasta vinculada usam o mesmo formulário.
 
-**Dentro de um projeto.** A árvore do projeto: contexto, entrada (inbox), atividades, notas. Solte arquivos sobre a janela e eles são copiados para o inbox — até 40 arquivos, 200 MB cada. Pastas são ignoradas. Markdown aparece formatado; **Ctrl+E** edita, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word viram texto para qualquer IA conseguir ler. Excel e PDF abrem no programa deles. Os arquivos que a IA salva aparecem na árvore assim que chegam.
+**Dentro de um projeto.** A árvore do projeto: contexto, entrada (inbox), atividades, notas. Solte arquivos sobre a janela e eles são copiados para o inbox — até 40 arquivos, 200 MB cada. Pastas são ignoradas. Markdown aparece formatado; **Ctrl+E** edita, **Ctrl+S** salva, **Ctrl+W** fecha. Arquivos Word viram texto para qualquer IA conseguir ler. Excel mostra os valores e PDF abre no visualizador embutido; o botão ao lado abre qualquer um no programa dele. Os arquivos que a IA salva aparecem na árvore assim que chegam.
 
 **Abrir na sua ferramenta de IA** (o botão de play):
 
@@ -191,6 +191,7 @@ O `npm run setup` instala as ferramentas, constrói o app, cria a `workspace/` e
 | `qa --terminal` | A mesma preparação num menu de terminal, se você preferir isso à janela. |
 | `npm run new-project -- <id> "<Nome>" [--blank]` | Cria a pasta de um projeto. `--blank` deixa de fora os arquivos de contexto de QA. |
 | `npm run dist:win` / `dist:mac` / `dist:linux` | Gera um instalador naquele sistema. A saída fica em `release/`. |
+| `npm run vscode:package` | Gera a extensão do VS Code (`release/moki-<versão>.vsix`). Para testar antes: `npm run vscode:build` e depois `code --extensionDevelopmentPath="$PWD/ide/vscode"`. Veja [ide/vscode/README.md](ide/vscode/README.md). |
 | `npm run check` e `npm test` | Validam o repositório e rodam os testes dele. |
 
 O `qa --terminal` é em inglês e ainda pergunta *Which project (system under test)?*. Qualquer id de projeto serve. Os comandos trabalham na `workspace/`; defina `QA_WORKSPACE=<pasta>` para usar outro workspace.
@@ -210,11 +211,14 @@ Não edite `.agents/skills/` nem `.claude/skills/` à mão; o `npm run build` re
 
 Como a janela é construída: [docs/desktop-app.md](docs/desktop-app.md). Como uma skill é formada: [docs/skill-standard.md](docs/skill-standard.md).
 
+Para entender ou planejar uma mudança, peça ao agente `moki-consultant`: ele só lê e devolve a proposta com o código e o impacto. Para implementá-la depois da sua aprovação, use o `moki-executor`, que roda as verificações. Os dois seguem as skills `moki-architecture` e `moki-change` ([docs/agents.md](docs/agents.md#framework-agents)).
+
 | Caminho | O que é |
 |---|---|
 | `AGENTS.md` | O que uma ferramenta de IA lê quando esta pasta é aberta: regras e o catálogo de skills |
 | `skills/`, `agents/`, `core/` | Skills, agentes prontos, políticas comuns — edite aqui |
 | `app/`, `desktop/` | A janela |
+| `ide/vscode/` | A extensão do VS Code: a mesma janela dentro do VS Code |
 | `workspace/`, `workspaces/` | Workspaces e projetos locais — nunca versionados |
 
 ## Licença

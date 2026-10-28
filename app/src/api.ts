@@ -9,6 +9,7 @@ export interface ProjectSummary {
   linkedSkills: string[]; // global skills this project uses, by name
   starter: Starter;
   tags: string[]; // tag ids
+  plugins: string[]; // app plugins turned on for this project (caveman)
 }
 // A tag shares context between projects: the context of the projects with it and the files marked with it.
 export interface Tag { id: string; name: string; color: string; description: string }
@@ -29,6 +30,8 @@ export interface SkillInfo { name: string; status: string; description: string }
 export type ToolKind = 'terminal' | 'editor' | 'chat' | 'print';
 export interface ToolInfo { id: string; label: string; hint: string; command: string; kind: ToolKind; available: boolean }
 export interface ActivityInfo { id: string; label: string; hint: string; skill: string; needsFiles: boolean; available: boolean; status: string }
+// "Open with" (Excel and Word files): the programs the system offers; dialog = the system shows its own list instead (Windows).
+export interface OpenWithApps { dialog: boolean; apps: { id: string; name: string; isDefault: boolean }[] }
 export interface InboxFile { name: string; size: number; modified: string }
 export interface OpenRun { id: string; status: string; currentStep: string }
 
@@ -48,6 +51,7 @@ export type FileContent =
     merges: number[][]; widths: number[]; hiddenRows: number[]; hiddenCols: number[]; align: Record<string, { h?: string; v?: string; wrap?: boolean }>;
   }[] }
   | { kind: 'image'; path: string; dataUrl: string }
+  | { kind: 'pdf'; path: string; data: string } // base64
   | { kind: 'binary'; path: string; size: number; openable: boolean; reason?: string };
 
 export interface RunState {
@@ -140,13 +144,22 @@ export interface GlobalItems {
   agents: { name: string; description: string; file: string; contract?: AgentContract }[];
 }
 export interface GlobalAgentDetail { name: string; description: string; file: string; text: string; html: string; contract?: AgentContract }
+// Status bar (desktop/usage.ts): plan usage of the AI tools and memory of the computer, of Moki and of each project's terminals.
+export interface PlanUsage { tool: 'claude' | 'codex'; label: string; windows: { label: string; percent: number; resetsAt: number | null }[]; error?: string }
+export interface Usage {
+  plans: PlanUsage[];
+  memory: { total: number; used: number; app: number; projects: { project: string; bytes: number; sessions: { id: string; bytes: number }[] }[] }; // a session is one terminal tab
+}
 
-interface Bridge {
+// window.qa: desktop/preload.ts in the desktop app, ide/vscode/webview-bridge.ts in VS Code.
+export interface Bridge {
+  query?: string; // the page parameters, when the host cannot put them in the URL (VS Code webview)
   call(method: string, ...args: unknown[]): Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
   filePath(file: File): string;
   watch(project: string | null): Promise<boolean>;
   onChanged(callback: (project: string) => void): () => void;
   openLink(url: string): Promise<void>;
+  usage?(refresh: boolean): Promise<Usage | null>;
   openNoteWindow(target: { project?: string | null; path?: string | null; loose?: string | null; theme?: string }): Promise<boolean>;
   notesChanged(): void;
   onNotesChanged(callback: () => void): () => void;
@@ -156,9 +169,9 @@ interface Bridge {
   openInMain?(project: string, path: string): void;
   onShowTerminal?(callback: (project: string, terminal: TerminalRef) => void): () => void;
   onOpenInMain?(callback: (project: string, path: string) => void): () => void;
-  term: {
+  term?: { // absent in VS Code, where the AI tools open in VS Code's own terminals
     create(tool: string): Promise<{ terminal?: TerminalRef; error?: string }>; // tool '' = the user's shell
-    start(id: string, cols: number, rows: number): Promise<string>;
+    start(id: string, cols: number, rows: number, project: string): Promise<string>;
     input(id: string, data: string): void;
     resize(id: string, cols: number, rows: number): void;
     kill(id: string): void;
@@ -169,6 +182,7 @@ interface Bridge {
 declare global { interface Window { qa?: Bridge } }
 
 export const hasBridge = (): boolean => Boolean(window.qa);
+export const pageParams = (): URLSearchParams => new URLSearchParams(window.qa?.query ?? window.location.search);
 
 async function call<T>(method: string, ...args: unknown[]): Promise<T> {
   if (!window.qa) throw new Error(t('Moki must be opened with the qa command.'));
@@ -193,6 +207,7 @@ export const api = {
   saveTag: (tag: { id?: string; name: string; color?: string; description?: string }) => call<Tag>('saveTag', tag),
   removeTag: (id: string) => call<boolean>('removeTag', id),
   setProjectTags: (project: string, ids: string[]) => call<ProjectSummary>('setProjectTags', project, ids),
+  setProjectPlugins: (project: string, names: string[]) => call<ProjectSummary>('setProjectPlugins', project, names),
   fileTags: (project: string) => call<Record<string, string[]>>('fileTags', project),
   setFileTags: (project: string, path: string, ids: string[]) => call<string[]>('setFileTags', project, path, ids),
   search: (query: string, tags: string[]) => call<SearchResult>('search', query, tags),
@@ -217,6 +232,8 @@ export const api = {
   createEntry: (project: string, parent: string, name: string, kind: 'file' | 'folder') => call<string>('createEntry', project, parent, name, kind),
   revealPath: (project: string, path: string) => call<boolean>('revealPath', project, path),
   copyPath: (project: string, path: string) => call<string>('copyPath', project, path),
+  openWithApps: (project: string, path: string) => call<OpenWithApps>('openWithApps', project, path),
+  openWith: (project: string, path: string, app: string) => call<boolean>('openWith', project, path, app),
   linkRepository: (project: string) => call<(ProjectSummary & { backup?: string }) | null>('linkRepository', project),
   openLinkedFolder: (project: string) => call<boolean>('openLinkedFolder', project),
   launch: (req: LaunchRequest) => call<LaunchResult>('launch', req),
@@ -249,7 +266,7 @@ export const api = {
   projectAgents: (project: string) => call<string[]>('projectAgents', project),
   setProjectAgents: (project: string, names: string[]) => call<string[]>('setProjectAgents', project, names),
   searchSkills: (query: string, category = '', page = 1) => call<SkillSearchPage>('searchSkills', query, category, page),
-  installedSkills: (project: string) => call<{ project: string[]; global: string[] }>('installedSkills', project),
+  installedSkills: (project: string) => call<{ project: string[]; global: string[]; artcraft: string[] }>('installedSkills', project),
   installSkill: (project: string, slug: string, scope: SkillScope, allowClaudeWrite = false) => call<InstallResult>('installSkill', project, slug, scope, allowClaudeWrite),
   proposeSkill: (project: string, req: { name: string; prompt: string; tool: string; language: string }) => call<LaunchResult>('proposeSkill', project, req),
   skillProposals: (project: string) => call<{ name: string; description: string }[]>('skillProposals', project),
@@ -269,6 +286,7 @@ export const api = {
   watch: (project: string | null) => window.qa?.watch(project ?? '') ?? Promise.resolve(false),
   onChanged: (cb: (project: string) => void) => window.qa?.onChanged(cb) ?? (() => {}),
   openLink: (url: string) => window.qa?.openLink(url),
+  usage: (refresh = false) => window.qa?.usage?.(refresh) ?? Promise.resolve(null),
   openNoteWindow: (target: { project?: string | null; path?: string | null; loose?: string | null }) => window.qa?.openNoteWindow({ ...target, theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark' }) ?? Promise.resolve(false),
   onNotesChanged: (cb: () => void) => window.qa?.onNotesChanged(cb) ?? (() => {}),
   // Embedded terminals (desktop/terminals.ts); only available inside the app.

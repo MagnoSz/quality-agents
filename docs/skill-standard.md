@@ -74,6 +74,7 @@ In **Output format** and **Persistence**, every path in backticks must start wit
 - Preserve exact phrases that the user will see (gate questions, fixed messages) in the deliverable language — put translations in a vocabulary reference.
 - Prefer deterministic checks (scripts) for anything that can be verified mechanically.
 - Never hard-code a company's or application's rules; put them in project context (`templates/project-context/`).
+- Framework skills (`metadata.category: framework`, e.g. `moki-change`) act on this repository, not on a project: they have no run folder, answer in the conversation and name repository paths as `<target-repo>/...`.
 
 ## Adding a new skill
 

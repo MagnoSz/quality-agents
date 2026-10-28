@@ -1,5 +1,6 @@
 // "Set up the project": what it is for, in the QA's own words, which global
-// skills it uses (linked by name, nothing copied) and which agents it enables.
+// skills it uses (linked by name, nothing copied), which agents it enables and
+// which optional app plugins (caveman) its sessions load.
 // New skills come from the registry (Find skills, prefilled with the
 // description). The AI tool can then adapt the context to the description
 // ("Prepare the project"), or, for a blank project, interview the user and
@@ -9,8 +10,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type AgentInfo, type Plan, type ProjectSummary } from '../api';
 import { t } from '../i18n';
-import { SkillsDialog } from './SkillsDialog';
-import { IconSearch, IconX } from './Icons';
+import { SkillsDialog, pluginList } from './SkillsDialog';
+import { IconCheck, IconSearch, IconX } from './Icons';
 
 interface Props {
   project: ProjectSummary;
@@ -21,10 +22,12 @@ interface Props {
 export function SetupDialog({ project, onClose, onSaved }: Props) {
   const [description, setDescription] = useState(project.description);
   const [global, setGlobal] = useState<string[]>([]);
+  const [artcraft, setArtcraft] = useState<string[]>([]);
   const [linked, setLinked] = useState<string[]>(project.linkedSkills);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [enabled, setEnabled] = useState<string[]>([]);
   const [agentsChanged, setAgentsChanged] = useState(false);
+  const [plugins, setPlugins] = useState<string[]>(project.plugins);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [files, setFiles] = useState<string[]>([]);
   const [prepare, setPrepare] = useState(true);
@@ -32,7 +35,7 @@ export function SetupDialog({ project, onClose, onSaved }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const loadGlobal = useCallback(() => { api.installedSkills(project.id).then((s) => setGlobal(s.global)).catch(() => { /* keep */ }); }, [project.id]);
+  const loadGlobal = useCallback(() => { api.installedSkills(project.id).then((s) => { setGlobal(s.global); setArtcraft(s.artcraft); }).catch(() => { /* keep */ }); }, [project.id]);
   useEffect(loadGlobal, [loadGlobal]);
 
   // A plan waiting for approval preselects what the AI recommended.
@@ -72,10 +75,11 @@ export function SetupDialog({ project, onClose, onSaved }: Props) {
       // Links to skills that are no longer installed are dropped. Agents are only written when chosen here,
       // so a project without a list keeps getting every agent.
       await api.setupProject(project.id, {
-        description, linkedSkills: linked.filter((n) => global.includes(n)),
+        description, linkedSkills: linked.filter((n) => global.includes(n) || artcraft.includes(n)),
         ...(pending || agentsChanged ? { agents: enabled } : {}),
         ...(pending ? { contextFiles: files } : {}),
       });
+      await api.setProjectPlugins(project.id, plugins);
       onSaved(prepare && next.ready ? next.activity : null);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
@@ -103,14 +107,14 @@ export function SetupDialog({ project, onClose, onSaved }: Props) {
             <span className="label">{t('Skills for all projects to use here')}</span>
             <span className="muted small">{t('Linked by name: requests from this project tell the AI to use them. Nothing is copied.')}</span>
             {global.length === 0 ? <p className="muted small">{t('No skills installed for all projects yet.')}</p> : (
-              <ul className="file-pick">
+              <ul className="pick-list" role="listbox" aria-multiselectable="true" aria-label={t('Skills for all projects to use here')}>
                 {global.map((n) => (
                   <li key={n}>
-                    <label className={linked.includes(n) ? 'on' : ''}>
-                      <input type="checkbox" checked={linked.includes(n)} onChange={() => setLinked((s) => flip(s, n))} />
-                      <span className="file-name">{n}</span>
+                    <button type="button" role="option" aria-selected={linked.includes(n)} className={`library-item${linked.includes(n) ? ' active' : ''}`} onClick={() => setLinked((s) => flip(s, n))}>
+                      <span className="library-item-name">{n}</span>
                       {suggested(plan?.skills, n)}
-                    </label>
+                      {linked.includes(n) && <IconCheck size={15} />}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -123,6 +127,24 @@ export function SetupDialog({ project, onClose, onSaved }: Props) {
             </div>
           </div>
 
+          {artcraft.length > 0 && (
+            <div className="field">
+              <span className="label">{t('ArtCraft skills')}</span>
+              <span className="muted small">{t('Moki references for the Craft App Suite. Linked by name, like the skills above.')}</span>
+              <ul className="pick-list" role="listbox" aria-multiselectable="true" aria-label={t('ArtCraft skills')}>
+                {artcraft.map((n) => (
+                  <li key={n}>
+                    <button type="button" role="option" aria-selected={linked.includes(n)} className={`library-item${linked.includes(n) ? ' active' : ''}`} onClick={() => setLinked((s) => flip(s, n))}>
+                      <span className="library-item-name">{n}</span>
+                      {suggested(plan?.skills, n)}
+                      {linked.includes(n) && <IconCheck size={15} />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="field">
             <span className="label">{t('Agents in this project')}</span>
             <ul className="agent-toggles">
@@ -133,6 +155,22 @@ export function SetupDialog({ project, onClose, onSaved }: Props) {
                     <span>{a.name}</span>
                     {a.source === 'custom' && <span className="chip">{t('yours')}</span>}
                     {suggested(plan?.agents, a.name)}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="field">
+            <span className="label">{t('Plugins in this project')}</span>
+            <span className="muted small">{t('ponytail and rtk are always on. These load only in the sessions opened from this project.')}</span>
+            <ul className="file-pick">
+              {pluginList().filter((p) => p.optional).map((p) => (
+                <li key={p.name}>
+                  <label className={plugins.includes(p.name) ? 'on' : ''}>
+                    <input type="checkbox" checked={plugins.includes(p.name)} onChange={() => setPlugins((s) => flip(s, p.name))} />
+                    <span className="file-name">{p.name}</span>
+                    <span className="muted small">{p.text}</span>
                   </label>
                 </li>
               ))}

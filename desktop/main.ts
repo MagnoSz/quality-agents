@@ -5,13 +5,17 @@
 
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, screen, session, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { existsSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ROOT } from '../scripts/lib/repo.mjs';
 import { TOOLS, isTool, listProjects, projectsDir, type ToolKey } from '../scripts/lib/core.ts';
-import { createService, ServiceError, type Service } from './service.ts';
+import { callService, createService } from './service.ts';
 import { launchInTerminal, launchTool, openFolder } from './launcher.ts';
+import { notebookKey, noteQuery, parseNoteRequest, type NoteRequest } from './notes.ts';
+import { setWorkspaceEnv } from './workspaces.ts';
+import { appChooser } from './open-with.ts';
 import { createTerminals, shellSpec } from './terminals.ts';
+import { memoryUsage, planUsage } from './usage.ts';
 
 const DIST = dirname(fileURLToPath(import.meta.url)); // app/dist-electron
 const UI = join(DIST, '..', 'dist'); // app/dist, inside the app (not the framework folder)
@@ -26,25 +30,22 @@ const fakeTools = process.env.QA_FAKE_TOOLS === '1';
 
 const service = createService(ROOT, {
   // Terminal tools open in a tab of the app; editors, or no node-pty, use the external launcher.
-  launch: (tool, prompt, root) => (fakeTools ? { opened: true, message: 'fake' }
-    : terminals.available() && !TOOLS[tool].clipboard ? launchInTerminal(tool, prompt, root, terminals.prepare) : launchTool(tool, prompt, root)),
+  launch: (tool, prompt, root, plugins = []) => (fakeTools ? { opened: true, message: 'fake' }
+    : terminals.available() && !TOOLS[tool].clipboard ? launchInTerminal(tool, prompt, root, terminals.prepare, plugins) : launchTool(tool, prompt, root, plugins)),
   ...(fakeTools ? { detectTools: () => Object.fromEntries(Object.keys(TOOLS).map((k) => [k, true])) as Record<ToolKey, boolean> } : {}),
   openFolder,
   openPath: (file) => { void shell.openPath(file); },
   reveal: (path) => shell.showItemInFolder(path),
   copy: (text) => clipboard.writeText(text),
+  appChooser,
   trash: (path) => shell.trashItem(path),
   pickFolder: async () => {
     if (!win) return null;
     const r = await dialog.showOpenDialog(win, { title: 'Choose a folder', properties: ['openDirectory', 'createDirectory'] });
     return r.canceled ? null : r.filePaths[0] ?? null;
   },
-  // Tools and helper commands started from here look for projects in the active workspace.
-  onWorkspace: (dir) => {
-    if (resolve(dir) === resolve(ROOT, 'workspace')) delete process.env.QA_WORKSPACE; else process.env.QA_WORKSPACE = dir;
-  },
+  onWorkspace: (dir) => setWorkspaceEnv(ROOT, dir),
 });
-const METHODS = new Set(Object.keys(service));
 
 let win: BrowserWindow | null = null;
 let watcher: FSWatcher | null = null;
@@ -60,27 +61,10 @@ function trusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   return Boolean(event.senderFrame?.url.startsWith('file://')) && (event.sender === win?.webContents || isNoteWindow(event.sender));
 }
 
-interface NoteRequest { project: string | null; path: string | null; loose: string | null; theme: 'light' | 'dark' }
-
-function parseNoteRequest(raw: unknown): NoteRequest | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  const project = typeof r.project === 'string' && r.project ? r.project : null;
-  const path = typeof r.path === 'string' && r.path ? r.path : null;
-  const loose = typeof r.loose === 'string' && r.loose ? r.loose : null;
-  if (project && !listProjects(ROOT).includes(project)) return null;
-  if (path && !/^notes\/[^/]+\.md$/.test(path)) return null;
-  if (loose && loose !== 'new' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(loose)) return null;
-  if (path && !project) return null;
-  if (project && loose) return null;
-  if (!project && !loose) return null;
-  return { project, path, loose, theme: r.theme === 'light' ? 'light' : 'dark' };
-}
-
 // The notebook: its own window, so it can be dragged past the main window onto the desktop. One per group:
 // the loose notes, or one project's notes. A note of a group whose notebook is open becomes a tab there.
 function openNoteWindow(target: NoteRequest): void {
-  const key = target.project ? `project:${target.project}` : 'loose';
+  const key = notebookKey(target);
   const existing = noteWindows.get(key);
   if (existing && !existing.isDestroyed()) {
     existing.webContents.send('qa:notebook-open', { project: target.project, path: target.path, loose: target.loose });
@@ -116,11 +100,7 @@ function openNoteWindow(target: NoteRequest): void {
   noteWindows.set(key, note);
   note.once('ready-to-show', () => note.show());
   note.on('closed', () => { if (noteWindows.get(key) === note) noteWindows.delete(key); });
-  const query: Record<string, string> = { view: 'note' };
-  if (target.project) query.project = target.project;
-  if (target.path) query.path = target.path;
-  if (target.loose) query.loose = target.loose;
-  void note.loadFile(join(UI, 'index.html'), { query });
+  void note.loadFile(join(UI, 'index.html'), { query: noteQuery(target) });
   note.webContents.on('will-navigate', (e) => e.preventDefault());
   note.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
@@ -203,14 +183,7 @@ if (!app.requestSingleInstanceLock()) {
 
     ipcMain.handle('qa:call', async (event, method: unknown, args: unknown) => {
       if (!trusted(event)) return { ok: false, error: 'Untrusted caller.' };
-      if (typeof method !== 'string' || !METHODS.has(method)) return { ok: false, error: 'Unknown action.' };
-      try {
-        const fn = service[method as keyof Service] as (...a: unknown[]) => unknown;
-        return { ok: true, value: await fn(...(Array.isArray(args) ? args : [])) };
-      } catch (e) {
-        const message = e instanceof ServiceError || e instanceof Error ? e.message : String(e);
-        return { ok: false, error: message };
-      }
+      return callService(service, method, args);
     });
 
     // Watch one project at a time; changes are debounced and sent to the UI.
@@ -240,9 +213,9 @@ if (!app.requestSingleInstanceLock()) {
       const r = launchInTerminal(tool, '', ROOT, terminals.prepare);
       return r.terminal ? { terminal: r.terminal } : { error: r.message };
     });
-    ipcMain.handle('qa:term-start', (event, id: unknown, cols: unknown, rows: unknown) => {
+    ipcMain.handle('qa:term-start', (event, id: unknown, cols: unknown, rows: unknown, project: unknown) => {
       if (!trusted(event) || typeof id !== 'string' || !isSize(cols) || !isSize(rows)) return 'Invalid terminal.';
-      return terminals.start(id, cols, rows);
+      return terminals.start(id, cols, rows, typeof project === 'string' && listProjects(ROOT).includes(project) ? project : '');
     });
     ipcMain.on('qa:term-input', (event, id: unknown, data: unknown) => {
       if (trusted(event) && typeof id === 'string' && typeof data === 'string' && data.length <= 1_000_000) terminals.write(id, data);
@@ -252,6 +225,14 @@ if (!app.requestSingleInstanceLock()) {
     });
     ipcMain.on('qa:term-kill', (event, id: unknown) => { if (trusted(event) && typeof id === 'string') terminals.kill(id); });
 
+    // Status bar: plan usage of the AI tools, and memory of the computer, of Moki and of each project's terminals.
+    ipcMain.handle('qa:usage', async (event, refresh: unknown) => {
+      if (!trusted(event)) return null;
+      const appBytes = app.getAppMetrics().reduce((sum, m) => sum + m.memory.workingSetSize * 1024, 0);
+      const [memory, plans] = await Promise.all([memoryUsage(terminals.list(), appBytes), planUsage(refresh === true)]);
+      return { memory, plans };
+    });
+
     ipcMain.handle('qa:open-link', (event, url: unknown) => {
       if (trusted(event) && typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url);
     });
@@ -259,7 +240,7 @@ if (!app.requestSingleInstanceLock()) {
     // From the main window, or from the loose notebook when a note is sent to a project.
     ipcMain.handle('qa:note-window', (event, raw: unknown) => {
       if (!trusted(event)) return false;
-      const target = parseNoteRequest(raw);
+      const target = parseNoteRequest(raw, ROOT);
       if (!target) return false;
       openNoteWindow(target);
       return true;
