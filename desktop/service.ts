@@ -16,7 +16,7 @@ import { setWorkspaceDir, workspaceDir, workspaceLabel } from '../scripts/lib/re
 import { searchWorkspace } from './search.ts';
 import { activeWorkspace, addWorkspaceFolder, createWorkspace, forgetWorkspace, listWorkspaces, renameWorkspace, setActiveWorkspace, type WorkspaceInfo } from './workspaces.ts';
 import { readableInputs, docxToMarkdown } from '../scripts/lib/docx.ts';
-import { checkOperation, cleanOperation, formatMessage, listOperations, removeOperation, suggestOutput, writeOperation, type OperationAgent } from '../scripts/lib/operations.ts';
+import { checkOperation, cleanOperation, formatMessage, listOperations, removeOperation, seedExample, suggestOutput, writeOperation, type OperationAgent } from '../scripts/lib/operations.ts';
 import { advance, approve, cancel, createOperationRun, decide, isOperationRun, markStarted, missingOutputs, readRun, setPaused, stepPrompt, type RunRequest } from '../scripts/lib/operation-runs.ts';
 import { markdownToHtml } from '../scripts/lib/markdown.mjs';
 import { STYLE_FILE, normalizeStyle } from '../scripts/lib/doc-style.mjs';
@@ -617,7 +617,11 @@ export function createService(root: string, deps: Deps) {
 
     // The agents an operation can use: usable library agents and the agents installed for every project.
     operationAgents: (): OperationAgent[] => operationAgents(),
-    operations: () => listOperations(root).map((op) => ({ ...op, check: checkOperation(op, operationAgents()) })),
+    // language: the app's, for the example operation created the first time (see seedExample).
+    operations: (language?: unknown) => {
+      failing(() => seedExample(root, String(language ?? 'en')));
+      return listOperations(root).map((op) => ({ ...op, check: checkOperation(op, operationAgents()) }));
+    },
     operation: (id: unknown) => {
       const op = listOperations(root).find((o) => o.id === id);
       if (!op) throw new ServiceError('Unknown operation.');

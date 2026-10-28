@@ -1,7 +1,7 @@
 // Client for the desktop app's main process (see desktop/preload.ts and
 // desktop/service.ts). Every call goes through one validated IPC channel.
 
-import { t } from './i18n';
+import { lang, t } from './i18n';
 
 export interface ProjectSummary {
   id: string; name: string; description: string; onboardingStatus: string; deliverableLanguage: string; runs: number; openRuns: number;
@@ -229,7 +229,7 @@ export const api = {
   saveAgentContract: (name: string, contract: AgentContract) => call<boolean>('saveAgentContract', name, contract),
   knownMcps: (project?: string | null) => call<string[]>('knownMcps', project ?? null),
   operationAgents: () => call<OperationAgent[]>('operationAgents'),
-  operations: () => call<Operation[]>('operations'),
+  operations: () => call<Operation[]>('operations', lang), // the first time, an example in the app's language
   checkOperation: (op: OperationDraft) => call<OperationCheck>('checkOperation', op),
   suggestLink: (from: string, to: string) => call<Record<string, string>>('suggestLink', from, to),
   saveOperation: (op: OperationDraft) => call<Operation>('saveOperation', op),

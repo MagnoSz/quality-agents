@@ -164,7 +164,12 @@ test.describe.serial('Moki settings', () => {
 
   test('an operation links agents with arrows: approval, which output answers which input, saved in the list', async () => {
     await page.getByRole('tab', { name: 'Operações' }).click();
-    await page.locator('.ops-welcome').getByRole('button', { name: 'Nova operação' }).click();
+    // The first time, an example to learn from: three lanes, the Moki agents, approval between them.
+    const example = page.locator('.library-item', { hasText: 'Exemplo: da história às evidências' });
+    await example.click();
+    await expect(page.locator('.ops-card-name')).toHaveText(['requirements-analyst', 'test-designer', 'evidence-builder']);
+    await expect(page.getByRole('region', { name: 'Checagem' }).locator('.ops-panel-head .pill')).toHaveText('Pronta');
+    await page.locator('.operations .home-list').getByRole('button', { name: 'Nova operação' }).click();
     await page.getByRole('textbox', { name: 'Nome da operação' }).fill('Revisão e testes');
     const pick = async (name: string) => {
       if (!(await page.locator('.ops-palette').isVisible())) await page.getByRole('button', { name: '+ Adicionar agente' }).click();
@@ -176,11 +181,26 @@ test.describe.serial('Moki settings', () => {
     const arrow = page.getByRole('button', { name: 'Seta de requirements-analyst para test-designer' });
     await expect(arrow).toHaveText('Aprovação');
     const inspector = page.getByRole('region', { name: 'Selecionado' });
-    await expect(inspector.getByRole('heading')).toHaveText('requirements-analyst → test-designer');
+    await expect(inspector.getByRole('heading', { level: 2 })).toHaveText('requirements-analyst → test-designer');
     await inspector.getByRole('combobox', { name: 'Resposta para Business rules' }).selectOption('review-matrix.json');
     const check = page.getByRole('region', { name: 'Checagem' });
-    await expect(check.locator('.ops-initial li')).toHaveText(['User stories (requirements-analyst)', 'User stories (test-designer)', 'Acceptance criteria (test-designer)']);
+    await expect(check.locator('.ops-initial-agent')).toHaveText(['requirements-analyst', 'test-designer']);
+    await expect(check.locator('.ops-initial .chip')).toHaveText(['User stories', 'User stories', 'Acceptance criteria']);
     await expect(check).toContainText('Pronta para usar.');
+    await expect(check.locator('.ops-panel-head .pill')).toHaveText('Pronta');
+
+    // The bar under the board makes it taller; the two panels below share what is left, side by side, same size.
+    const board = page.locator('.ops-board-scroll');
+    const before = (await board.boundingBox())?.height ?? 0;
+    const bar = await page.getByRole('separator', { name: 'Altura do quadro' }).boundingBox();
+    await page.mouse.move((bar?.x ?? 0) + 20, (bar?.y ?? 0) + 6);
+    await page.mouse.down();
+    await page.mouse.move((bar?.x ?? 0) + 20, (bar?.y ?? 0) - 54, { steps: 6 });
+    await page.mouse.up();
+    expect(Math.round((await board.boundingBox())?.height ?? 0)).toBe(Math.round(Math.max(before - 60, 180))); // never below 180px
+    const [left, right] = [await inspector.boundingBox(), await check.boundingBox()];
+    expect(Math.round(left?.height ?? 0)).toBe(Math.round(right?.height ?? 1));
+    expect(Math.round(left?.width ?? 0)).toBe(Math.round(right?.width ?? 1));
 
     await inspector.getByRole('radio', { name: 'Seguir direto para test-designer' }).check();
     await expect(arrow).toHaveText('Direto');
@@ -221,9 +241,9 @@ test.describe.serial('Moki settings', () => {
     // Dragging the empty board moves the view.
     const scroller = page.locator('.ops-board-scroll');
     const area = await scroller.boundingBox();
-    await page.mouse.move((area?.x ?? 0) + 300, (area?.y ?? 0) + 380);
+    await page.mouse.move((area?.x ?? 0) + 300, (area?.y ?? 0) + 200);
     await page.mouse.down();
-    await page.mouse.move((area?.x ?? 0) + 100, (area?.y ?? 0) + 380, { steps: 6 });
+    await page.mouse.move((area?.x ?? 0) + 100, (area?.y ?? 0) + 200, { steps: 6 });
     await page.mouse.up();
     expect(await scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(100);
 

@@ -658,6 +658,22 @@ test('operations branch on the result of an agent, loop back up to a limit, and 
   for (const a of [reviewer.name, fixer.name]) service.deleteAgent(a);
 });
 
+test('operations: the first time, an example in the app language; deleted, it does not come back', () => {
+  const dir = join(root, 'workspace', 'library', 'operations');
+  rmSync(dir, { recursive: true, force: true });
+  const [example] = service.operations('pt-BR');
+  assert.equal(example.name, 'Exemplo: da história às evidências');
+  assert.deepEqual(example.lanes.map((l) => l.name), ['Análise', 'Testes', 'Evidências']);
+  assert.deepEqual(example.check.order.map((id) => example.steps.find((s) => s.id === id)?.agent), ['library:requirements-analyst', 'library:test-designer', 'library:evidence-builder']);
+  assert.deepEqual([example.check.errors, example.check.warnings], [[], []], 'a clean example');
+  assert.deepEqual(example.check.approvals, ['s2', 's3']);
+  service.deleteOperation(example.id);
+  assert.deepEqual(service.operations('pt-BR'), []);
+  rmSync(dir, { recursive: true, force: true });
+  assert.equal(service.operations('en')[0].name, 'Example: from the story to the evidence');
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test('agents per project: enabled list in project.json gates the launch', () => {
   const all = service.projectAgents('acme');
   assert.ok(all.includes('requirements-analyst') && !all.includes('automation-engineer'), 'absent list = every usable agent');

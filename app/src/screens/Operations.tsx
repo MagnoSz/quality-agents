@@ -9,9 +9,10 @@
 // set the order). Dragging the empty board moves it. Saved in
 // workspace/library/operations/.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { api, type Operation, type OperationAgent, type OperationCheck, type OperationDraft, type OperationLane, type OperationLink, type ToolInfo } from '../api';
 import { t } from '../i18n';
+import { recall, remember } from '../prefs';
 import { AddButton } from '../components/AddButton';
 import { IconTrash, IconX } from '../components/Icons';
 
@@ -20,6 +21,8 @@ const CARD_H = 92;
 const BOARD_W = 1600;
 const BOARD_H = 720;
 const LANE_HEAD = 40; // the lane names, above the cards
+const BOARD_MIN = 180; // px: the board's height can be dragged between this and what leaves room for the panels below
+const PANELS_MIN = 220; // px: the panels below the board keep at least this
 const LANE_COLORS = ['#f1d27c', '#8fbf7f', '#7fb2e5', '#e8935a', '#c79be0', '#6cc5c0', '#e5675b', '#a8a196'];
 const empty = (): OperationDraft => ({ name: '', description: '', start: '', maxRounds: 3, lanes: [], steps: [], links: [] });
 const fields = (op: OperationDraft): OperationDraft => ({
@@ -27,6 +30,17 @@ const fields = (op: OperationDraft): OperationDraft => ({
   links: op.links.map((l) => ({ ...l, when: l.when ?? '' })),
 });
 const snapshot = (d: OperationDraft | null) => JSON.stringify(d && { ...d, steps: d.steps, links: d.links });
+
+// A block of the panels below the board: a small title, an optional hint, its content.
+function Block({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="ops-block">
+      <h3>{title}</h3>
+      {hint && <p className="muted small">{hint}</p>}
+      {children}
+    </div>
+  );
+}
 
 type Selection = { kind: 'step'; id: string } | { kind: 'link'; i: number } | null; // an arrow by its place in the list (two may join the same cards)
 
@@ -48,6 +62,37 @@ export function Operations({ tools }: Props) {
   const [notice, setNotice] = useState('');
   const board = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  const editor = useRef<HTMLDivElement>(null);
+  // The board's height, dragged on the bar below it (remembered); the two panels share the rest, never less than PANELS_MIN.
+  const [wanted, setWanted] = useState(() => Math.max(Number(recall('qa-ops-board-h')) || 360, BOARD_MIN));
+  const [room, setRoom] = useState(Number.POSITIVE_INFINITY); // the most the board can take in this window
+  const measure = useCallback(() => {
+    const e = editor.current;
+    const b = scroller.current;
+    if (e && b) setRoom(e.getBoundingClientRect().bottom - b.getBoundingClientRect().top - 42 - PANELS_MIN); // padding, bar and gap
+  }, []);
+  const open_ = draft !== null;
+  useEffect(() => {
+    if (!open_) return undefined;
+    measure();
+    const watch = new ResizeObserver(measure);
+    if (editor.current) watch.observe(editor.current);
+    return () => watch.disconnect();
+  }, [measure, open_]);
+  const boardH = Math.round(Math.max(BOARD_MIN, Math.min(wanted, room)));
+  const resizeBoard = (h: number) => {
+    const next = Math.round(Math.max(BOARD_MIN, Math.min(h, room)));
+    setWanted(next);
+    remember('qa-ops-board-h', String(next));
+  };
+  const startSplit = (e: ReactPointerEvent) => {
+    e.preventDefault();
+    const start = { y: e.clientY, h: boardH };
+    document.body.classList.add('resizing-rows');
+    const move = (m: PointerEvent) => resizeBoard(start.h + m.clientY - start.y);
+    const stop = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop); document.body.classList.remove('resizing-rows'); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', stop);
+  };
   const dirty = draft !== null && snapshot(draft) !== saved;
 
   const load = useCallback(() => {
@@ -258,7 +303,7 @@ export function Operations({ tools }: Props) {
             <button type="button" className="btn" onClick={() => open(null)}>{t('New operation')}</button>
           </div>
         ) : (
-          <div className="ops-editor">
+          <div className="ops-editor" ref={editor}>
             {error && <div className="error-bar">{error}<button type="button" className="icon-btn" onClick={() => setError('')}><IconX size={14} /></button></div>}
             {notice && !dirty && <div className="error-bar info-bar" role="status">{notice}<button type="button" className="icon-btn" onClick={() => setNotice('')}><IconX size={14} /></button></div>}
             <header className="ops-head">
@@ -307,7 +352,7 @@ export function Operations({ tools }: Props) {
               <span className="muted small">{t('Drag a card to move it. Drag from its dot to another card to pass its work there. Drag the empty board to move around.')}</span>
             </div>
 
-            <div className="ops-board-scroll" ref={scroller}>
+            <div className="ops-board-scroll" ref={scroller} style={{ height: boardH }}>
               <div className="ops-board" ref={board} style={{ width: BOARD_W, height: BOARD_H }} onPointerDown={startPan}>
                 {draft.lanes.map((lane, i) => {
                   const left = draft.lanes.slice(0, i).reduce((sum, l) => sum + l.width, 0);
@@ -384,125 +429,206 @@ export function Operations({ tools }: Props) {
               </div>
             </div>
 
+            <div className="ops-splitter" role="separator" aria-orientation="horizontal" aria-label={t('Board height')} tabIndex={0}
+              aria-valuenow={boardH} aria-valuemin={BOARD_MIN} title={t('Drag to make the board taller or shorter')}
+              onPointerDown={startSplit} onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); resizeBoard(boardH + (e.key === 'ArrowDown' ? 40 : -40)); } }}>
+              <span />
+            </div>
+
             <div className="ops-panels">
-              <section className="ops-inspector" aria-label={t('Selected')}>
+              <section className="ops-panel ops-inspector" aria-label={t('Selected')}>
                 {selectedLink ? (() => {
                   const a = agentOf(selectedLink.from);
                   const b = agentOf(selectedLink.to);
                   const always = b?.mcps.some((m) => m.mode === 'execute');
                   return (
                     <>
-                      <div className="ops-inspector-head">
-                        <h2>{stepName(selectedLink.from)} → {stepName(selectedLink.to)}</h2>
+                      <header className="ops-panel-head">
+                        <div>
+                          <span className="ops-kicker">{t('Arrow')}</span>
+                          <h2>{stepName(selectedLink.from)} → {stepName(selectedLink.to)}</h2>
+                        </div>
                         <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeLink(linkIndex)}>{t('Remove arrow')}</button>
-                      </div>
-                      {(a?.outcomes ?? []).length > 0 && (
-                        <label className="field">
-                          <span className="label">{t('Taken when {from} ends with', { from: stepName(selectedLink.from) })}</span>
-                          <select value={selectedLink.when ?? ''} onChange={(e) => setLink(linkIndex, { when: e.target.value })} aria-label={t('Result that leads here')}>
-                            {(a?.outcomes ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                            <option value="">{t('Any other result (otherwise)')}</option>
-                          </select>
-                        </label>
-                      )}
-                      <fieldset className="field">
-                        <legend className="label">{t('When {from} finishes', { from: stepName(selectedLink.from) })}</legend>
-                        <label className="field inline"><input type="radio" name="gate" checked={selectedLink.gate === 'auto'} onChange={() => setLink(linkIndex, { gate: 'auto' })} /> {t('Go on to {to} right away', { to: stepName(selectedLink.to) })}</label>
-                        <label className="field inline"><input type="radio" name="gate" checked={selectedLink.gate === 'approval'} onChange={() => setLink(linkIndex, { gate: 'approval' })} /> {t('Wait for my approval')}</label>
-                        {always && <span className="muted small">{t('{to} executes through an MCP: the operation always asks you before it.', { to: stepName(selectedLink.to) })}</span>}
-                      </fieldset>
-                      <div className="field">
-                        <span className="label">{t('What answers each input of {to}', { to: stepName(selectedLink.to) })}</span>
-                        <span className="muted small">{t('{to} receives every file {from} delivers. Here you say which one answers each input; the others are asked when the operation starts.', { to: stepName(selectedLink.to), from: stepName(selectedLink.from) })}</span>
-                        {b && b.inputs.length ? (
-                          <table className="ops-map">
-                            <tbody>
-                              {b.inputs.map((input) => (
-                                <tr key={input}>
-                                  <th scope="row">{input}</th>
-                                  <td>
-                                    <select value={selectedLink.map[input] ?? ''} aria-label={t('Answer to {input}', { input })}
-                                      onChange={(e) => {
-                                        const map = { ...selectedLink.map };
-                                        if (e.target.value) map[input] = e.target.value; else delete map[input];
-                                        setLink(linkIndex, { map });
-                                      }}>
-                                      <option value="">{t('Asked when it starts')}</option>
-                                      {(a?.outputs ?? []).map((o) => <option key={o} value={o}>{t('{file}, from {from}', { file: o, from: a?.name ?? '' })}</option>)}
-                                    </select>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        ) : <span className="muted small">{t('{to} declares no inputs.', { to: stepName(selectedLink.to) })}</span>}
+                      </header>
+                      <div className="ops-panel-body">
+                        <Block title={t('When to follow it')}>
+                          {(a?.outcomes ?? []).length > 0 && (
+                            <label className="field">
+                              <span className="muted small">{t('Taken when {from} ends with', { from: stepName(selectedLink.from) })}</span>
+                              <select value={selectedLink.when ?? ''} onChange={(e) => setLink(linkIndex, { when: e.target.value })} aria-label={t('Result that leads here')}>
+                                {(a?.outcomes ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                                <option value="">{t('Any other result (otherwise)')}</option>
+                              </select>
+                            </label>
+                          )}
+                          <fieldset className="ops-choice">
+                            <legend className="muted small">{t('When {from} finishes', { from: stepName(selectedLink.from) })}</legend>
+                            <label className={selectedLink.gate === 'auto' ? 'on' : ''}><input type="radio" name="gate" checked={selectedLink.gate === 'auto'} onChange={() => setLink(linkIndex, { gate: 'auto' })} /> {t('Go on to {to} right away', { to: stepName(selectedLink.to) })}</label>
+                            <label className={selectedLink.gate === 'approval' ? 'on' : ''}><input type="radio" name="gate" checked={selectedLink.gate === 'approval'} onChange={() => setLink(linkIndex, { gate: 'approval' })} /> {t('Wait for my approval')}</label>
+                          </fieldset>
+                          {always && <p className="warn-text small">{t('{to} executes through an MCP: the operation always asks you before it.', { to: stepName(selectedLink.to) })}</p>}
+                        </Block>
+                        <Block title={t('What {to} receives', { to: stepName(selectedLink.to) })}
+                          hint={t('{to} receives every file {from} delivers. Here you say which one answers each input; the others are asked when the operation starts.', { to: stepName(selectedLink.to), from: stepName(selectedLink.from) })}>
+                          {b && b.inputs.length ? (
+                            <table className="ops-map">
+                              <tbody>
+                                {b.inputs.map((input) => (
+                                  <tr key={input}>
+                                    <th scope="row">{input}</th>
+                                    <td>
+                                      <select value={selectedLink.map[input] ?? ''} aria-label={t('Answer to {input}', { input })}
+                                        onChange={(e) => {
+                                          const map = { ...selectedLink.map };
+                                          if (e.target.value) map[input] = e.target.value; else delete map[input];
+                                          setLink(linkIndex, { map });
+                                        }}>
+                                        <option value="">{t('Asked when it starts')}</option>
+                                        {(a?.outputs ?? []).map((o) => <option key={o} value={o}>{t('{file}, from {from}', { file: o, from: a?.name ?? '' })}</option>)}
+                                      </select>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : <p className="muted small">{t('{to} declares no inputs.', { to: stepName(selectedLink.to) })}</p>}
+                        </Block>
                       </div>
                     </>
                   );
                 })() : selectedStep ? (() => {
                   const agent = agentOf(selectedStep.id);
-                  const incoming = draft.links.find((l) => l.to === selectedStep.id);
-                  const outgoing = draft.links.find((l) => l.from === selectedStep.id);
-                  const targets = steps.filter((s) => s.id !== selectedStep.id && !draft.links.some((l) => l.to === s.id));
+                  const incoming = draft.links.filter((l) => l.to === selectedStep.id);
+                  const outgoing = draft.links.map((l, i) => ({ l, i })).filter(({ l }) => l.from === selectedStep.id);
+                  const targets = steps.filter((s) => s.id !== selectedStep.id);
+                  const n = check?.order.indexOf(selectedStep.id) ?? -1;
                   return (
                     <>
-                      <div className="ops-inspector-head">
-                        <h2>{agent?.name ?? selectedStep.agent}</h2>
+                      <header className="ops-panel-head">
+                        <div>
+                          <span className="ops-kicker">{n >= 0 ? t('Step {n}', { n: n + 1 }) : t('Step not linked')}{check?.start === selectedStep.id && ` · ${t('Start')}`}</span>
+                          <h2>{agent?.name ?? selectedStep.agent}</h2>
+                        </div>
                         <span className="row-actions">
                           {check?.start !== selectedStep.id && <button type="button" className="btn btn-ghost btn-sm" onClick={() => update((d) => ({ ...d, start: selectedStep.id }))}>{t('Start with this step')}</button>}
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeStep(selectedStep.id)}>{t('Remove step')}</button>
                         </span>
+                      </header>
+                      <div className="ops-panel-body">
+                        {agent && <p className="muted small ops-description">{agent.description}</p>}
+                        {agent && (
+                          <>
+                            <Block title={t('Receives')}>
+                              {agent.inputs.length ? (
+                                <ul className="ops-rows">
+                                  {agent.inputs.map((i) => {
+                                    const from = incoming.find((l) => l.map[i]);
+                                    return (
+                                      <li key={i}>
+                                        <span>{i}</span>
+                                        {from ? <span className="ops-tag from">← {from.map[i]} · {stepName(from.from)}</span> : <span className="ops-tag ask">{t('Asked when it starts')}</span>}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              ) : <p className="muted small">{t('Needs nothing to start.')}</p>}
+                            </Block>
+                            <Block title={t('Delivers')}>
+                              {agent.outputs.length
+                                ? <div className="chips">{agent.outputs.map((o) => <span key={o} className="chip">{o}</span>)}</div>
+                                : <p className={`small ${outgoing.length ? 'warn-text' : 'muted'}`}>{t('None: it delivers text only')}</p>}
+                            </Block>
+                            {(agent.outcomes ?? []).length > 0 && (
+                              <Block title={t('Possible results')}>
+                                <div className="chips">{agent.outcomes?.map((o) => <span key={o} className="chip ops-outcome">{o}</span>)}</div>
+                              </Block>
+                            )}
+                            <Block title={t('Uses')}>
+                              <ul className="ops-rows">
+                                {agent.mcps.map((m) => (
+                                  <li key={m.name}><span>{m.name}</span><span className={`ops-tag ${m.mode === 'execute' ? 'exec' : ''}`}>{m.mode === 'execute' ? t('Executes') : t('Reads')}</span></li>
+                                ))}
+                                <li><span>{t('Default AI')}</span><span className="ops-tag">{aiName(agent.ai)}</span></li>
+                              </ul>
+                            </Block>
+                          </>
+                        )}
+                        <Block title={t('Next step')}>
+                          {outgoing.length > 0 && (
+                            <ul className="ops-rows">
+                              {outgoing.map(({ l, i }) => (
+                                <li key={i}>
+                                  <button type="button" className="link" onClick={() => setSel({ kind: 'link', i })}>→ {stepName(l.to)}</button>
+                                  <span className="ops-tags">
+                                    {(l.when || otherwise(l.from)) && <span className="ops-tag from">{l.when || otherwise(l.from)}</span>}
+                                    <span className={`ops-tag ${l.gate === 'approval' ? 'ask' : ''}`}>{l.gate === 'approval' ? t('Approval') : t('Direct')}</span>
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {!outgoing.some(({ l }) => !l.when) && targets.length > 0 && (
+                            <select value="" onChange={(e) => { if (e.target.value) void link(selectedStep.id, e.target.value); }} aria-label={t('After this step')}>
+                              <option value="">{outgoing.length ? t('Add a next step…') : t('Choose the next step…')}</option>
+                              {targets.map((s) => <option key={s.id} value={s.id}>{stepName(s.id)}</option>)}
+                            </select>
+                          )}
+                          {!outgoing.length && !targets.length && <p className="muted small">{t('This is the last step.')}</p>}
+                        </Block>
+                        <p className="muted small">{t('To change its inputs, outputs, MCP servers or AI, edit the agent in Settings › Agents.')}</p>
                       </div>
-                      {agent && <p className="muted small">{agent.description}</p>}
-                      {agent && (
-                        <dl className="facts ops-facts">
-                          <div><dt>{t('Inputs')}</dt><dd>{agent.inputs.length ? agent.inputs.map((i) => (
-                            <span key={i} className="ops-io">{i} <span className="muted small">{incoming?.map[i] ? `← ${incoming.map[i]}` : `· ${t('asked when it starts')}`}</span></span>
-                          )) : '—'}</dd></div>
-                          <div><dt>{t('Outputs')}</dt><dd>{agent.outputs.length ? agent.outputs.join(', ') : t('None: it delivers text only')}</dd></div>
-                          {(agent.outcomes ?? []).length > 0 && <div><dt>{t('Possible results')}</dt><dd>{agent.outcomes?.join(', ')}</dd></div>}
-                          <div><dt>{t('MCP servers')}</dt><dd>{agent.mcps.length ? agent.mcps.map((m) => `${m.name} (${m.mode === 'execute' ? t('Executes') : t('Reads')})`).join(', ') : '—'}</dd></div>
-                          <div><dt>{t('Default AI')}</dt><dd>{aiName(agent.ai)}</dd></div>
-                        </dl>
-                      )}
-                      {!outgoing && targets.length > 0 && (
-                        <label className="field">
-                          <span className="label">{t('After this step')}</span>
-                          <select value="" onChange={(e) => { if (e.target.value) void link(selectedStep.id, e.target.value); }} aria-label={t('After this step')}>
-                            <option value="">{t('Choose the next step…')}</option>
-                            {targets.map((s) => <option key={s.id} value={s.id}>{stepName(s.id)}</option>)}
-                          </select>
-                        </label>
-                      )}
-                      <p className="muted small">{t('To change its inputs, outputs, MCP servers or AI, edit the agent in Settings › Agents.')}</p>
                     </>
                   );
-                })() : <p className="muted small">{t('Select a card or an arrow to see and change it.')}</p>}
-              </section>
-
-              <section className="ops-check" aria-label={t('Check')}>
-                <h2>{t('Check')}</h2>
-                {!check ? <p className="muted small">…</p> : (
+                })() : (
                   <>
-                    {check.errors.map((m, i) => <p key={`e${i}`} className="ops-msg error small">{t(m.text, m.params)}</p>)}
-                    {check.warnings.map((m, i) => <p key={`w${i}`} className="ops-msg warn-text small">{t(m.text, m.params)}</p>)}
-                    {!check.errors.length && !check.warnings.length && steps.length > 0 && <p className="ops-msg ok-text small">{t('Ready to use.')}</p>}
-                    {check.initialInputs.length > 0 && (
-                      <>
-                        <h3>{t('Asked when it starts')}</h3>
-                        <ul className="ops-initial">
-                          {check.initialInputs.map((i) => <li key={`${i.step}:${i.input}`}>{i.input} <span className="muted small">({i.agent})</span></li>)}
-                        </ul>
-                      </>
-                    )}
-                    {check.approvals.length > 0 && (
-                      <>
-                        <h3>{t('Waits for you before')}</h3>
-                        <p className="small">{check.approvals.map(stepName).join(', ')}</p>
-                      </>
-                    )}
+                    <header className="ops-panel-head"><div><span className="ops-kicker">{t('Details')}</span><h2>{t('Nothing selected')}</h2></div></header>
+                    <div className="ops-panel-body"><p className="muted small">{t('Select a card or an arrow to see and change it.')}</p></div>
                   </>
                 )}
+              </section>
+
+              <section className="ops-panel ops-check" aria-label={t('Check')}>
+                <header className="ops-panel-head">
+                  <div><span className="ops-kicker">{t('Before saving')}</span><h2>{t('Check')}</h2></div>
+                  {check && (check.errors.length
+                    ? <span className="pill pill-blocked">{t('{n} to fix', { n: check.errors.length })}</span>
+                    : check.warnings.length ? <span className="pill pill-awaiting-approval">{t('{n} to look at', { n: check.warnings.length })}</span>
+                      : steps.length > 0 && <span className="pill pill-completed">{t('Ready')}</span>)}
+                </header>
+                <div className="ops-panel-body">
+                  {!check ? <p className="muted small">…</p> : (
+                    <>
+                      {check.errors.length > 0 && (
+                        <Block title={t('To fix')}>
+                          <ul className="ops-msgs">{check.errors.map((m, i) => <li key={`e${i}`} className="error small">{t(m.text, m.params)}</li>)}</ul>
+                        </Block>
+                      )}
+                      {check.warnings.length > 0 && (
+                        <Block title={t('To look at')}>
+                          <ul className="ops-msgs">{check.warnings.map((m, i) => <li key={`w${i}`} className="warn-text small">{t(m.text, m.params)}</li>)}</ul>
+                        </Block>
+                      )}
+                      {!check.errors.length && !check.warnings.length && steps.length > 0 && <p className="ops-msg ok-text small">{t('Ready to use.')}</p>}
+                      {check.initialInputs.length > 0 && (
+                        <Block title={t('Asked when it starts')}>
+                          <ul className="ops-initial">
+                            {[...new Set(check.initialInputs.map((i) => i.agent))].map((agentName) => (
+                              <li key={agentName}>
+                                <span className="ops-initial-agent">{agentName}</span>
+                                <span className="chips">{check.initialInputs.filter((i) => i.agent === agentName).map((i) => <span key={`${i.step}:${i.input}`} className="chip">{i.input}</span>)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </Block>
+                      )}
+                      {check.approvals.length > 0 && (
+                        <Block title={t('Waits for you before')}>
+                          <div className="chips">{check.approvals.map((id) => <span key={id} className="chip">{stepName(id)}</span>)}</div>
+                        </Block>
+                      )}
+                    </>
+                  )}
+                </div>
               </section>
             </div>
           </div>

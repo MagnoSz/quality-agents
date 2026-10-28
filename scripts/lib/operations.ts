@@ -209,6 +209,15 @@ export function listOperations(root = ROOT): Operation[] {
   });
 }
 
+// The first time operations are listed, an example to learn from (templates/operations/, in the app's language).
+// Deleted, it does not come back: the folder is there from then on.
+export function seedExample(root = ROOT, language = 'en'): void {
+  if (existsSync(operationsDir(root))) return;
+  const file = join(root, 'templates', 'operations', `example.${language === 'pt-BR' ? 'pt-BR' : 'en'}.json`);
+  if (!existsSync(file)) return;
+  writeOperation(cleanOperation(JSON.parse(readFileSync(file, 'utf8'))), root);
+}
+
 export function writeOperation(op: Operation, root = ROOT): void {
   if (!SLUG.test(op.id)) throw new Error(`Invalid operation id "${op.id}".`);
   mkdirSync(operationsDir(root), { recursive: true });
